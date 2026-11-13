@@ -9,10 +9,13 @@ export interface Positioning {
   savedAt: string;
 }
 
-interface PositioningApi {
-  text: string | null;
-  saved_at: string | null;
+interface SavedPositioningApi {
+  text: string;
+  saved_at: string;
 }
+
+/** Both fields are null until the User saves a Positioning. */
+type PositioningApi = SavedPositioningApi | { text: null; saved_at: null };
 
 export const positioningService = {
   /** Null until the User saves a Positioning. */
@@ -24,9 +27,7 @@ export const positioningService = {
 
   /** Replaces any saved Positioning. The backend trims the text and refuses a blank one. */
   save: async (text: string): Promise<Positioning> => {
-    const { data } = await apiService.put<{ text: string; saved_at: string }>('/positioning', {
-      text,
-    });
+    const { data } = await apiService.put<SavedPositioningApi>('/positioning', { text });
     return { text: data.text, savedAt: data.saved_at };
   },
 };

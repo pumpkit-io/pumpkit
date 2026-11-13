@@ -4,8 +4,7 @@ import sqlalchemy as sa
 
 from alembic import command
 from tests.migrations import migrate
-
-POSITIONING = "/api/v1/positioning"
+from tests.positioning.positioning import POSITIONING
 
 
 async def _tables(db_engine) -> list[str]:

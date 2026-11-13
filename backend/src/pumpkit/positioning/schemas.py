@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 # Per caller, for the route and the MCP tool that save a Positioning.
 WRITE_RATE = "20/minute"
@@ -13,7 +13,7 @@ POSITIONING_MAX_CHARS = 4000
 class PositioningSaveRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    text: str = Field(..., max_length=POSITIONING_MAX_CHARS)
+    text: str
 
     @field_validator("text")
     @classmethod
@@ -21,6 +21,8 @@ class PositioningSaveRequest(BaseModel):
         stripped = value.strip()
         if not stripped:
             raise ValueError("Write your positioning first.")
+        if len(stripped) > POSITIONING_MAX_CHARS:
+            raise ValueError(f"A positioning can be up to {POSITIONING_MAX_CHARS:,} characters.")
         return stripped
 
 

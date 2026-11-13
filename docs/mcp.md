@@ -125,12 +125,12 @@ Settings' Connect AI apps card lists your connected apps, each with whether it i
 
 ## Positioning tools
 
-Your Positioning is a few sentences about who you are on X, what you post about, who you write for, what you post for and what you can point readers to. It is the same text as on the Persona page of the web app.
+Your positioning is a few sentences about who you are on X, what you post about, who you write for, what you post for and what you can point readers to. It is the same text as on the Persona page of the web app.
 
 | Tool              | What it does                                                                                                      |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `get_positioning` | Reads your Positioning and when you last saved it. Both are empty until you save one.                             |
-| `set_positioning` | Saves your Positioning, in place of the one you had. It holds up to 4,000 characters, and a blank one is refused. |
+| `get_positioning` | Reads your positioning and when you last saved it. Both are empty until you save one.                             |
+| `set_positioning` | Saves your positioning, in place of the one you had. It holds up to 4,000 characters, and a blank one is refused. |
 
 `set_positioning` is limited to 20 calls a minute per User, and `get_positioning` to 60.
 

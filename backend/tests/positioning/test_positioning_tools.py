@@ -1,9 +1,7 @@
 """The Positioning MCP tools, refusing what the web routes refuse."""
 
 from tests.mcp_client import error_text
-
-POSITIONING = "/api/v1/positioning"
-TEXT = "I'm a solo founder. I post about bootstrapping for people starting their first SaaS."
+from tests.positioning.positioning import POSITIONING, TEXT
 
 
 async def test_get_positioning_answers_with_nothing_until_one_is_saved(subscribed, mcp):
@@ -35,10 +33,10 @@ async def test_a_blank_positioning_is_refused_in_words(subscribed, mcp):
     assert (await mcp.call_tool("get_positioning"))["structuredContent"]["text"] == TEXT
 
 
-async def test_a_positioning_over_4000_characters_is_refused(subscribed, mcp):
+async def test_a_positioning_over_4000_characters_is_refused_in_words(subscribed, mcp):
     result = await mcp.call_tool("set_positioning", text="a" * 4001)
 
-    assert error_text(result) == "String should have at most 4000 characters"
+    assert error_text(result) == "A positioning can be up to 4,000 characters."
 
 
 async def test_tools_list_shows_the_positioning_tools_with_their_annotations(subscribed, mcp):

@@ -59,7 +59,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { track } from '@/lib/analytics';
 import { billingService } from '@/services/billingService';
-import { positioningService } from '@/services/positioningService';
+import { positioningService, type Positioning } from '@/services/positioningService';
 import {
   NOT_SUBSCRIBED,
   SUBSCRIBED,
@@ -95,11 +95,8 @@ describe('Persona: the Positioning panel', () => {
     renderSignedIn('/persona');
 
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
-    const regions = screen
-      .getAllByRole('region')
-      .map((region) => region.getAttribute('aria-labelledby'));
-    const headings = regions.map((id) => (id ? document.getElementById(id)?.textContent : null));
-    expect(headings).toEqual(['Who you are on X', 'How your posts sound']);
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
+    expect(headings.slice(0, 2)).toEqual(['Who you are on X', 'How your posts sound']);
   });
 
   it('names the five things a Positioning covers under the textarea', async () => {
@@ -200,13 +197,43 @@ describe('Persona: the Positioning panel', () => {
     expect(await (await panel()).findByRole('button', { name: 'Saving…' })).toBeDisabled();
   });
 
+  it('keeps what the User types while a save is on its way', async () => {
+    let finishSave: (positioning: Positioning) => void = () => {};
+    vi.mocked(positioningService.save).mockReturnValue(
+      new Promise((resolve) => {
+        finishSave = resolve;
+      }),
+    );
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: 'Save' }));
+    await region.findByRole('button', { name: 'Saving…' });
+    fireEvent.change(textarea, { target: { value: 'I post about pricing and churn.' } });
+
+    finishSave({ text: 'I post about pricing.', savedAt: '2026-10-10T13:00:30Z' });
+
+    await waitFor(() => expect(region.getByRole('button', { name: 'Save' })).toBeEnabled());
+    expect(textarea).toHaveValue('I post about pricing and churn.');
+    expect(region.queryByText('Saved')).not.toBeInTheDocument();
+  });
+
   it.each([
-    [
-      apiError(429, 'Too many requests. Try again in a minute.'),
-      'Too many requests. Try again in a minute.',
-    ],
-    [apiError(500, null as unknown as string), "Couldn't save your positioning. Try again."],
-  ])('says under the textarea why a save failed, keeping the text', async (failure, message) => {
+    {
+      failure: apiError(429, 'Too many requests. Try again in a minute.'),
+      message: 'Too many requests. Try again in a minute.',
+      described: /^Too many requests\. Try again in a minute\. Cover:/,
+    },
+    {
+      failure: Object.assign(new Error('Network Error'), { isAxiosError: true }),
+      message: "Couldn't save your positioning. Try again.",
+      described: /^Couldn't save your positioning\. Try again\. Cover:/,
+    },
+  ])('says under the textarea why a save failed, keeping the text', async (failed) => {
+    const { failure, message, described } = failed;
     vi.mocked(positioningService.save).mockRejectedValue(failure);
     renderSignedIn('/persona');
 
@@ -218,7 +245,7 @@ describe('Persona: the Positioning panel', () => {
 
     expect(await region.findByRole('alert')).toHaveTextContent(message);
     expect(textarea).toHaveValue('I post about pricing.');
-    expect(textarea).toHaveAccessibleDescription(new RegExp(`^${message.replace(/[.']/g, '.')}`));
+    expect(textarea).toHaveAccessibleDescription(described);
     expect(region.getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(region.queryByText('Saved')).not.toBeInTheDocument();
     expect(track).not.toHaveBeenCalledWith('positioning_saved');

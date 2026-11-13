@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { POSITIONING_MAX_CHARS } from '@/services/positioningService';
 import { usePositioning } from './usePositioning';
 
-/** How close to the limit the count starts showing, so it stays out of the way until it matters. */
+/** How close to the limit the count starts showing. */
 const COUNT_SHOWN_WITHIN = 400;
 
 /** The Persona page's Positioning: one textarea the User writes and saves. */

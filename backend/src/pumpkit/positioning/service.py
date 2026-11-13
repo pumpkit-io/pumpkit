@@ -25,7 +25,8 @@ async def save_positioning(
         except IntegrityError:
             # A concurrent first save inserted the row; this one overwrites it.
             positioning = await db.get(Positioning, user_id, populate_existing=True)
-            assert positioning is not None
+            if positioning is None:
+                raise
     positioning.text = text
     positioning.saved_at = now
     await db.flush()

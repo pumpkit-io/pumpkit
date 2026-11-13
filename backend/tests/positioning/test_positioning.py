@@ -4,8 +4,7 @@ from datetime import timedelta
 
 import pytest
 
-POSITIONING = "/api/v1/positioning"
-TEXT = "I'm a solo founder. I post about bootstrapping for people starting their first SaaS."
+from tests.positioning.positioning import POSITIONING, TEXT
 
 
 async def test_a_user_who_saved_nothing_reads_no_positioning(client, subscribed):
@@ -62,6 +61,15 @@ async def test_a_positioning_holds_up_to_4000_characters(client, subscribed):
 
     assert response.status_code == 422
     assert (await client.get(POSITIONING)).json()["text"] == longest
+
+
+async def test_the_space_around_a_positioning_does_not_count_towards_its_length(client, subscribed):
+    longest = "a" * 4000
+
+    response = await client.put(POSITIONING, json={"text": f"  {longest}\n"})
+
+    assert response.status_code == 200
+    assert response.json()["text"] == longest
 
 
 async def test_each_user_reads_and_saves_only_their_own_positioning(

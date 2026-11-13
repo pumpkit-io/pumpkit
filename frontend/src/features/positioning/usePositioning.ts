@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
@@ -14,6 +14,8 @@ export function usePositioning() {
   /** The text as last saved; empty until the User saves a Positioning. */
   const [saved, setSaved] = useState('');
   const [text, setText] = useState('');
+  /** The text as of the last edit, which a save in flight can't see in its closure. */
+  const latestText = useRef('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** True from a save until the next edit. */
@@ -27,6 +29,7 @@ export function usePositioning() {
         if (cancelled) return;
         setSaved(positioning?.text ?? '');
         setText(positioning?.text ?? '');
+        latestText.current = positioning?.text ?? '';
         setLoading('loaded');
       })
       .catch(() => !cancelled && setLoading('failed'));
@@ -42,6 +45,7 @@ export function usePositioning() {
 
   const edit = useCallback((next: string) => {
     setText(next);
+    latestText.current = next;
     setJustSaved(false);
   }, []);
 
@@ -51,8 +55,12 @@ export function usePositioning() {
     try {
       const positioning = await positioningService.save(text);
       setSaved(positioning.text);
-      setText(positioning.text);
-      setJustSaved(true);
+      // Text typed while the save was on its way stays, unsaved.
+      if (latestText.current === text) {
+        setText(positioning.text);
+        latestText.current = positioning.text;
+        setJustSaved(true);
+      }
       track('positioning_saved');
     } catch (e) {
       // A refusal for want of a Subscription sends the User to the Paywall, not to an error.
