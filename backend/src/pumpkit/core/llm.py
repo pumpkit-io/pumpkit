@@ -79,11 +79,8 @@ class LLMCall:
 @dataclass
 class FakeLLM:
     """
-    A scripted model: each call takes the next of `replies`, a dict of the response model's
-    fields or an exception to raise, and is recorded in `calls`. A reply that doesn't fit the
-    response model fails as it does on the real port, with an `LLMError`. A call whose schema name is in
-    `standing` takes that reply instead, every time, and leaves `replies` alone. Clear
-    `configured` to stand for a missing key.
+    A scripted model: each call takes the reply `standing` holds for its schema name, or else the
+    next of `replies`: a dict of fields or an exception. Clear `configured` for a missing key.
     """
 
     replies: list[Union[dict[str, Any], Exception]] = field(default_factory=list)

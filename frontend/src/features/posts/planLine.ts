@@ -13,8 +13,7 @@ const AIMS_FOR: Record<DesiredAction, string> = {
   repost: 'aims for reposts',
   share: 'aims for shares',
   follow: 'aims for follows',
-  // A trust post shows the work and has no ask.
-  trust: 'asks for nothing',
+  trust: 'aims for trust',
   click: 'aims for clicks',
   DM: 'aims for DMs',
   'sign-up': 'aims for sign-ups',

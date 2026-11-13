@@ -258,10 +258,8 @@ def fake_x_publisher():
 @pytest.fixture(autouse=True)
 def fake_llm():
     """
-    Every test calls models through a scripted fake instead of a real endpoint. Request it by name
-    to queue `fake_llm.replies` (field dicts or exceptions) and read `fake_llm.calls`. The plan
-    call has a standing answer any account takes, so a test queues only the writing calls;
-    set `fake_llm.standing[POST_IDEAS]` to plan otherwise.
+    Every test calls a scripted fake model: queue `fake_llm.replies`, read `fake_llm.calls`.
+    The plan call has a standing answer; set `fake_llm.standing[POST_IDEAS]` to plan otherwise.
     """
     fake = FakeLLM(standing={POST_IDEAS: ideas()})
     app.dependency_overrides[get_llm] = lambda: fake

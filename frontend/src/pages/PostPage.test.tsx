@@ -584,7 +584,7 @@ describe('Post page', () => {
         { funnel: 'bottom', desiredAction: 'sign-up', length: 'long' },
         'Built for conversion · aims for sign-ups · long',
       ],
-      [{ desiredAction: 'trust' }, 'Built for trust · asks for nothing · medium'],
+      [{ desiredAction: 'trust' }, 'Built for trust · aims for trust · medium'],
       [{ desiredAction: 'dwell_time' }, 'Built for trust · aims for full reads · medium'],
     ])('words the Plan %j as "%s"', async (choices, words) => {
       renderPost({ ...postWith('the final text'), plan: { ...PLAN, ...choices } });

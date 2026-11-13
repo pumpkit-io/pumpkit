@@ -48,8 +48,11 @@ class Brief(Base):
     planning_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
 
     user: Mapped["User"] = relationship()
+    # The single-post Idea first, then the split Ideas in posting order.
     ideas: Mapped[list["Idea"]] = relationship(
-        back_populates="brief", cascade="all, delete-orphan", order_by="Idea.posting_order"
+        back_populates="brief",
+        cascade="all, delete-orphan",
+        order_by="Idea.whole_brief.desc(), Idea.posting_order",
     )
 
 
@@ -62,7 +65,7 @@ class Idea(Base):
         String, primary_key=True, default=lambda: ulid_with_prefix("idea")
     )
     brief_id: Mapped[str] = mapped_column(ForeignKey("briefs.id", ondelete="CASCADE"), index=True)
-    # Where the Idea comes among its Brief's Ideas when they are posted, from 1.
+    # Where the Idea comes among the Ideas posted with it, from 1: always 1 for the single-post Idea.
     posting_order: Mapped[int] = mapped_column(Integer)
     # True for the single-post Idea, which covers the whole Brief; False for a split Idea.
     whole_brief: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())

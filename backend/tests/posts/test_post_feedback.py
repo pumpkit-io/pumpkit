@@ -14,7 +14,7 @@ from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import writing_calls, written
+from tests.posts.writing_replies import POST_IDEAS, writing_calls, written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -63,6 +63,16 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
         {"text": "final 2", "char_count": 7, "char_limit": X_POST_MAX_CHARS}
     ]
     assert version["starting_text"] is None
+
+
+async def test_feedback_makes_no_plan_call(client, post_id, fake_llm):
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+
+    response = await client.post(_versions_url(post_id), json={"feedback": "make it shorter"})
+
+    assert response.status_code == 201
+    assert len(fake_llm.calls) == 2
+    assert POST_IDEAS not in [call.response_model.__name__ for call in fake_llm.calls]
 
 
 def _system(prompt: str) -> dict:

@@ -6,9 +6,8 @@ import type { TextSaveState } from '../text/textController';
 const LINE = 'font-sans text-[13px] tabular-nums text-muted-foreground';
 
 /**
- * Where the Text came from, cut to one line: "V3 · From Feedback: “…”" or "V1 · From your
- * brief · Built for trust · aims for bookmarks · medium". It opens the Plan and the full Brief,
- * or the full Feedback, below it, since the line rarely holds all of it.
+ * Where the Text came from, cut to one line, such as "V1 · From your brief · Built for trust".
+ * It opens the Plan and the full Brief, or the full Feedback, since the line rarely holds them.
  */
 export function OriginLine({
   brief,

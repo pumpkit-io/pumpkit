@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal, Optional, Sequence, Union
 
 from pydantic import BaseModel, ConfigDict
@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from pumpkit.core.config import settings
 from pumpkit.core.llm import LLM, LLMError
 from pumpkit.core.text import drop_unstorable
-from pumpkit.posts.formats import FORMAT_POST
+from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
 from pumpkit.posts.plans import LENGTH_SHORT, DesiredAction, Funnel, Length, Plan, Structure
 from pumpkit.posts.writing.constants import CACHE_TTL, MAX_SPLIT_IDEAS, MAX_TOKENS
 from pumpkit.posts.writing.prompts.plan import SHORT_LIMIT, is_short_only, plan_prompt, plan_user
@@ -110,6 +110,7 @@ def _text(value: str) -> str:
 
 def _plan(planned: _Planned) -> Plan:
     """The Plan of one planned post. `one_line` and `few_lines` are short whatever `format` says."""
+    # The ported prompt calls the Length `format`.
     length: Length = LENGTH_SHORT if planned.structure in _SHORT_STRUCTURES else planned.format
     return Plan(
         core_idea=_text(planned.core_idea),
@@ -148,21 +149,25 @@ def _pulls(planned: _Planned, plan: Plan) -> list[str]:
     return pulls
 
 
-def _plans(planned: Sequence[_Planned]) -> list[Plan]:
+def _plans(planned: Sequence[_Planned], user_id: str) -> list[Plan]:
     plans = []
     for post in planned:
         plan = _plan(post)
         for pull in _pulls(post, plan):
-            logger.warning("A plan's choices pull against each other: %s", pull)
+            # The Brief is stored only after its Post is written, so it has no id to log yet.
+            logger.warning(
+                "A plan's choices pull against each other for User %s: %s", user_id, pull
+            )
         plans.append(plan)
     return plans
 
 
-async def plan_brief(llm: LLM, brief: str, positioning: str, char_limit: int) -> PlannedBrief:
+async def plan_brief(
+    llm: LLM, *, user_id: str, brief: str, positioning: str, format: Format, char_limit: int
+) -> PlannedBrief:
     """
-    Plan `brief` for a User with this Positioning, whose X account's posts hold up to
-    `char_limit` characters. Raises whatever the LLM port raises, and an `LLMError` when the
-    call runs out of time; nothing is stored here.
+    Plan `brief`, which the User asked to be written in `format`. Stores nothing, and raises
+    what the LLM port raises, or an `LLMError` when the call runs out of time.
     """
     response_model: type[Union[PostIdeas, ShortPostIdeas]] = (
         ShortPostIdeas if is_short_only(char_limit) else PostIdeas
@@ -180,8 +185,11 @@ async def plan_brief(llm: LLM, brief: str, positioning: str, char_limit: int) ->
             f"{settings.LLM_PLANNING_MODEL}: the plan call took over {PLAN_CALL_SECONDS:.0f}s"
         ) from error
     ideas = result.parsed
-    [single] = _plans([ideas.single_idea])
-    split = _plans((ideas.split_ideas or [])[:MAX_SPLIT_IDEAS])
+    [single] = _plans([ideas.single_idea], user_id)
+    if format == FORMAT_THREAD:
+        # The User still picks the Format, so the Plan follows it; #476 hands the planner that choice.
+        single = replace(single, format=FORMAT_THREAD, length=None)
+    split = _plans((ideas.split_ideas or [])[:MAX_SPLIT_IDEAS], user_id)
     return PlannedBrief(
         positioning=positioning,
         reasoning=_text(ideas.reasoning),

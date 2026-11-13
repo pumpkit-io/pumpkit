@@ -1,9 +1,6 @@
 """
-The plan call's system prompt and user message, ported from pumpkit-new-architecture-v5.
-
-What differs from v5: the prompt names the account's character limit, its 280 and 700 become the
-lower of that number and the account's limit, and an account that holds no more than a short post
-is offered only `short` with `one_line` or `few_lines`.
+The plan call's system prompt and user message, ported from pumpkit-new-architecture-v5 and
+fitted to the character limit of the User's X account.
 """
 
 from functools import cache
@@ -71,10 +68,10 @@ _FIT_MATERIAL = "- bookmark goes with a list, a playbook or a finding with a met
 
 def _fit_section(short_only: bool) -> str:
     if short_only:
+        # No material line: it pairs actions with structures and lengths this account can't use.
         lines = [
             "- Every post is short, with one_line or few_lines, whatever the funnel.",
             _FIT_ACTION,
-            _FIT_MATERIAL,
         ]
     else:
         lines = [

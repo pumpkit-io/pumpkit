@@ -14,6 +14,7 @@ from pumpkit.posts import media as media_service
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
 from pumpkit.posts.media_files import PREVIEW_CONTENT_TYPE
+from pumpkit.posts.models import Idea, Post
 from pumpkit.posts.schemas import PostResponse
 from pumpkit.posts.version_writing import (
     char_limit_for,
@@ -57,14 +58,26 @@ async def start_post(
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
 
-    planned = await plan_brief(llm, brief, positioning.text, char_limit)
-    try:
-        written = await write_first_version(llm, corpus, brief, format, char_limit)
-    except Exception as error:
+    planned = await plan_brief(
+        llm,
+        user_id=user_id,
+        brief=brief,
+        positioning=positioning.text,
+        format=format,
+        char_limit=char_limit,
+    )
+
+    async def store_post() -> tuple[Idea, Post]:
         idea = await service.store_planned_brief(
             db, user_id=user_id, text=brief, planned=planned, now=now
         )
         post = await service.create_post(db, user_id=user_id, idea=idea, corpus=corpus, now=now)
+        return idea, post
+
+    try:
+        written = await write_first_version(llm, corpus, brief, format, char_limit)
+    except Exception as error:
+        _, post = await store_post()
         await record_failed_attempt(
             db, post=post, sequence=1, feedback=None, format=format, error=error, now=now
         )
@@ -74,10 +87,7 @@ async def start_post(
 
     # Before the insert: its key share on the User deadlocks two requests upgrading it to charge.
     await users_service.lock_user_id(db, user_id=user_id)
-    idea = await service.store_planned_brief(
-        db, user_id=user_id, text=brief, planned=planned, now=now
-    )
-    post = await service.create_post(db, user_id=user_id, idea=idea, corpus=corpus, now=now)
+    idea, post = await store_post()
     version = await service.record_version(
         db, post=post, sequence=1, version_number=1, feedback=None, written=written, now=now
     )

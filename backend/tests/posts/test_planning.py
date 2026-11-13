@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import func, select
+from sqlalchemy.orm import selectinload
 
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
@@ -13,12 +14,10 @@ from pumpkit.core.llm import FakeLLM, LLMError, get_llm
 from pumpkit.main import app
 from pumpkit.posts.models import Brief, Idea, Post, VersionAttempt
 from pumpkit.posts.writing import planning
-from pumpkit.posts.writing.prompts.plan import plan_prompt
-from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.mcp_client import error_text
 from tests.positioning.positioning import POSITIONING, TEXT, save_positioning
-from tests.posts.writing_replies import POST_IDEAS, ideas, planned_post, written
+from tests.posts.writing_replies import POST_IDEAS, ideas, planned_post, written, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -66,6 +65,13 @@ def _system_text(call) -> str:
     return call.messages[0]["content"][0]["text"]
 
 
+def _planned_schema(call) -> dict:
+    """The schema of one planned post in the answer the plan call asked for."""
+    schema = call.response_model.model_json_schema()
+    name = schema["properties"]["single_idea"]["$ref"].rsplit("/", 1)[-1]
+    return schema["$defs"][name]
+
+
 async def _ideas(db) -> list[Idea]:
     """Every stored Idea: the single-post one first, then the split ones in posting order."""
     rows = await db.scalars(select(Idea).order_by(Idea.whole_brief.desc(), Idea.posting_order))
@@ -85,25 +91,15 @@ async def test_the_plan_call_comes_first_with_the_plan_prompt_the_brief_and_the_
     plan_call = fake_llm.calls[0]
     assert plan_call.response_model.__name__ == "post_ideas"
     assert plan_call.model == "openai/gpt-6-luna"
-    cached = {"type": "ephemeral", "ttl": "1h"}
-    assert plan_call.messages == [
-        {
-            "role": "system",
-            "content": [
-                {
-                    "type": "text",
-                    "text": plan_prompt(5, X_POST_MAX_CHARS),
-                    "cache_control": cached,
-                }
-            ],
-        },
-        {
-            "role": "user",
-            "content": (
-                f"<raw_input>\n{BRIEF}\n</raw_input>\n\n<positioning>\n{TEXT}\n</positioning>"
-            ),
-        },
-    ]
+    system, user_message = plan_call.messages
+    [block] = system["content"]
+    assert (system["role"], block["type"]) == ("system", "text")
+    assert block["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+    assert block["text"].startswith("# Role\n\nYou plan posts on X on my behalf.")
+    assert user_message == {
+        "role": "user",
+        "content": (f"<raw_input>\n{BRIEF}\n</raw_input>\n\n<positioning>\n{TEXT}\n</positioning>"),
+    }
     assert len(fake_llm.calls) == 3
 
 
@@ -126,7 +122,7 @@ async def test_the_answer_schema_puts_the_reasoning_before_the_plans_and_the_ide
 
     schema = fake_llm.calls[0].response_model.model_json_schema()
     assert list(schema["properties"]) == ["reasoning", "single_idea", "split_ideas"]
-    planned = schema["$defs"]["_PlannedPost"]
+    planned = _planned_schema(fake_llm.calls[0])
     assert list(planned["properties"]) == [
         "core_idea",
         "takeaway",
@@ -148,12 +144,12 @@ async def test_the_prompt_of_a_long_post_account_names_its_limit_and_offers_ever
     await _start(client, fake_llm)
 
     prompt = _system_text(fake_llm.calls[0])
-    assert prompt == plan_prompt(5, X_LONG_POST_MAX_CHARS)
     assert "A post on my X account holds at most 25,000 characters." in prompt
     assert "- short: at most 280 characters" in prompt
     assert "- medium: about 350 to 600 characters (hard limit 700)." in prompt
     assert "- long: about 400 to 2,000 characters" in prompt
     assert "- hook_playbook_closer:" in prompt
+    assert "- bookmark goes with a list, a playbook or a finding" in prompt
     assert "- format: short, medium or long." in prompt
     assert "At least 2 ideas, at most 5." in prompt
     assert "{" not in prompt
@@ -171,6 +167,7 @@ async def test_the_prompt_of_a_280_character_account_offers_only_short_one_line_
     for longer in ("- medium:", "- long:", "- hook_list_closer:", "- hook_playbook_closer:"):
         assert longer not in prompt
     assert "- Every post is short, with one_line or few_lines, whatever the funnel." in prompt
+    assert "bookmark goes with a list" not in prompt
     assert "- format: short.\n" in prompt
     assert "{" not in prompt
 
@@ -184,7 +181,7 @@ async def test_a_280_character_account_takes_no_plan_longer_than_short(
 
     assert_reported_502(await _start(client, fake_llm))
 
-    planned = fake_llm.calls[0].response_model.model_json_schema()["$defs"]["_PlannedShortPost"]
+    planned = _planned_schema(fake_llm.calls[0])
     assert planned["properties"]["format"] == {
         "const": "short",
         "title": "Format",
@@ -219,6 +216,45 @@ async def test_the_post_is_returned_and_read_back_with_its_plan(client, ready, f
     }
     assert started["plan"] == plan
     assert (await client.get(f"{POSTS}/{started['id']}")).json()["plan"] == plan
+
+
+async def test_the_plan_of_a_post_started_as_a_thread_is_a_thread_with_no_length(
+    client, ready, fake_llm
+):
+    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+
+    response = await client.post(POSTS, json={"brief": BRIEF, "format": "thread"})
+
+    assert response.status_code == 201, response.text
+    started = response.json()
+    assert started["versions"][0]["format"] == "thread"
+    assert (started["plan"]["format"], started["plan"]["length"]) == ("thread", None)
+    read = (await client.get(f"{POSTS}/{started['id']}")).json()["plan"]
+    assert (read["format"], read["length"]) == ("thread", None)
+
+
+async def test_start_post_over_mcp_as_a_thread_answers_a_thread_plan_with_no_length(
+    subscribed, mcp, fake_llm, fake_x_reader
+):
+    fake_x_reader.posts["levelsio"] = [
+        FetchedPost(
+            post_id="levelsio-0",
+            text="levelsio post",
+            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    ]
+    await mcp.call_tool("set_positioning", text=TEXT)
+    await mcp.call_tool("add_inspiration_author", handle="levelsio")
+    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+
+    result = await mcp.call_tool("start_post", brief=BRIEF, format="thread")
+
+    assert result["isError"] is False
+    plan = result["structuredContent"]["plan"]
+    assert (plan["format"], plan["length"]) == ("thread", None)
+    read = await mcp.call_tool("get_post", post_id=result["structuredContent"]["id"])
+    assert read["structuredContent"]["plan"]["format"] == "thread"
+    assert read["structuredContent"]["plan"]["length"] is None
 
 
 @pytest.mark.parametrize(
@@ -290,6 +326,8 @@ async def test_the_post_is_written_from_the_single_post_idea_and_split_plans_are
     assert second.plan.reasoning == (
         "The brief holds one result with its numbers, which earns trust."
     )
+    [brief] = list(await db.scalars(select(Brief).options(selectinload(Brief.ideas))))
+    assert [idea.id for idea in brief.ideas] == [single.id, first.id, second.id]
     [post] = list(await db.scalars(select(Post)))
     assert (post.id, post.idea_id) == (started["id"], single.id)
     assert started["plan"]["core_idea"] == "Everything I learned from two failed products."
@@ -316,7 +354,7 @@ async def test_a_lone_split_plan_is_no_split(client, ready, fake_llm, db):
 
 
 async def test_choices_that_pull_against_each_other_are_logged_and_the_post_is_still_written(
-    client, ready, fake_llm, premium, caplog
+    client, ready, fake_llm, premium, caplog, user
 ):
     await premium()
     fake_llm.standing[POST_IDEAS] = ideas(
@@ -330,15 +368,17 @@ async def test_choices_that_pull_against_each_other_are_logged_and_the_post_is_s
     assert response.json()["versions"][0]["parts"][0]["text"] == "the final"
     logged = [record.getMessage() for record in caplog.records]
     assert logged == [
-        "A plan's choices pull against each other: structure=few_lines is a short post: "
-        "format=long is ignored and the post is planned short.",
-        "A plan's choices pull against each other: desired_action=buy is unusual for the top "
-        "of the funnel (usual: dwell_time, follow, reply, repost, share).",
+        f"A plan's choices pull against each other for User {user.id}: structure=few_lines is "
+        "a short post: format=long is ignored and the post is planned short.",
+        f"A plan's choices pull against each other for User {user.id}: desired_action=buy is "
+        "unusual for the top of the funnel (usual: dwell_time, follow, reply, repost, share).",
     ]
     assert response.json()["plan"]["length"] == "short"
 
 
-async def test_a_list_planned_short_is_logged_as_tight(client, ready, fake_llm, premium, caplog):
+async def test_a_list_planned_short_is_logged_as_tight(
+    client, ready, fake_llm, premium, caplog, user
+):
     await premium()
     fake_llm.standing[POST_IDEAS] = ideas(
         planned_post(format="short", structure="hook_list_closer")
@@ -349,8 +389,8 @@ async def test_a_list_planned_short_is_logged_as_tight(client, ready, fake_llm, 
 
     assert response.status_code == 201
     assert [record.getMessage() for record in caplog.records] == [
-        "A plan's choices pull against each other: structure=hook_list_closer in 280 "
-        "characters is tight: expect a very compressed list."
+        f"A plan's choices pull against each other for User {user.id}: "
+        "structure=hook_list_closer in 280 characters is tight: expect a very compressed list."
     ]
 
 
