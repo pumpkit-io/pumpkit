@@ -14,7 +14,6 @@ from pumpkit.core.config import settings
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -124,7 +123,7 @@ async def test_feedback_is_charged_to_a_top_up_too(
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     post_id = (await _start_post(client, fake_llm)).json()["id"]
     await _use_allowance(db, user.id, count=3)
-    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+    fake_llm.replies = [{"post": "final 2"}]
 
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "shorter"})
 
