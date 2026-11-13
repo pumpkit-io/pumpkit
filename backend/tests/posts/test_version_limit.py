@@ -12,6 +12,7 @@ from pumpkit.core.db.session import get_async_db
 from pumpkit.core.llm import LLMError
 from pumpkit.main import app
 from pumpkit.posts.models import Post, VersionAttempt
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -31,6 +32,7 @@ async def with_author(client, subscribed, fake_x_reader):
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     ]
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
@@ -173,6 +175,7 @@ async def test_the_limit_is_per_user_so_another_users_attempts_dont_count(
 ):
     await _store_attempts(db, user.id, [clock() + timedelta(minutes=n) for n in range(30)])
     await _sign_in_as_another_subscribed_user(db)
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
     fake_llm.replies = [written("sketch"), {"post": "final"}]
 

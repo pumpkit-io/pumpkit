@@ -1,15 +1,18 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { Version } from '@/services/postService';
+import type { Plan, Version } from '@/services/postService';
+import { planLine } from '../planLine';
 import type { TextSaveState } from '../text/textController';
 
 const LINE = 'font-sans text-[13px] tabular-nums text-muted-foreground';
 
 /**
  * Where the Text came from, cut to one line: "V3 · From Feedback: “…”" or "V1 · From your
- * Brief". It opens the full Brief or Feedback below it, since the line rarely holds all of it.
+ * brief · Built for trust · aims for bookmarks · medium". It opens the Plan and the full Brief,
+ * or the full Feedback, below it, since the line rarely holds all of it.
  */
 export function OriginLine({
   brief,
+  plan,
   version,
   edited,
   writing,
@@ -17,6 +20,8 @@ export function OriginLine({
   rewritesDropped = false,
 }: {
   brief: string;
+  /** Shown on the Version written from the Brief: Feedback may have overridden it since. */
+  plan?: Plan | null;
   /** The Version the Text came from. */
   version: Version;
   edited: boolean;
@@ -51,7 +56,13 @@ export function OriginLine({
   const from = version.feedback
     ? `From feedback: “${version.feedback.replace(/\s+/g, ' ').trim()}”`
     : 'From your brief';
-  const line = [`V${version.number}`, from, ...(edited ? ['edited'] : [])].join(' · ');
+  const planned = plan && !version.feedback ? planLine(plan, version.format) : null;
+  const line = [
+    `V${version.number}`,
+    from,
+    ...(planned ? [planned] : []),
+    ...(edited ? ['edited'] : []),
+  ].join(' · ');
 
   // The Version number leads as a tag; the source gives way first when the line runs short.
 
@@ -66,7 +77,8 @@ export function OriginLine({
           <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground">
             V{version.number}
           </span>
-          <span className="min-w-0 truncate">{from}</span>
+          <span className={planned ? 'shrink-0' : 'min-w-0 truncate'}>{from}</span>
+          {planned && <span className="min-w-0 truncate">· {planned}</span>}
           {edited && <span className="shrink-0">· edited</span>}
         </button>
       </PopoverTrigger>
@@ -76,6 +88,7 @@ export function OriginLine({
         aria-label={version.feedback ? 'Feedback' : 'Brief'}
         className="max-h-[50vh] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto"
       >
+        {planned && <p className={`mb-2 ${LINE}`}>{planned}</p>}
         <p className="whitespace-pre-wrap break-words font-sans text-sm leading-6 text-foreground">
           {version.feedback ?? brief}
         </p>

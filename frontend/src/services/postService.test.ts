@@ -98,6 +98,40 @@ describe('postService', () => {
     });
   });
 
+  it("reads a Post's Plan, and none on a Post written before Briefs were planned", async () => {
+    const read = { id: 'post_01', brief: 'ship', text: null, versions: [], status: 'draft' };
+    const get = vi.spyOn(apiService, 'get');
+    get.mockResolvedValueOnce({
+      data: {
+        ...read,
+        scheduled_post: null,
+        plan: {
+          core_idea: 'Shipping small things beats planning big ones.',
+          takeaway: 'Ship the smallest thing that works this week.',
+          funnel: 'middle',
+          desired_action: 'bookmark',
+          format: 'post',
+          length: 'medium',
+          structure: 'hook_problem_insight_closer',
+        },
+      },
+    } as never);
+    get.mockResolvedValueOnce({
+      data: { ...read, scheduled_post: null, plan: null },
+    } as never);
+
+    expect((await postService.get('post_01')).plan).toEqual({
+      coreIdea: 'Shipping small things beats planning big ones.',
+      takeaway: 'Ship the smallest thing that works this week.',
+      funnel: 'middle',
+      desiredAction: 'bookmark',
+      format: 'post',
+      length: 'medium',
+      structure: 'hook_problem_insight_closer',
+    });
+    expect((await postService.get('post_01')).plan).toBeNull();
+  });
+
   it("reads a Post's Text with the Version it came from and whether it was edited, and its Media", async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
       data: {

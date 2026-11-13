@@ -13,6 +13,7 @@ from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -31,6 +32,7 @@ async def with_author(client, subscribed, fake_x_reader):
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=_utc(2026, 9, 1))
     ]
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 

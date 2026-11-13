@@ -12,6 +12,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     false,
+    true,
 )
 from sqlalchemy import Enum as PgEnum
 from sqlalchemy.dialects.postgresql import JSONB
@@ -20,6 +21,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pumpkit.core.db.base import Base
 from pumpkit.core.ids import ulid_with_prefix
 from pumpkit.posts.formats import Format
+from pumpkit.posts.plans import DesiredAction, Funnel, Length, Plan, Structure
 
 if TYPE_CHECKING:
     from pumpkit.auth.models import User
@@ -36,8 +38,19 @@ class Brief(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # The User's Positioning when the Brief was planned, whatever it is now. None, like the
+    # three below, on a Brief that was never planned.
+    positioning: Mapped[Optional[str]] = mapped_column(Text)
+    # Why the planner split the Brief or didn't. Only kept, never shown.
+    planning_reasoning: Mapped[Optional[str]] = mapped_column(Text)
+    planning_model: Mapped[Optional[str]] = mapped_column(String)
+    # The provider's whole usage payload, cost and cache counts included.
+    planning_usage: Mapped[Optional[dict]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
 
     user: Mapped["User"] = relationship()
+    ideas: Mapped[list["Idea"]] = relationship(
+        back_populates="brief", cascade="all, delete-orphan", order_by="Idea.posting_order"
+    )
 
 
 class Idea(Base):
@@ -51,9 +64,61 @@ class Idea(Base):
     brief_id: Mapped[str] = mapped_column(ForeignKey("briefs.id", ondelete="CASCADE"), index=True)
     # Where the Idea comes among its Brief's Ideas when they are posted, from 1.
     posting_order: Mapped[int] = mapped_column(Integer)
+    # True for the single-post Idea, which covers the whole Brief; False for a split Idea.
+    whole_brief: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # The Plan, as columns. All None on an Idea that was never planned.
+    core_idea: Mapped[Optional[str]] = mapped_column(Text)
+    takeaway: Mapped[Optional[str]] = mapped_column(Text)
+    plan_reasoning: Mapped[Optional[str]] = mapped_column(Text)
+    funnel: Mapped[Optional[Funnel]] = mapped_column(PgEnum(*get_args(Funnel), name="funnel_enum"))
+    desired_action: Mapped[Optional[DesiredAction]] = mapped_column(
+        PgEnum(*get_args(DesiredAction), name="desired_action_enum")
+    )
+    format: Mapped[Optional[Format]] = mapped_column(
+        PgEnum(*get_args(Format), name="version_format_enum")
+    )
+    # None for a Thread.
+    length: Mapped[Optional[Length]] = mapped_column(PgEnum(*get_args(Length), name="length_enum"))
+    structure: Mapped[Optional[Structure]] = mapped_column(
+        PgEnum(*get_args(Structure), name="structure_enum")
+    )
 
     # Read with the Idea, since an async session can't load it lazily.
-    brief: Mapped[Brief] = relationship(lazy="selectin")
+    brief: Mapped[Brief] = relationship(back_populates="ideas", lazy="selectin")
+
+    def __init__(self, *, plan: Optional[Plan] = None, **fields: Any) -> None:
+        super().__init__(**fields)
+        if plan is not None:
+            self.core_idea = plan.core_idea
+            self.takeaway = plan.takeaway
+            self.plan_reasoning = plan.reasoning
+            self.funnel = plan.funnel
+            self.desired_action = plan.desired_action
+            self.format = plan.format
+            self.length = plan.length
+            self.structure = plan.structure
+
+    @property
+    def plan(self) -> Optional[Plan]:
+        if (
+            self.core_idea is None
+            or self.takeaway is None
+            or self.funnel is None
+            or self.desired_action is None
+            or self.format is None
+            or self.structure is None
+        ):
+            return None
+        return Plan(
+            core_idea=self.core_idea,
+            takeaway=self.takeaway,
+            reasoning=self.plan_reasoning or "",
+            funnel=self.funnel,
+            desired_action=self.desired_action,
+            format=self.format,
+            length=self.length,
+            structure=self.structure,
+        )
 
 
 class Post(Base):

@@ -14,11 +14,14 @@ from pumpkit.posts.formats import Format
 from pumpkit.posts.models import (
     ATTEMPT_FAILED,
     ATTEMPT_SUCCEEDED,
+    Brief,
+    Idea,
     Post,
     VersionAttempt,
 )
 from pumpkit.posts.writing.constants import CORPUS_POSTS_PER_AUTHOR
 from pumpkit.posts.writing.corpus import Corpus, CorpusPost, group_corpus
+from pumpkit.posts.writing.planning import PlannedBrief
 from pumpkit.posts.writing.starting_text import StartingText
 from pumpkit.posts.writing.versions import WrittenVersion
 
@@ -108,13 +111,40 @@ async def count_versions_between(
     return result.scalar_one()
 
 
+async def store_planned_brief(
+    db: AsyncSession, *, user_id: str, text: str, planned: PlannedBrief, now: datetime
+) -> Idea:
+    """
+    Store the Brief as it was planned, with its single-post Idea and its split Ideas in posting
+    order, and return the single-post Idea. Flushes.
+    """
+    single = Idea(posting_order=1, whole_brief=True, plan=planned.single)
+    split = [
+        Idea(posting_order=order, whole_brief=False, plan=plan)
+        for order, plan in enumerate(planned.split, start=1)
+    ]
+    brief = Brief(
+        user_id=user_id,
+        text=text,
+        created_at=now,
+        positioning=planned.positioning,
+        planning_reasoning=planned.reasoning,
+        planning_model=planned.model,
+        planning_usage=planned.usage,
+        ideas=[single, *split],
+    )
+    db.add(brief)
+    await db.flush()
+    return single
+
+
 async def create_post(
-    db: AsyncSession, *, user_id: str, brief: str, corpus: Corpus, now: datetime
+    db: AsyncSession, *, user_id: str, idea: Idea, corpus: Corpus, now: datetime
 ) -> Post:
-    """Flushes."""
+    """A Post of `user_id`, who must be the User of the Idea's Brief. Flushes."""
     post = Post(
         user_id=user_id,
-        brief=brief,
+        idea=idea,
         corpus_post_ids=list(corpus.post_ids),
         created_at=now,
         # Set empty so the collection never loads lazily, which an async session can't do.

@@ -112,6 +112,7 @@ import {
   postService,
   textOf,
   type Part,
+  type Plan,
   type PostDetail,
   type PostText,
   type Version,
@@ -178,6 +179,7 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
     {
       id: 'post_01',
       brief: 'ship small things',
+      plan: null,
       text: null,
       versions: [],
       status: 'draft',
@@ -548,6 +550,74 @@ describe('Post page', () => {
   });
 
   describe('Origin line', () => {
+    const PLAN: Plan = {
+      coreIdea: 'Shipping small things beats planning big ones.',
+      takeaway: 'Ship the smallest thing that works this week.',
+      funnel: 'middle',
+      desiredAction: 'bookmark',
+      format: 'post',
+      length: 'medium',
+      structure: 'hook_problem_insight_closer',
+    };
+
+    it('shows the Plan in plain words after the Brief, and again above the full Brief', async () => {
+      renderPost({ ...postWith('the final text'), plan: PLAN });
+      await textCard();
+
+      fireEvent.click(
+        card().getByRole('button', {
+          name: 'V1 · From your brief · Built for trust · aims for bookmarks · medium',
+        }),
+      );
+
+      const brief = within(await screen.findByRole('dialog', { name: 'Brief' }));
+      expect(brief.getByText('Built for trust · aims for bookmarks · medium')).toBeInTheDocument();
+      expect(brief.getByText('ship small things')).toBeInTheDocument();
+    });
+
+    it.each<[Partial<Plan>, string]>([
+      [
+        { funnel: 'top', desiredAction: 'reply', length: 'short' },
+        'Built for reach · aims for replies · short',
+      ],
+      [
+        { funnel: 'bottom', desiredAction: 'sign-up', length: 'long' },
+        'Built for conversion · aims for sign-ups · long',
+      ],
+      [{ desiredAction: 'trust' }, 'Built for trust · asks for nothing · medium'],
+      [{ desiredAction: 'dwell_time' }, 'Built for trust · aims for full reads · medium'],
+    ])('words the Plan %j as "%s"', async (choices, words) => {
+      renderPost({ ...postWith('the final text'), plan: { ...PLAN, ...choices } });
+      await textCard();
+
+      expect(
+        card().getByRole('button', { name: `V1 · From your brief · ${words}` }),
+      ).toBeInTheDocument();
+    });
+
+    it('leaves the Length out of the Plan of a Thread', async () => {
+      renderPost({ ...threadWith([part('one'), part('two')]), plan: PLAN });
+      await textCard();
+
+      expect(
+        card().getByRole('button', {
+          name: 'V1 · From your brief · Built for trust · aims for bookmarks',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('shows no Plan on a Version written from Feedback, which may have overridden it', async () => {
+      renderPost({
+        ...draft([version(1, ['the final text']), version(2, ['a punchier text'])]),
+        plan: PLAN,
+      });
+      await textCard();
+
+      expect(
+        card().getByRole('button', { name: 'V2 · From feedback: “punchier”' }),
+      ).toBeInTheDocument();
+    });
+
     it('says the Text came from the Brief, and opens the full Brief', async () => {
       renderPost(postWith('the final text'));
       await textCard();

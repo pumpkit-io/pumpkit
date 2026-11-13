@@ -11,6 +11,7 @@ from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 from tests.billing.test_monthly_coupons import monthly
 from tests.billing.test_top_ups import ACCEPTANCE, TOP_UP_CHECKOUT, _send
 from tests.billing.test_top_ups import sells_top_ups as sells_top_ups
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written
 
 
@@ -111,6 +112,7 @@ async def test_existing_trial_keeps_original_reduced_period_then_full_free_month
         "customer.subscription.updated",
         {"customer": "cus_monthly"},
     )
+    await save_positioning(authed_client)
     await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     fake_llm.replies = [written("Sketch"), {"post": "Usage stays in the original trial"}]
     assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201

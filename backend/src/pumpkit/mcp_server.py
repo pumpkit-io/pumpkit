@@ -52,7 +52,9 @@ Pumpkit writes X posts in the style of X accounts the user picks, their inspirat
 (up to three), and publishes them on X.
 
 - A brief says what a post is about and what the user thinks about it. Starting a post from \
-a brief makes its first version.
+a brief plans it around the user's positioning, then makes its first version. A user with no \
+positioning can't start a post: save one with `set_positioning`, or send them to the Persona \
+page of the web app.
 - A post has one text, the text meant for X, with one text per part for a thread. It is what \
 the user sees and edits by hand in the web app, and `get_post` says whether it was `edited` \
 since the version it came from.

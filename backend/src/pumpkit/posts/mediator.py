@@ -9,6 +9,7 @@ from pumpkit.auth.models import User
 from pumpkit.core.errors import NotFoundError, RefusedError
 from pumpkit.core.llm import LLM
 from pumpkit.core.storage import FileStorage
+from pumpkit.positioning import service as positioning_service
 from pumpkit.posts import media as media_service
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
@@ -19,12 +20,14 @@ from pumpkit.posts.version_writing import (
     charge_generation,
     check_attempt_limit,
     check_generation_left,
+    plan_response,
     record_failed_attempt,
     version_response,
 )
+from pumpkit.posts.writing.planning import plan_brief
 from pumpkit.posts.writing.versions import write_first_version
 
-# Where the User adds Inspiration authors.
+# Where the User saves their Positioning and adds Inspiration authors.
 PERSONA_PAGE = "/persona"
 
 
@@ -32,12 +35,17 @@ async def start_post(
     db: AsyncSession, llm: LLM, user: User, brief: str, format: Format, now: datetime
 ) -> PostResponse:
     """
-    Start a Post from the Brief and write its first Version in `format`.
+    Plan the Brief with the User's Positioning, then start a Post from its single-post Idea
+    and write its first Version in `format`.
 
-    The Post and its attempt are stored only after the calls, so no transaction stays open
-    across them; a failure is stored as a failed attempt before the error is re-raised.
+    The Brief, its Ideas, the Post and its attempt are stored only after the calls, so no
+    transaction stays open across them. A failed plan stores nothing; a failed write is stored
+    as a failed attempt before the error is re-raised.
     """
     user_id = user.id
+    positioning = await positioning_service.get_positioning(db, user_id=user_id)
+    if positioning is None:
+        raise RefusedError("Set up your persona before writing a post.", fix_page=PERSONA_PAGE)
     corpus = await service.corpus_for_user(db, user_id=user_id)
     if not corpus.post_ids:
         raise RefusedError(
@@ -49,10 +57,14 @@ async def start_post(
     # Ends the read transaction before the calls, which can take minutes.
     await db.commit()
 
+    planned = await plan_brief(llm, brief, positioning.text, char_limit)
     try:
         written = await write_first_version(llm, corpus, brief, format, char_limit)
     except Exception as error:
-        post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
+        idea = await service.store_planned_brief(
+            db, user_id=user_id, text=brief, planned=planned, now=now
+        )
+        post = await service.create_post(db, user_id=user_id, idea=idea, corpus=corpus, now=now)
         await record_failed_attempt(
             db, post=post, sequence=1, feedback=None, format=format, error=error, now=now
         )
@@ -62,14 +74,20 @@ async def start_post(
 
     # Before the insert: its key share on the User deadlocks two requests upgrading it to charge.
     await users_service.lock_user_id(db, user_id=user_id)
-    post = await service.create_post(db, user_id=user_id, brief=brief, corpus=corpus, now=now)
+    idea = await service.store_planned_brief(
+        db, user_id=user_id, text=brief, planned=planned, now=now
+    )
+    post = await service.create_post(db, user_id=user_id, idea=idea, corpus=corpus, now=now)
     version = await service.record_version(
         db, post=post, sequence=1, version_number=1, feedback=None, written=written, now=now
     )
     await charge_generation(db, user_id=user_id, version=version, now=now)
     await db.commit()
     return PostResponse(
-        id=post.id, brief=post.brief, versions=[version_response(version, char_limit)]
+        id=post.id,
+        brief=post.brief,
+        plan=plan_response(idea.plan),
+        versions=[version_response(version, char_limit)],
     )
 
 

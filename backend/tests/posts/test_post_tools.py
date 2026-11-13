@@ -12,7 +12,7 @@ from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written, written_thread
+from tests.posts.writing_replies import PLAN, written, written_thread
 
 
 @pytest.fixture
@@ -25,6 +25,9 @@ async def with_author(subscribed, mcp, fake_x_reader):
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     ]
+    assert (await mcp.call_tool("set_positioning", text="I post about bootstrapping."))[
+        "isError"
+    ] is False
     assert (await mcp.call_tool("add_inspiration_author", handle="levelsio"))["isError"] is False
 
 
@@ -53,6 +56,7 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
     assert post == {
         "id": post["id"],
         "brief": "ship small things",
+        "plan": PLAN,
         "versions": [
             {
                 "id": post["versions"][0]["id"],
@@ -95,6 +99,8 @@ async def test_start_post_takes_an_optional_format_of_post_or_thread(subscribed,
 
 
 async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
+    await mcp.call_tool("set_positioning", text="I post about bootstrapping.")
+
     result = await mcp.call_tool("start_post", brief="ship small things")
 
     assert error_text(result) == (

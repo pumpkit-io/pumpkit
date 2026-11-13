@@ -635,6 +635,7 @@ async def get_post(
     return PostDetailResponse(
         id=post.id,
         brief=post.brief,
+        plan=version_writing.plan_response(post.idea.plan),
         text=version_writing.text_response(post, char_limit),
         versions=[
             version_writing.version_response(v, char_limit)
