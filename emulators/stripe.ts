@@ -398,6 +398,19 @@ export function pumpkitStripe(target: WebhookTarget) {
         if (key && state.idempotentObjects[key]) return c.json(state.idempotentObjects[key]);
         const [item] = params.line_items ?? [{}];
         if (params.mode !== 'setup' && !state.prices[item?.price]) return notFound(c, 'price', item?.price);
+        const managed = params.managed_payments?.enabled === 'true';
+        // Stripe refuses these with Managed Payments on, since it collects tax and the address itself.
+        const sellerOnly = ['automatic_tax', 'tax_id_collection', 'customer_update'].filter((p) => p in params);
+        if (managed && sellerOnly.length)
+          return c.json(
+            {
+              error: {
+                type: 'invalid_request_error',
+                message: `Managed Payments sets ${sellerOnly.join(', ')} itself`,
+              },
+            },
+            400,
+          );
         const days = params.subscription_data?.trial_period_days;
         const session = {
           id: newId('cs_test'),
@@ -408,6 +421,7 @@ export function pumpkitStripe(target: WebhookTarget) {
           customer: params.customer,
           client_reference_id: params.client_reference_id ?? null,
           metadata: params.metadata ?? {},
+          managed_payments: { enabled: managed },
           success_url: params.success_url,
           cancel_url: params.cancel_url,
           created: now(),

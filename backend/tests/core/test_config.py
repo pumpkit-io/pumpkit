@@ -291,6 +291,21 @@ def test_operator_details_without_support_email_fail_naming_it(instance_env):
         instance_env(**_OPERATOR_ENV)
 
 
+def test_the_instance_stays_the_seller_unless_it_turns_managed_payments_on(instance_env):
+    assert instance_env(**_STRIPE_ENV).STRIPE_MANAGED_PAYMENTS is False
+    assert instance_env(**_STRIPE_ENV, STRIPE_MANAGED_PAYMENTS="true").STRIPE_MANAGED_PAYMENTS
+
+
+def test_managed_payments_without_stripe_billing_fails_naming_what_is_missing(instance_env):
+    with pytest.raises(ValidationError) as excinfo:
+        instance_env(STRIPE_MANAGED_PAYMENTS="true")
+
+    message = str(excinfo.value)
+    assert "STRIPE_MANAGED_PAYMENTS" in message
+    for key in _STRIPE_ENV:
+        assert key in message
+
+
 def test_empty_plan_keys_count_as_unset(instance_env):
     stripe_without_plans = {**_STRIPE_ENV, "BILLING_PLAN_KEYS": "[]"}
 

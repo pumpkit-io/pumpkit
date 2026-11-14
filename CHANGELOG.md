@@ -44,6 +44,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - Self-hosters can test personally at `http://localhost:5173` with real X sign-in, Stripe sandbox billing and coupons, and separate persistent local data through `make dev-personal`. A development-only X callback relay preserves localhost sessions; agent stacks stay emulated. Existing local stacks keep their data.
 
+- Self-hosters can make Stripe the seller of their Instance with the new optional setting `STRIPE_MANAGED_PAYMENTS=true`: every Subscription and Top-up Checkout then runs with Stripe's Managed Payments, so Stripe calculates, collects and files VAT and sends receipts and invoices. Left unset, nothing changes: the Instance stays the seller and charges VAT through Stripe Tax. Turning it on needs Stripe billing configured and a Managed Payments tax code on each product, and applies only to Subscriptions started afterwards.
+
 ## [0.11.1] - 2026-11-10
 
 - Users can switch annual subscriptions in Stripe classic mode to monthly billing after coupon free access without an immediate charge or lost access. Existing interrupted changes retain their original recovery request.
