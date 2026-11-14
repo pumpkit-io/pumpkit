@@ -4,6 +4,7 @@ import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { positioningService } from '@/services/positioningService';
+import { forgetDraft, keepDraft, keptDraft } from './keptDraft';
 
 type Loading = 'loading' | 'failed' | 'loaded';
 
@@ -17,8 +18,11 @@ function isBlank(text: string): boolean {
   return [...text].every((ch) => ch <= '\x1f' || ch === '\x85' || /[\s\p{Cs}]/u.test(ch));
 }
 
-/** The User's Positioning as they are editing it, loaded on mount, with save and draft. */
-export function usePositioning() {
+/**
+ * The User's Positioning as they are editing it, loaded on mount, with save and draft. With
+ * `draftOnOpen`, a User with no Positioning gets the kept draft, else a fresh one, as it loads.
+ */
+export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean } = {}) {
   const { refresh: refreshOnboarding } = useOnboarding();
   const [loading, setLoading] = useState<Loading>('loading');
   const [attempt, setAttempt] = useState(0);
@@ -40,6 +44,34 @@ export function usePositioning() {
   /** True from a draft filling the textarea until the next edit, save or draft. */
   const [justDrafted, setJustDrafted] = useState(false);
 
+  const draft = useCallback(async () => {
+    const before = latestText.current;
+    setDrafting(true);
+    setError(null);
+    setTextRefused(false);
+    setJustDrafted(false);
+    try {
+      const drafted = await positioningService.draft();
+      setCanDraft(drafted.canDraft);
+      if (drafted.text === null) {
+        setError(drafted.reason ?? NOT_DRAFTED);
+      } else if (latestText.current === before) {
+        setText(drafted.text);
+        latestText.current = drafted.text;
+        setJustSaved(false);
+        setJustDrafted(true);
+        if (draftOnOpen) keepDraft(drafted.text);
+      }
+    } catch (e) {
+      if (isSubscriptionNeeded(e)) void refreshOnboarding();
+      // The only 429 this request gets is the daily limit, which the button's own line explains.
+      else if (errorStatus(e) === 429) setCanDraft(false);
+      else setError(errorMessage(e, NOT_DRAFTED));
+    } finally {
+      setDrafting(false);
+    }
+  }, [draftOnOpen, refreshOnboarding]);
+
   useEffect(() => {
     let cancelled = false;
     positioningService
@@ -51,12 +83,22 @@ export function usePositioning() {
         latestText.current = positioning.text ?? '';
         setCanDraft(positioning.canDraft);
         setLoading('loaded');
+        if (!draftOnOpen || positioning.text !== null) return;
+        const kept = keptDraft();
+        if (kept !== null) {
+          setText(kept);
+          latestText.current = kept;
+          setJustDrafted(true);
+        } else if (positioning.canDraft) {
+          // Same tick as the load, so the textarea never renders editable before the draft starts.
+          void draft();
+        }
       })
       .catch(() => !cancelled && setLoading('failed'));
     return () => {
       cancelled = true;
     };
-  }, [attempt]);
+  }, [attempt, draftOnOpen, draft]);
 
   const reload = useCallback(() => {
     setLoading('loading');
@@ -72,7 +114,8 @@ export function usePositioning() {
     setJustDrafted(false);
   }, []);
 
-  const save = useCallback(async () => {
+  /** Resolves true when the text in the textarea is what got saved. */
+  const save = useCallback(async (): Promise<boolean> => {
     setSaving(true);
     setError(null);
     setTextRefused(false);
@@ -87,6 +130,8 @@ export function usePositioning() {
         setJustSaved(true);
       }
       track('positioning_saved');
+      if (draftOnOpen) forgetDraft();
+      return latestText.current === positioning.text;
     } catch (e) {
       // A refusal for want of a Subscription sends the User to the Paywall, not to an error.
       if (isSubscriptionNeeded(e)) void refreshOnboarding();
@@ -103,39 +148,18 @@ export function usePositioning() {
         );
         setTextRefused(refused);
       }
+      return false;
     } finally {
       setSaving(false);
     }
-  }, [text, refreshOnboarding]);
+  }, [text, draftOnOpen, refreshOnboarding]);
 
-  const draft = useCallback(async () => {
-    setDrafting(true);
-    setError(null);
-    setTextRefused(false);
-    setJustDrafted(false);
-    try {
-      const drafted = await positioningService.draft();
-      setCanDraft(drafted.canDraft);
-      if (drafted.text === null) {
-        setError(drafted.reason ?? NOT_DRAFTED);
-      } else {
-        setText(drafted.text);
-        latestText.current = drafted.text;
-        setJustSaved(false);
-        setJustDrafted(true);
-      }
-    } catch (e) {
-      if (isSubscriptionNeeded(e)) void refreshOnboarding();
-      // The only 429 this request gets is the daily limit, which the button's own line explains.
-      else if (errorStatus(e) === 429) setCanDraft(false);
-      else setError(errorMessage(e, NOT_DRAFTED));
-    } finally {
-      setDrafting(false);
-    }
-  }, [refreshOnboarding]);
+  /** Shows `message` where a failed save's reason goes. */
+  const fail = useCallback((message: string) => setError(message), []);
 
   const idle = loading === 'loaded' && !saving && !drafting;
-  const canSave = idle && !isBlank(text) && text.trim() !== saved;
+  const hasText = !isBlank(text);
+  const canSave = idle && hasText && text.trim() !== saved;
   /** Counted in code points, as the backend's limit counts, so an emoji is one character. */
   const length = [...text].length;
 
@@ -147,7 +171,10 @@ export function usePositioning() {
     edit,
     save,
     saving,
+    idle,
+    hasText,
     canSave,
+    fail,
     error,
     textRefused,
     justSaved,
