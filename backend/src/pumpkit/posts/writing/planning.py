@@ -171,7 +171,7 @@ def _plans(planned: Sequence[_Planned], user_id: str) -> list[Plan]:
     for post in planned:
         plan = _plan(post)
         for pull in _pulls(post, plan):
-            # The Brief is stored only after its Post is written, so it has no id to log yet.
+            # The Brief is stored after the plan call, so it has no id to log yet.
             logger.warning(
                 "A plan's choices pull against each other for User %s: %s", user_id, pull
             )

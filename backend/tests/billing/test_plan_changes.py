@@ -448,7 +448,7 @@ async def test_interval_change_keeps_used_generation_and_captured_paid_caps(
     await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
     await save_positioning(authed_client)
     fake_llm.replies = [{"post": "A used generation before changing payment frequency"}]
-    assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
+    assert (await authed_client.post("/api/v1/briefs", json={"brief": "A note"})).status_code == 201
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 800)
     before = (await authed_client.get("/api/v1/usage")).json()
     assert before["allowance"]["generations"] == {"limit": 500, "used": 1, "left": 499}

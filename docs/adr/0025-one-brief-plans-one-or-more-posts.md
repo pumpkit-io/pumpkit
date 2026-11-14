@@ -17,7 +17,7 @@ This amends ADR 0016's premise of one Brief per Post, and ADR 0012 for the tools
 - The planner chooses the Format. The User no longer picks it when starting a Post, and an explicit ask in the Brief ("as a thread", "write one post about this") is followed. The planner chooses a Thread when the material needs more room than the account's limit allows, and prefers a medium or long post on an account with a longer limit.
 - In the web app, a Brief with no split Ideas starts writing its single-post Idea in the planning request, so the simple case stays one step for the User. With split Ideas, the User picks which to write, or asks for one Post covering everything, which writes the single-post Idea.
 - Planning is never a Generation. One Generation is charged per Post written (ADR 0026), and that includes the Post a planning request starts when there are no split Ideas.
-- Planning is rate limited by the existing per-minute write rate and a per-User hourly cap, whose number #482 sets.
+- Planning is rate limited by the existing per-minute write rate and a per-User cap of 20 plan calls an hour (`PLAN_CALLS_PER_HOUR`). Every plan call counts, a failed one included, since a failed call is paid for too. A planning request is also refused up front when the User couldn't write even one Post, by the attempt limit or the Generations left, since a Brief with no split Ideas starts writing its Post at once.
 - Choices in a Plan that pull against each other are logged, and the Post is still written.
 - The User can't change a Plan before writing. Feedback overrides it afterwards ("make it longer", "no CTA", "turn it into a thread").
 

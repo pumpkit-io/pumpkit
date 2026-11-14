@@ -10,9 +10,10 @@ from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHAR
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import save_positioning
 from tests.posts.feedback import written_version
-from tests.posts.writing_replies import start_thread, written_post
+from tests.posts.writing_replies import start_thread, started_post_id, written_post
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 
 
 @pytest.fixture
@@ -54,7 +55,7 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
 ):
     fake_llm.replies = [{"post": "final"}]
 
-    post = await client.post(POSTS, json={"brief": "ship"})
+    post = await client.post(BRIEFS, json={"brief": "ship"})
     fake_llm.calls.clear()
     thread = await start_thread(client, fake_llm, ["one", "two"], brief="ship")
 
@@ -78,7 +79,7 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
     await connect_x_as(subscription_type)
     fake_llm.replies = [{"post": "final"}]
 
-    post = await client.post(POSTS, json={"brief": "ship"})
+    post = await client.post(BRIEFS, json={"brief": "ship"})
     fake_llm.calls.clear()
     thread = await start_thread(client, fake_llm, ["one", "two"], brief="ship")
 
@@ -91,7 +92,7 @@ async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit
     client, db, user, with_positioning, fake_llm, connect_x_as
 ):
     await connect_x_as("None")
-    post_id = (await start_thread(client, fake_llm, ["one", "two"], brief="ship")).json()["id"]
+    post_id = started_post_id(await start_thread(client, fake_llm, ["one", "two"], brief="ship"))
     connection = await x_connections_service.get_connection(db, user_id=user.id)
     assert connection is not None
     await x_connections_service.save_account(

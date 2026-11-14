@@ -12,9 +12,10 @@ import pytest
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.writing_state import WRITING_TIMEOUT
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import HUMANIZED_POST, REVISED_POST
+from tests.posts.writing_replies import HUMANIZED_POST, REVISED_POST, started_post_id
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 USAGE = "/api/v1/usage"
 
 
@@ -23,10 +24,10 @@ async def post_id(client, subscribed, fake_llm, background_tasks, clock) -> str:
     """A Draft whose Text is Version 1, "Version one.", written in the background."""
     await save_positioning(client)
     fake_llm.replies.append({"post": "Version one.", "first_reply": None})
-    started = await client.post(POSTS, json={"brief": "ship small things"})
+    started = await client.post(BRIEFS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     await background_tasks.wait()
-    return started.json()["id"]
+    return started_post_id(started)
 
 
 @pytest.fixture
@@ -208,7 +209,7 @@ async def test_a_feedback_being_written_holds_its_generation(
     monkeypatch.setattr("pumpkit.core.config.settings.GENERATIONS_MONTHLY_CAP", 2)
     await _feedback(client, post_id)
 
-    response = await client.post(POSTS, json={"brief": "ship small things"})
+    response = await client.post(BRIEFS, json={"brief": "ship small things"})
 
     assert response.status_code == 409
     assert response.json()["left"] == 0

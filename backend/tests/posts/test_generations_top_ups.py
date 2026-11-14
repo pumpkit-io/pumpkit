@@ -13,8 +13,10 @@ from pumpkit.core.config import settings
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import started_post_id
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 USAGE = "/api/v1/usage"
 WEBHOOK = "/api/v1/stripe/webhook"
 CUSTOMER = "cus_1"
@@ -86,7 +88,7 @@ async def _generations_left(client) -> tuple[int, list[int]]:
 
 async def _start_post(client, fake_llm):
     fake_llm.replies = [{"post": "final"}]
-    return await client.post(POSTS, json={"brief": "ship"})
+    return await client.post(BRIEFS, json={"brief": "ship"})
 
 
 async def test_with_the_allowance_used_up_a_version_is_charged_to_a_top_up(
@@ -139,7 +141,7 @@ async def test_feedback_is_charged_to_a_top_up_too(
     fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
-    post_id = (await _start_post(client, fake_llm)).json()["id"]
+    post_id = started_post_id(await _start_post(client, fake_llm))
     await _use_allowance(db, user.id, count=3)
     fake_llm.replies = [{"post": "final 2"}]
 
@@ -237,7 +239,7 @@ async def test_a_failed_attempt_takes_nothing_from_a_top_up(
     await _use_allowance(db, user.id)
     fake_llm.replies = [LLMError("down")]
 
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
+    assert (await client.post(BRIEFS, json={"brief": "ship"})).status_code == 201
 
     assert await _generations_left(client) == (0, [2])
 

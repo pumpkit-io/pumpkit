@@ -20,6 +20,7 @@ from tests.posts.writing_replies import (
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 BRIEF = "I built a pricing calculator. Sign up at pumpkit.io/calc to try it."
 
 
@@ -35,7 +36,7 @@ def _texts(parts: list[dict]) -> list[str]:
 async def _written(client, fake_llm, merged_reply, humanized_reply) -> dict:
     fake_llm.standing[MERGED_SKETCH] = merged("The post.", first_reply=merged_reply)
     fake_llm.replies = [{"post": "The post.", "first_reply": humanized_reply}]
-    return await written_post(client, await client.post(POSTS, json={"brief": BRIEF}))
+    return await written_post(client, await client.post(BRIEFS, json={"brief": BRIEF}))
 
 
 async def test_a_written_first_reply_is_the_last_part_of_a_single_post(client, ready, fake_llm):

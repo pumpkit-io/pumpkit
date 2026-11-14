@@ -70,7 +70,7 @@ test('New post shows the generations limit instead of an error banner', async ({
   await page.goto('/new');
   await page.getByLabel('Brief', { exact: true }).fill('A post that exceeds my allowance.');
   const response = page.waitForResponse(
-    (r) => r.url().endsWith('/api/v1/posts') && r.request().method() === 'POST',
+    (r) => r.url().endsWith('/api/v1/briefs') && r.request().method() === 'POST',
   );
   await page.getByRole('button', { name: 'Write the post' }).click();
   expect((await response).status()).toBe(409);

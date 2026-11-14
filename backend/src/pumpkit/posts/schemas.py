@@ -8,7 +8,7 @@ from pumpkit.posts.formats import Format
 from pumpkit.posts.media_files import cleaned_alt_text
 from pumpkit.posts.models import MediaKind
 from pumpkit.posts.plans import DesiredAction, Funnel, Length, Structure
-from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS
+from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS, MAX_SPLIT_IDEAS
 from pumpkit.posts.writing_state import WritingState
 
 # Per caller, for the routes and MCP tools that write a Version.
@@ -17,7 +17,7 @@ WRITE_RATE = "20/minute"
 MEDIA_RATE = "60/minute"
 
 
-class PostStartRequest(BaseModel):
+class BriefRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     # The planner chooses the Format, so a Brief asks for a Thread in its own words.
@@ -138,3 +138,46 @@ class PostResponse(BaseModel):
     versions: list[VersionResponse]
     # "writing" while its first Version is written in the background, then None.
     writing_state: Optional[WritingState]
+
+
+class WriteIdeasRequest(BaseModel):
+    """The Ideas of a Brief to write, each as a Post of its own."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    # Split Ideas or the single-post one. Empty is refused with a reason the page can show.
+    idea_ids: list[str] = Field(..., max_length=MAX_SPLIT_IDEAS + 1)
+
+    @field_validator("idea_ids")
+    @classmethod
+    def _once_each(cls, value: list[str]) -> list[str]:
+        return list(dict.fromkeys(value))
+
+
+class BriefPostResponse(BaseModel):
+    """An Idea's Post as its Brief's page shows it."""
+
+    id: str
+    # "writing" while its first Version is written, "not_written" when Pumpkit couldn't write it.
+    writing_state: Optional[WritingState]
+    # None until its first Version is written.
+    text: Optional[TextResponse]
+
+
+class IdeaResponse(BaseModel):
+    id: str
+    # Where the Idea comes among the Ideas posted with it, from 1; the single-post Idea is 1.
+    posting_order: int
+    # True for the single-post Idea, which covers the whole Brief.
+    whole_brief: bool
+    plan: Optional[PlanResponse]
+    # None until the User writes the Idea.
+    post: Optional[BriefPostResponse]
+
+
+class BriefResponse(BaseModel):
+    id: str
+    text: str
+    created_at: datetime
+    # The single-post Idea first, then the split Ideas in posting order.
+    ideas: list[IdeaResponse]

@@ -17,9 +17,11 @@ from tests.posts.writing_replies import (
     PLAN,
     POST_IDEAS,
     SKETCHED_POST,
+    started_post_id,
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 USAGE = "/api/v1/usage"
 BRIEF = "I shipped a pricing page in a weekend and trials went from 12 to 31 a week."
 
@@ -39,9 +41,9 @@ def held(fake_llm):
 
 async def _start(client, fake_llm, final: str = "The final.") -> str:
     fake_llm.replies.append({"post": final, "first_reply": None})
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
     assert response.status_code == 201, response.text
-    return response.json()["id"]
+    return started_post_id(response)
 
 
 async def _post(client, post_id: str) -> dict:
@@ -58,20 +60,22 @@ def _plan_calls(fake_llm) -> int:
     return sum(call.response_model.__name__ == POST_IDEAS for call in fake_llm.calls)
 
 
-async def test_starting_a_post_answers_with_it_being_written_before_its_version_is(
+async def test_planning_a_brief_answers_with_its_post_being_written_before_its_version_is(
     client, ready, fake_llm, background_tasks, held
 ):
     fake_llm.replies.append({"post": "The final.", "first_reply": None})
 
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
 
     assert response.status_code == 201
     body = response.json()
-    assert body["brief"] == BRIEF
-    assert body["plan"] == PLAN
-    assert body["versions"] == []
-    assert body["writing_state"] == "writing"
-    post = await _post(client, body["id"])
+    assert body["text"] == BRIEF
+    [idea] = body["ideas"]
+    assert idea["plan"] == PLAN
+    assert idea["post"]["writing_state"] == "writing"
+    assert idea["post"]["text"] is None
+    post = await _post(client, idea["post"]["id"])
+    assert post["brief"] == BRIEF
     assert post["writing_state"] == "writing"
     assert post["status"] is None
     assert post["text"] is None
@@ -121,12 +125,12 @@ async def test_a_failed_write_charges_nothing_and_shows_the_post_not_written(
     client, ready, fake_llm, background_tasks, fake_posthog
 ):
     fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
     assert response.status_code == 201
 
     await background_tasks.wait()
 
-    post = await _post(client, response.json()["id"])
+    post = await _post(client, started_post_id(response))
     assert post["writing_state"] == "not_written"
     assert post["status"] is None
     assert post["text"] is None
@@ -164,7 +168,7 @@ async def test_retry_writes_the_post_again_from_its_plan_without_planning(
     client, ready, fake_llm, background_tasks
 ):
     fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
-    post_id = (await client.post(POSTS, json={"brief": BRIEF})).json()["id"]
+    post_id = started_post_id(await client.post(BRIEFS, json={"brief": BRIEF}))
     await background_tasks.wait()
     del fake_llm.standing[HUMANIZED_POST]
     fake_llm.replies.append({"post": "Written on retry.", "first_reply": None})
@@ -186,7 +190,7 @@ async def test_retry_after_the_timeout_keeps_only_the_retried_write(
     client, ready, fake_llm, background_tasks, held, clock
 ):
     fake_llm.replies.append({"post": "From the lost write.", "first_reply": None})
-    post_id = (await client.post(POSTS, json={"brief": BRIEF})).json()["id"]
+    post_id = started_post_id(await client.post(BRIEFS, json={"brief": BRIEF}))
     clock.advance(WRITING_TIMEOUT)
     fake_llm.replies.append({"post": "From the retry.", "first_reply": None})
 
@@ -218,7 +222,7 @@ async def test_retry_counts_as_a_new_attempt_against_the_hourly_limit(
 ):
     monkeypatch.setattr("pumpkit.posts.version_writing.VERSION_ATTEMPTS_PER_WINDOW", 2)
     fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
-    post_id = (await client.post(POSTS, json={"brief": BRIEF})).json()["id"]
+    post_id = started_post_id(await client.post(BRIEFS, json={"brief": BRIEF}))
     await background_tasks.wait()
     assert (await client.post(f"{POSTS}/{post_id}/retry")).status_code == 202
     await background_tasks.wait()
@@ -234,7 +238,7 @@ async def test_writes_in_flight_count_against_the_hourly_limit(
     monkeypatch.setattr("pumpkit.posts.version_writing.VERSION_ATTEMPTS_PER_WINDOW", 1)
     await _start(client, fake_llm)
 
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
 
     assert response.status_code == 429
 
@@ -245,7 +249,7 @@ async def test_writes_in_flight_hold_their_generations(
     monkeypatch.setattr("pumpkit.core.config.settings.GENERATIONS_MONTHLY_CAP", 1)
     await _start(client, fake_llm)
 
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
 
     assert response.status_code == 409
     assert response.json()["left"] == 0

@@ -19,7 +19,7 @@ from pumpkit.x_connection.x_publisher import (
 )
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import start_thread
+from tests.posts.writing_replies import start_thread, started_post_id
 from tests.scheduling.reading import scheduled_posts_through_mcp
 
 POSTS_PAGE = "http://localhost:5173/posts"
@@ -36,9 +36,9 @@ async def written_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post written through the API, its Text "The final, version one."."""
     await save_positioning(client)
     fake_llm.replies = [{"post": "The final, version one."}]
-    started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
+    started = await client.post("/api/v1/briefs", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def test_scheduling_a_post_answers_with_the_scheduled_page_link(
@@ -71,7 +71,7 @@ async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     await save_positioning(client)
     started = await start_thread(client, fake_llm, THREAD_FINAL)
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def test_scheduling_a_thread_answers_with_each_part_in_order_and_none_live(

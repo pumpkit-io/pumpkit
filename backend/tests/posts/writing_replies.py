@@ -14,6 +14,7 @@ from pumpkit.posts.writing.post_replies import (
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 
 # What `fake_llm.standing` keys its replies by: the plan's schema name, which both of its answer
 # classes share, and the writing calls' classes.
@@ -160,7 +161,7 @@ async def start_thread(client, fake_llm, parts: list[str], brief: str = "ship sm
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread())
     fake_llm.replies.insert(0, {"parts": list(parts)})
     try:
-        return await client.post(POSTS, json={"brief": brief})
+        return await client.post(BRIEFS, json={"brief": brief})
     finally:
         fake_llm.standing[POST_IDEAS] = before
 
@@ -170,7 +171,13 @@ async def written_post(client, response) -> dict:
     The Post a start `response` named, read once its first Version's write has ended, as
     `GET /posts/{id}` answers it. The suite runs the write inside the request.
     """
-    assert response.status_code == 201, response.text
-    read = await client.get(f"{POSTS}/{response.json()['id']}")
+    read = await client.get(f"{POSTS}/{started_post_id(response)}")
     assert read.status_code == 200, read.text
     return read.json()
+
+
+def started_post_id(response) -> str:
+    """The id of the Post a plan `response` started: its single-post Idea's, with no split."""
+    assert response.status_code == 201, response.text
+    [post_id] = [i["post"]["id"] for i in response.json()["ideas"] if i["post"] is not None]
+    return post_id

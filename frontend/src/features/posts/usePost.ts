@@ -10,10 +10,9 @@ import { track } from '@/lib/analytics';
 import { errorAllowanceUsedUp, errorMessage, errorStatus } from '@/services/apiErrors';
 import {
   isUnwritten,
+  pollDelay,
   postService,
   VersionNotWritten,
-  WRITING_POLL_MAX_MS,
-  WRITING_POLL_MS,
   type FailedFeedback,
   type Format,
   type PostDetail,
@@ -124,7 +123,7 @@ export function usePost(postId: string) {
   useEffect(() => {
     if (!writingPost) return;
     let stopped = false;
-    const delay = Math.min(WRITING_POLL_MS * 2 ** poll.failures, WRITING_POLL_MAX_MS);
+    const delay = pollDelay(poll.failures);
     const timer = setTimeout(() => {
       postService.get(postId).then(
         (post) => {

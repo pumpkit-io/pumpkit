@@ -51,7 +51,7 @@ async def test_known_cancellation_does_not_restore_access_or_billing_actions_aft
         assert (await authed_client.get("/api/v1/onboarding")).json()["next_step"] == "paywall"
         assert (await authed_client.get("/api/v1/posts")).status_code == 403
         assert (
-            await authed_client.post("/api/v1/posts", json={"brief": "No expired access"})
+            await authed_client.post("/api/v1/briefs", json={"brief": "No expired access"})
         ).status_code == 403
         assert (await authed_client.get("/api/v1/usage")).status_code == 403
         assert (await authed_client.post(TOP_UP_CHECKOUT, json=ACCEPTANCE)).status_code == 409

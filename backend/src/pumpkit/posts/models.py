@@ -56,6 +56,21 @@ class Brief(Base):
     )
 
 
+class PlanCall(Base):
+    """
+    One plan call a User's request made, whatever came of it. The hourly cap counts these, since a
+    failed plan call stores no Brief and is paid for all the same.
+    """
+
+    __tablename__ = "plan_calls"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("plan_call")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    called_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class Idea(Base):
     """One Post proposed from a Brief, written or not."""
 

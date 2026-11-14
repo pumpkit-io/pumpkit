@@ -4,6 +4,7 @@ import { APP_HOME, ONBOARDING_PATH, PAYWALL_PATH } from '@/features/onboarding/p
 import { STATUS_TAB, TAB_ORDER } from '@/features/posts/postStatus';
 import { OAUTH_CONSENT_PATH } from '@/lib/oauthConsentPath';
 import { AppLayout } from './AppLayout';
+import { BriefPage } from './BriefPage';
 import { FocusedLayout } from './FocusedLayout';
 import { NewPost } from './NewPost';
 import { OAuthConsent } from './OAuthConsent';
@@ -36,6 +37,7 @@ export function signedInRoutes() {
           <Route key={status} path={STATUS_TAB[status].path} element={<Posts status={status} />} />
         ))}
         <Route path="/posts/:id" element={<PostPage />} />
+        <Route path="/briefs/:id" element={<BriefPage />} />
         <Route path="/persona" element={<Persona />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/home" element={<Navigate to="/new" replace />} />

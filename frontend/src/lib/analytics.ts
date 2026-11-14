@@ -156,6 +156,14 @@ export const EVENTS = {
     description:
       "New post (brief) or the Post page (feedback, or retry of a first Version Pumpkit couldn't write): asked for a Version. Props: kind (brief | feedback | retry).",
   },
+  brief_planned: {
+    description:
+      'New post: a Brief was planned. Props: split_ideas (number of separate ideas found, 0 when the Brief holds one and its post is already being written).',
+  },
+  ideas_write_requested: {
+    description:
+      'New post, ideas step: asked to write the ideas picked. Props: count (posts asked for), choice (each | whole).',
+  },
   post_version_failed: {
     description:
       'New post (brief), the Post page (feedback), or a Post page that watched its first Version fail (brief, or retry when that page retried it): writing a Version failed. Props: kind (brief | feedback | retry).',
