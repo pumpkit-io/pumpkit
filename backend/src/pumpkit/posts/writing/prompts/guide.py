@@ -8,12 +8,13 @@ desired action, length and structure. Only the section for the chosen value goes
 """
 
 from dataclasses import asdict, dataclass
-from typing import Literal
+from typing import Literal, Optional
 
 from pumpkit.posts.formats import FORMAT_THREAD
 from pumpkit.posts.plans import (
     FUNNEL_ACTIONS,
     LENGTH_SHORT,
+    THREAD_STRUCTURES,
     DesiredAction,
     Funnel,
     Length,
@@ -450,6 +451,22 @@ def effective_length(plan: Plan) -> Length:
     return plan.length
 
 
+def plan_structure(plan: Plan) -> Optional[Structure]:
+    """The Plan's structure, or None when its Format has none such: a short post's, switched to a Thread."""
+    if plan.format == FORMAT_THREAD and plan.structure not in THREAD_STRUCTURES:
+        return None
+    return plan.structure
+
+
+def length_for_limit(char_limit: int) -> Length:
+    """The longest Length whose v5 limit the account's limit holds, or short."""
+    if char_limit >= LONG_LIMIT:
+        return "long"
+    if char_limit >= MEDIUM_LIMIT:
+        return "medium"
+    return LENGTH_SHORT
+
+
 def char_limit_for_plan(plan: Plan, char_limit: int) -> int:
     """The post's hard limit: v5's for its Length, or the account's when that is lower."""
     v5_limit = {"short": SHORT_LIMIT, "medium": MEDIUM_LIMIT, "long": LONG_LIMIT}
@@ -478,7 +495,7 @@ def action_section(plan: Plan, links: LinkPlacement) -> str:
 
 def closer_section(plan: Plan, links: LinkPlacement) -> str:
     action = ACTION[plan.desired_action]
-    if plan.structure == "one_line":
+    if plan_structure(plan) == "one_line":
         chosen = (
             "For this post: there is no separate closer or CTA line (one-line structure). "
             f'`cta_type` is "{action["cta"]}" only if the line itself makes that ask, otherwise "none".'

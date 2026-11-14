@@ -1,7 +1,7 @@
 """An Idea's Plan: what Pumpkit decides about a Post before writing it (ADR 0025)."""
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args
 
 from pumpkit.posts.formats import Format
 
@@ -39,6 +39,7 @@ ThreadStructure = Literal[
     "hook_playbook_closer",
 ]
 Structure = Literal[ShortStructure, ThreadStructure]
+THREAD_STRUCTURES: frozenset[Structure] = frozenset(get_args(ThreadStructure))
 
 
 @dataclass(frozen=True)

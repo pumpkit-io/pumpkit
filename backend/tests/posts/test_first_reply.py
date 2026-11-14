@@ -3,23 +3,18 @@ A single post's first reply (ADR 0027): the last Part of the Text, which the wri
 external link in. The Text and each Version record it, and the Post's Format stays post.
 """
 
-from datetime import datetime, timezone
-
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.writing.versions import RevisedPost as RevisedFromCorpus
 from tests.media_files import png
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
+    HUMANIZED_THREAD,
     MERGED_SKETCH,
     REVISED_POST,
+    REVISED_THREAD,
     merged,
     revised,
-    start_thread,
-    written,
-    written_thread,
 )
 
 POSTS = "/api/v1/posts"
@@ -243,79 +238,79 @@ async def test_media_in_the_first_replys_place_moves_onto_the_post(
     ]
 
 
-@pytest.fixture
-async def with_author(client, ready, fake_x_reader):
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
+# A switch to a Thread: the first reply's content goes in the last Part (ADR 0027)
 
 
-def _prompts(fake_llm) -> str:
+def _texts_of(fake_llm, schema: type) -> str:
     return "\n".join(
-        str(message["content"]) for call in fake_llm.calls for message in call.messages
+        str(message["content"])
+        for call in fake_llm.calls
+        if call.response_model is schema
+        for message in call.messages
     )
-
-
-async def test_feedback_written_from_the_corpus_keeps_the_first_reply_as_it_is(
-    client, with_author, fake_llm
-):
-    started = await start_thread(client, fake_llm, ["a", "b"], brief=BRIEF)
-    post_id = started.json()["id"]
-    fake_llm.replies = [written("one post"), {"post": "One post."}]
-    await _feedback(client, post_id, "condense it", format="post")
-    added = await _edit(client, post_id, parts=["One post.", "Try it: x.co/c"], first_reply=True)
-    assert added.status_code == 200, added.text
-    fake_llm.calls.clear()
-    fake_llm.replies = [written("one shorter post"), {"post": "One shorter post."}]
-
-    version = await _feedback(client, post_id, "shorter")
-
-    assert version["format"] == "post"
-    assert version["first_reply"] is True
-    assert _texts(version["parts"]) == ["One shorter post.", "Try it: x.co/c"]
-    assert "x.co/c" not in _prompts(fake_llm)
-    assert "<first_reply>" not in _prompts(fake_llm)
-
-
-async def test_a_switch_to_a_thread_and_back_never_shows_the_model_a_tagged_post(
-    client, with_author, fake_llm
-):
-    post = await _written(client, fake_llm, "Try it: [link]", "Try it: [link]")
-    fake_llm.calls.clear()
-    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["a", "b"]}]
-    await _feedback(client, post["id"], "expand it", format="thread")
-    fake_llm.replies = [written("back"), {"post": "Back to one."}]
-
-    version = await _feedback(client, post["id"], "condense it", format="post")
-
-    assert _texts(version["parts"]) == ["Back to one."]
-    assert "<first_reply>" not in _prompts(fake_llm)
 
 
 async def _switched_to_a_thread(client, fake_llm, reply: str, parts: list[str]) -> dict:
     post = await _written(client, fake_llm, "Try it: [link]", reply)
-    fake_llm.replies = [written_thread(["a", "b"]), {"parts": parts}]
+    fake_llm.calls.clear()
+    fake_llm.replies = [{"parts": parts}]
     return await _feedback(client, post["id"], "expand it", format="thread")
 
 
-async def test_a_switch_to_a_thread_ends_its_last_part_with_the_first_reply(
-    client, with_author, fake_llm
+async def test_a_switch_to_a_thread_shows_the_revise_call_the_post_and_its_first_reply(
+    client, ready, fake_llm
 ):
-    version = await _switched_to_a_thread(client, fake_llm, "Try it → [link]", ["One.", "Two."])
+    await _switched_to_a_thread(client, fake_llm, "Try it: [link]", ["One.", "Try it: [link]"])
+
+    [revise] = [c for c in fake_llm.calls if c.response_model is REVISED_THREAD]
+    assert revise.messages[2] == {
+        "role": "assistant",
+        "content": "<post>\nThe post.\n</post>\n\n<first_reply>\nTry it: [link]\n</first_reply>",
+    }
+    assert (
+        "what it says goes in the last part, with its link or [link] as it is."
+        in (revise.messages[0]["content"][0]["text"])
+    )
+    [humanizer] = [c for c in fake_llm.calls if c.response_model is HUMANIZED_THREAD]
+    assert humanizer.messages[2]["content"] == (
+        "This is the post as I last saw it, before my latest feedback.\n\n"
+        "<previous_post>\nThe post.\n</previous_post>\n\n"
+        "<previous_first_reply>\nTry it: [link]\n</previous_first_reply>"
+    )
+
+
+async def test_a_switch_to_a_thread_keeps_the_last_part_the_writing_moved_the_first_reply_into(
+    client, ready, fake_llm
+):
+    version = await _switched_to_a_thread(
+        client, fake_llm, "Try it: [link]", ["One.", "Two. Try it: [link]"]
+    )
 
     assert version["format"] == "thread"
     assert version["first_reply"] is False
+    assert _texts(version["parts"]) == ["One.", "Two. Try it: [link]"]
+
+
+async def test_a_switch_to_a_thread_that_lost_the_link_ends_its_last_part_with_the_first_reply(
+    client, ready, fake_llm
+):
+    version = await _switched_to_a_thread(client, fake_llm, "Try it → [link]", ["One.", "Two."])
+
     assert _texts(version["parts"]) == ["One.", "Two.\n\nTry it -> [link]"]
 
 
+async def test_a_switch_to_a_thread_that_lost_a_real_link_ends_with_the_first_reply_too(
+    client, ready, fake_llm
+):
+    version = await _switched_to_a_thread(
+        client, fake_llm, "Get it: pumpkit.io/calc", ["One.", "Two."]
+    )
+
+    assert _texts(version["parts"]) == ["One.", "Two.\n\nGet it: pumpkit.io/calc"]
+
+
 async def test_a_first_reply_that_would_overfill_the_last_part_becomes_a_part_of_its_own(
-    client, with_author, fake_llm
+    client, ready, fake_llm
 ):
     full = "x" * 270
 
@@ -325,7 +320,7 @@ async def test_a_first_reply_that_would_overfill_the_last_part_becomes_a_part_of
 
 
 async def test_a_thread_of_ten_parts_takes_the_first_reply_into_its_last_part_anyway(
-    client, with_author, fake_llm
+    client, ready, fake_llm
 ):
     parts = [f"Part {n}." for n in range(1, 10)] + ["x" * 270]
 
@@ -335,65 +330,52 @@ async def test_a_thread_of_ten_parts_takes_the_first_reply_into_its_last_part_an
     assert version["parts"][-1]["text"] == "x" * 270 + "\n\nTry it: [link]"
 
 
-async def _corpus_post(client, fake_llm) -> str:
-    """A single post "One post." written from the corpus, as Version 2 after a Thread."""
-    started = await start_thread(client, fake_llm, ["a", "b"], brief=BRIEF)
-    post_id = started.json()["id"]
-    fake_llm.replies = [written("one post"), {"post": "One post."}]
-    await _feedback(client, post_id, "condense it", format="post")
-    return post_id
-
-
-def _feedback_framings(fake_llm) -> list[str]:
-    [revise] = [c for c in fake_llm.calls if c.response_model is RevisedFromCorpus]
-    return [
-        m["content"]
-        for m in revise.messages
-        if m["role"] == "user" and m["content"].startswith("That was Version")
-    ]
-
-
-async def test_adding_a_first_reply_to_a_post_written_from_the_corpus_is_no_going_back(
-    client, with_author, fake_llm
-):
-    post_id = await _corpus_post(client, fake_llm)
-    added = await _edit(client, post_id, parts=["One post.", "Try it: x.co/c"], first_reply=True)
-    assert added.status_code == 200, added.text
-    fake_llm.replies = [written("one shorter post"), {"post": "One shorter post."}]
-    await _feedback(client, post_id, "shorter")
+async def test_a_thread_switched_back_to_a_post_is_revised_from_the_thread(client, ready, fake_llm):
+    post = await _written(client, fake_llm, "Try it: [link]", "Try it: [link]")
+    fake_llm.replies = [{"parts": ["One.", "Two. Try it: [link]"]}]
+    await _feedback(client, post["id"], "expand it", format="thread")
     fake_llm.calls.clear()
-    fake_llm.replies = [written("shortest"), {"post": "Shortest."}]
+    fake_llm.standing[REVISED_POST] = revised("Back to one.", first_reply="Try it: [link]")
+    fake_llm.replies = [{"post": "Back to one.", "first_reply": "Try it: [link]"}]
 
-    await _feedback(client, post_id, "shorter still")
+    version = await _feedback(client, post["id"], "condense it", format="post")
 
-    framings = _feedback_framings(fake_llm)
-    assert framings[-2].startswith("That was Version 2.\n\nChange the post you just wrote")
-    assert framings[-1].startswith("That was Version 3.\n\nChange the post you just wrote")
-    assert not any("went back" in framing for framing in framings)
+    assert (version["format"], version["first_reply"]) == ("post", True)
+    assert _texts(version["parts"]) == ["Back to one.", "Try it: [link]"]
+    [revise] = [c for c in fake_llm.calls if c.response_model is REVISED_POST]
+    assert revise.messages[-2]["content"] == (
+        '<part number="1">\nOne.\n</part>\n\n<part number="2">\nTwo. Try it: [link]\n</part>'
+    )
 
 
-async def _with_a_blank_first_reply(client, fake_llm) -> str:
-    """A post written from the corpus whose User added a first reply and left it blank."""
-    post_id = await _corpus_post(client, fake_llm)
-    added = await _edit(client, post_id, parts=["One post.", ""], first_reply=True)
+async def _with_a_blank_first_reply(client, without_reply) -> str:
+    """The post "The post." whose User added a first reply and left it blank."""
+    added = await _edit(client, without_reply, parts=["The post.", ""], first_reply=True)
     assert added.status_code == 200, added.text
-    return post_id
+    return without_reply
 
 
-async def test_a_switch_to_a_thread_appends_no_blank_first_reply(client, with_author, fake_llm):
-    post_id = await _with_a_blank_first_reply(client, fake_llm)
-    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["One.", "x" * 279]}]
+async def test_a_switch_to_a_thread_moves_no_blank_first_reply(client, without_reply, fake_llm):
+    post_id = await _with_a_blank_first_reply(client, without_reply)
+    fake_llm.replies = [{"parts": ["One.", "x" * 279]}]
 
     version = await _feedback(client, post_id, "expand it", format="thread")
 
     assert _texts(version["parts"]) == ["One.", "x" * 279]
+    assert "<first_reply>" not in _texts_of(fake_llm, REVISED_THREAD)
+    assert "first_reply>" not in _texts_of(fake_llm, HUMANIZED_THREAD)
 
 
-async def test_feedback_on_a_post_with_a_blank_first_reply_drops_it(client, with_author, fake_llm):
-    post_id = await _with_a_blank_first_reply(client, fake_llm)
-    fake_llm.replies = [written("one shorter post"), {"post": "One shorter post."}]
+async def test_feedback_on_a_post_with_a_blank_first_reply_drops_it(
+    client, without_reply, fake_llm
+):
+    post_id = await _with_a_blank_first_reply(client, without_reply)
+    fake_llm.replies = [{"post": "One shorter post.", "first_reply": "Made up."}]
 
     version = await _feedback(client, post_id, "shorter")
 
     assert version["first_reply"] is False
     assert _texts(version["parts"]) == ["One shorter post."]
+    assert "<first_reply>" not in _texts_of(fake_llm, REVISED_POST)
+    [revise] = [c for c in fake_llm.calls if c.response_model is REVISED_POST]
+    assert revise.messages[-1]["content"].startswith("That was Version 1.\n\nChange the post")

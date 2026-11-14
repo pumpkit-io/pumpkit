@@ -18,11 +18,13 @@ from tests.posts.writing_replies import (
     HUMANIZED_THREAD,
     MERGED_THREAD,
     POST_IDEAS,
+    REVISED_THREAD,
     SKETCHED_THREAD,
     ideas,
     merged_thread,
     planned_post,
     planned_thread,
+    revised_thread,
     sketched_thread,
 )
 
@@ -589,26 +591,215 @@ async def test_start_post_over_mcp_takes_no_format_and_writes_the_thread_the_pla
     assert [part["text"] for part in post["versions"][0]["parts"]] == FINAL
 
 
-# Feedback on a Thread still writes from the corpus the Post started with, until #477
+# Feedback on a Thread: the thread revise call, then the thread humanizer
+
+FINAL_PARTS = '<part number="1">\nShip on Fridays.\n</part>\n\n<part number="2">\nKeep a public changelog.\n</part>'
 
 
-@pytest.mark.parametrize("format", [None, "post"])
-async def test_feedback_on_a_thread_written_without_inspiration_authors_is_refused(
-    client, ready, fake_llm, format
+async def _thread_with_feedback(client, fake_llm, feedback: str = "shorter", **plan):
+    post_id = (await _write_thread(client, fake_llm, **plan)).json()["id"]
+    fake_llm.calls.clear()
+    fake_llm.replies = [{"parts": ["Fridays.", "Changelog."]}]
+    response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": feedback})
+    assert response.status_code == 201, response.text
+    return post_id, response.json()
+
+
+async def test_feedback_on_a_thread_runs_the_thread_revise_call_then_the_thread_humanizer(
+    client, ready, fake_llm
+):
+    _, version = await _thread_with_feedback(client, fake_llm)
+
+    assert (version["number"], version["format"]) == (2, "thread")
+    assert [part["text"] for part in version["parts"]] == ["Fridays.", "Changelog."]
+    assert [call.response_model for call in fake_llm.calls] == [REVISED_THREAD, HUMANIZED_THREAD]
+    assert [call.model for call in fake_llm.calls] == [
+        "openai/gpt-6.1-terra",
+        "openai/gpt-6.1-terra",
+    ]
+    assert {call.max_tokens for call in fake_llm.calls} == {20000}
+
+
+async def test_the_thread_revise_prompt_is_the_revise_rules_around_the_thread_guide(
+    client, ready, fake_llm
+):
+    await _thread_with_feedback(client, fake_llm, desired_action="sign-up", funnel="BOF")
+
+    [revise] = _calls(fake_llm, REVISED_THREAD)
+    prompt = _system_text(revise)
+    assert _headings(prompt) == [
+        "# Role",
+        "# What you are given",
+        "# How to revise",
+        "# The guide the thread follows",
+        "# The raw input is the content",
+        "# What a good post does",
+        "# Funnel stage: bottom of funnel (BOF)",
+        "# Desired action: sign-up",
+        "# Format: thread",
+        "## Part 1",
+        "## The last part",
+        "# Structure: hook, list, closer",
+        "# The structure across the parts",
+        "# The hook",
+        "## Psychological levers",
+        "## Hook types",
+        "## How to craft it",
+        "## The hook must be honest",
+        "# The lines right after the hook",
+        "# The closer and the CTA",
+        "## CTAs that fit bottom of funnel",
+        "## CTA rules at every stage",
+        "# How the lines read",
+        "# Never add",
+        "# Output",
+    ]
+    assert prompt.startswith(
+        "# Role\n\nYou revise one thread on X written on my behalf, from my feedback. A thread "
+        "is a chain of posts, each replying to the one before; each post in it is a part."
+    )
+    assert "- the versions of the thread: after these inputs" in prompt
+    assert "- Keep the hook in part 1 as it is unless my feedback asks to change it." in prompt
+    assert "- Keep between 2 and 10 parts and each part within the limit" in prompt
+    assert "- Each part is at most 280 characters as X counts them" in prompt
+    assert (
+        "- When my feedback turns a single post into a thread, a first reply under the post has "
+        "no place of its own: what it says goes in the last part, with its link or [link] as it is."
+    ) in prompt
+    assert "- The link goes in the last part, and the closer says what it leads to." in prompt
+    assert "- parts: the thread's parts, in order, one string per part." in prompt
+    for post_only in ("first_reply", "Not a thread", "# Format: short", "- post:"):
+        assert post_only not in prompt
+    assert "{" not in prompt
+
+
+async def test_the_thread_revise_conversation_is_the_inputs_then_each_version_after_its_feedback(
+    client, ready, fake_llm
+):
+    post_id, _ = await _thread_with_feedback(client, fake_llm)
+    fake_llm.replies = [{"parts": ["Fri.", "Log."]}]
+
+    await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "warmer"})
+
+    [*_, revise] = _calls(fake_llm, REVISED_THREAD)
+    assert revise.messages[1:] == [
+        {"role": "user", "content": INPUTS},
+        {"role": "assistant", "content": FINAL_PARTS},
+        {"role": "user", "content": _framed("shorter", 1)},
+        {
+            "role": "assistant",
+            "content": '<part number="1">\nFridays.\n</part>\n\n<part number="2">\nChangelog.\n</part>',
+        },
+        {"role": "user", "content": _framed("warmer", 2)},
+    ]
+
+
+def _framed(feedback: str, version: int) -> str:
+    return (
+        f"That was Version {version}.\n\n"
+        "Change the thread you just wrote according to this feedback, and change nothing else. "
+        "Keep every part the feedback does not ask about exactly as it is, and return the whole "
+        f"thread rather than only the part that changed.\n\nThe feedback:\n{feedback}"
+    )
+
+
+async def test_the_thread_revision_humanizer_uses_the_thread_humanizer_prompt(
+    client, ready, fake_llm
+):
+    fake_llm.standing[REVISED_THREAD] = revised_thread(["Ship—Fridays.", "Changelog."])
+
+    await _thread_with_feedback(client, fake_llm)
+
+    [humanizer] = _calls(fake_llm, HUMANIZED_THREAD)
+    assert _system_text(humanizer).startswith(
+        "# Role\n\nYou rewrite one thread on X on my behalf to make it sound human"
+    )
+    assert "- The structure (hook_list_closer): keep the order of the parts" in _system_text(
+        humanizer
+    )
+    assert humanizer.messages[1]["content"].startswith(
+        "This is the brief the thread below was written from."
+    )
+    assert humanizer.messages[2:] == [
+        {
+            "role": "user",
+            "content": "This is the thread as I last saw it, before my latest feedback.\n\n"
+            f"<previous_thread>\n{FINAL_PARTS}\n</previous_thread>",
+        },
+        {
+            "role": "user",
+            "content": "This is my latest feedback on that thread. The thread below already "
+            "applies it, so don't apply it again, and don't add, remove or reorder anything to "
+            "serve it. If it asks for something your guidelines would undo, keep what it asks "
+            "for.\n\n<feedback>\nshorter\n</feedback>",
+        },
+        {
+            "role": "user",
+            "content": "This is the thread to rewrite. Return every sentence that is also in the "
+            "previous thread exactly as it is in <thread> below, even if it moved. A sentence that "
+            "differs only in punctuation counts as unchanged. Apply your guidelines only to the "
+            "sentences that are new or reworded, and don't add sentences or ideas the thread "
+            "doesn't have.\n\n<thread>\n"
+            '<part number="1">\nShip - Fridays.\n</part>\n\n<part number="2">\nChangelog.\n</part>'
+            "\n</thread>",
+        },
+    ]
+
+
+async def test_feedback_on_a_hand_edited_thread_keeps_the_users_sentences(client, ready, fake_llm):
+    post_id = (await _write_thread(client, fake_llm)).json()["id"]
+    edited = ["Ship on Fridays. I mean it!", "Keep a public changelog."]
+    assert (await client.put(f"{POSTS}/{post_id}/text", json={"parts": edited})).is_success
+    fake_llm.calls.clear()
+    fake_llm.replies = [{"parts": ["a", "b"]}]
+
+    await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "warmer"})
+
+    [revise] = _calls(fake_llm, REVISED_THREAD)
+    assert revise.messages[-1]["content"].startswith(
+        'That was Version 1. I changed the text to:\n\n<thread>\n<part number="1">\n'
+        "Ship on Fridays. I mean it!\n</part>"
+    )
+    [humanizer] = _calls(fake_llm, HUMANIZED_THREAD)
+    assert humanizer.messages[-2]["content"] == (
+        "I wrote these sentences myself. Wherever one of them is in the thread below, even with "
+        "different punctuation, return it exactly as I wrote it here, even if your guidelines "
+        "would change it, unless my latest feedback asks to change it.\n\n"
+        "<my_sentences>\n<sentence>I mean it!</sentence>\n</my_sentences>"
+    )
+
+
+async def test_a_thread_version_stores_the_revised_parts_the_reasoning_and_the_cta(
+    client, db, ready, fake_llm
+):
+    fake_llm.standing[REVISED_THREAD] = revised_thread(
+        ["Fri—day.", "Log."], reasoning="Cut part 2 down.", cta_type="bookmark"
+    )
+
+    await _thread_with_feedback(client, fake_llm)
+
+    second = (await db.scalars(select(VersionAttempt).order_by(VersionAttempt.sequence))).all()[1]
+    assert (second.sketch_parts, second.parts) == (
+        ["Fri - day.", "Log."],
+        ["Fridays.", "Changelog."],
+    )
+    assert (second.hook_reasoning, second.hook_name, second.cta_type) == (
+        "Cut part 2 down.",
+        None,
+        "bookmark",
+    )
+    assert second.first_reply is False
+
+
+async def test_thread_feedback_over_mcp_is_written_from_the_thread_prompts(
+    client, ready, fake_llm, mcp
 ):
     post_id = (await _write_thread(client, fake_llm)).json()["id"]
     fake_llm.calls.clear()
-    used = await _generations_used(client)
+    fake_llm.replies = [{"parts": ["Fridays.", "Changelog."]}]
 
-    response = await client.post(
-        f"{POSTS}/{post_id}/versions",
-        json={"feedback": "shorter", **({"format": format} if format else {})},
-    )
+    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == (
-        "Feedback on a thread written without inspiration authors isn't available yet. "
-        "Edit the text by hand, or start a new post."
-    )
-    assert fake_llm.calls == []
-    assert await _generations_used(client) == used
+    assert result["isError"] is False, result
+    assert [call.response_model for call in fake_llm.calls] == [REVISED_THREAD, HUMANIZED_THREAD]
+    assert _system_text(fake_llm.calls[0]).startswith("# Role\n\nYou revise one thread on X")

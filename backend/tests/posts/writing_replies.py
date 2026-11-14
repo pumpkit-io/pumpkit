@@ -1,4 +1,4 @@
-"""The plan, sketch, merge, humanizer, revise and revision calls' scripted replies, for tests that write a Version."""
+"""The plan, sketch, merge, humanizer and revise calls' scripted replies, for tests that write a Version."""
 
 from typing import Optional
 
@@ -8,6 +8,7 @@ from pumpkit.posts.writing.post_replies import (
     MergedSketch,
     MergedThread,
     RevisedPost,
+    RevisedThread,
     SketchedPost,
     SketchedThread,
 )
@@ -15,7 +16,7 @@ from pumpkit.posts.writing.post_replies import (
 POSTS = "/api/v1/posts"
 
 # What `fake_llm.standing` keys its replies by: the plan's schema name, which both of its answer
-# classes share, and the single post's classes, since the old path reuses some of their names.
+# classes share, and the writing calls' classes.
 POST_IDEAS = "post_ideas"
 SKETCHED_POST = SketchedPost
 MERGED_SKETCH = MergedSketch
@@ -24,6 +25,7 @@ REVISED_POST = RevisedPost
 SKETCHED_THREAD = SketchedThread
 MERGED_THREAD = MergedThread
 HUMANIZED_THREAD = HumanizedThread
+REVISED_THREAD = RevisedThread
 
 
 def planned_post(
@@ -70,23 +72,6 @@ def ideas(single: Optional[dict] = None, split: Optional[list[dict]] = None) -> 
         "single_idea": single or planned_post(),
         "split_ideas": split,
     }
-
-
-REASONING = (
-    "The brief is a plain observation, so a natural opening fits better than a library hook."
-)
-
-
-def written(post: str, hook_name: Optional[str] = None, hook_reasoning: str = REASONING) -> dict:
-    """The writing call's answer, opening with no library Hook unless `hook_name` names one."""
-    return {"hook_reasoning": hook_reasoning, "hook_name": hook_name, "post": post}
-
-
-def written_thread(
-    parts: list[str], hook_name: Optional[str] = None, hook_reasoning: str = REASONING
-) -> dict:
-    """The Thread writing call's answer, its Parts in order."""
-    return {"hook_reasoning": hook_reasoning, "hook_name": hook_name, "parts": parts}
 
 
 def sketched(post: str = "A sketch.", **fields) -> dict:
@@ -149,17 +134,20 @@ def revised(post: str = "The revised post.", **fields) -> dict:
     }
 
 
-def writing_calls(fake_llm) -> list:
-    """
-    The calls the fake model received that wrote or revised the Version's text: the old path's,
-    and the humanizer's of a single post written or revised from its Plan.
-    """
+def revised_thread(parts: Optional[list[str]] = None, **fields) -> dict:
+    """The thread revise call's answer: two Parts and no CTA, unless `fields` say otherwise."""
+    return {
+        "reasoning": "The feedback asks for less; part 1 stays.",
+        "cta_type": "none",
+        "parts": parts or ["The revised hook.", "The revised closer."],
+        **fields,
+    }
+
+
+def humanizer_calls(fake_llm) -> list:
+    """The humanizer calls the fake model received, a post's or a Thread's."""
     return [
-        call
-        for call in fake_llm.calls
-        if call.response_model.__name__ != POST_IDEAS
-        and call.response_model
-        not in (SKETCHED_POST, MERGED_SKETCH, REVISED_POST, SKETCHED_THREAD, MERGED_THREAD)
+        call for call in fake_llm.calls if call.response_model in (HUMANIZED_POST, HUMANIZED_THREAD)
     ]
 
 
