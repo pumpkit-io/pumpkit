@@ -57,6 +57,7 @@ import {
   postService,
   type PostDetail,
   type PostCounts,
+  type PlaceInBrief,
   type PostListItem,
   type PostsPage,
   type ScheduledPostSummary,
@@ -89,6 +90,8 @@ function summary(extra: Partial<ScheduledPostSummary> = {}): ScheduledPostSummar
   };
 }
 
+const ALONE: PlaceInBrief = { position: 1, postCount: 1, previousPostId: null, nextPostId: null };
+
 function item(id: string, parts: string[], extra: Partial<PostListItem> = {}): PostListItem {
   return {
     id,
@@ -100,6 +103,8 @@ function item(id: string, parts: string[], extra: Partial<PostListItem> = {}): P
     versionCount: 1,
     latestVersionAt: at(-1, 15),
     scheduledPost: summary(),
+    briefId: `brief_of_${id}`,
+    placeInBrief: ALONE,
     ...extra,
   };
 }
@@ -319,6 +324,8 @@ describe('Posts page', () => {
       vi.mocked(postService.get).mockResolvedValue({
         id: 'post_01',
         brief: 'ship small things',
+        briefId: 'brief_01',
+        placeInBrief: ALONE,
         plan: null,
         status: 'scheduled',
         writing: false,
@@ -481,6 +488,35 @@ describe('Posts page', () => {
     expect(draft.getByText('Single post · 3 versions')).toBeInTheDocument();
   });
 
+  it('shows a Draft from a brief with several posts as "2 of 4", linking to the brief', async () => {
+    vi.mocked(postService.list).mockResolvedValue(
+      page([
+        item('post_02', ['The second of four.'], {
+          status: 'draft',
+          scheduledPost: null,
+          briefId: 'brief_01',
+          placeInBrief: {
+            position: 2,
+            postCount: 4,
+            previousPostId: 'post_01',
+            nextPostId: 'post_03',
+          },
+        }),
+        item('post_09', ['Alone in its brief.'], { status: 'draft', scheduledPost: null }),
+      ]),
+    );
+    renderSignedIn('/posts/drafts');
+
+    const sibling = await row('The second of four.');
+    expect(sibling.getByText(/^Single post · 1 version ·/)).toBeInTheDocument();
+    const place = sibling.getByRole('link', { name: '2 of 4 posts from its brief' });
+    expect(place).toHaveTextContent('2 of 4');
+    expect(place).toHaveAttribute('href', '/briefs/brief_01');
+    const alone = await row('Alone in its brief.');
+    expect(alone.getByText('Single post · 1 version')).toBeInTheDocument();
+    expect(alone.queryByRole('link', { name: /posts from its brief/ })).not.toBeInTheDocument();
+  });
+
   it('lists Published Posts with when they went out, where, and a link to X', async () => {
     vi.mocked(postService.list).mockResolvedValue(
       page([
@@ -590,6 +626,8 @@ describe('Posts page', () => {
       return {
         id,
         brief: 'ship small things',
+        briefId: 'brief_01',
+        placeInBrief: ALONE,
         plan: null,
         text: { format: 'post', firstReply: false, parts: [], versionNumber: 2, edited: false },
         versions: [1, 2].map((number) => ({

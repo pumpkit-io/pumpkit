@@ -52,7 +52,7 @@ class Brief(Base):
     ideas: Mapped[list["Idea"]] = relationship(
         back_populates="brief",
         cascade="all, delete-orphan",
-        order_by="Idea.whole_brief.desc(), Idea.posting_order",
+        order_by=lambda: IDEA_ORDER,
     )
 
 
@@ -137,6 +137,10 @@ class Idea(Base):
             length=self.length,
             structure=self.structure,
         )
+
+
+# A Brief's Ideas in order, which numbers its Posts too (ADR 0025).
+IDEA_ORDER = (Idea.whole_brief.desc(), Idea.posting_order, Idea.id)
 
 
 class Post(Base):

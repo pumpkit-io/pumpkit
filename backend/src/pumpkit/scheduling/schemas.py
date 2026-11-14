@@ -12,6 +12,7 @@ from pumpkit.posts.schemas import (
     FailedFeedbackResponse,
     IdeaFields,
     MediaResponse,
+    PlaceInBriefResponse,
     PlanResponse,
     TextResponse,
     VersionResponse,
@@ -114,6 +115,8 @@ class PostDetailResponse(BaseModel):
 
     id: str
     brief: str
+    brief_id: str
+    place_in_brief: PlaceInBriefResponse
     # None for a Post written before Briefs were planned.
     plan: Optional[PlanResponse]
     # None until the Post's first Version is written.
@@ -183,6 +186,8 @@ class ScheduledPostSummaryResponse(BaseModel):
 class PostListItemResponse(BaseModel):
     id: str
     brief: str
+    brief_id: str
+    place_in_brief: PlaceInBriefResponse
     status: PostStatus
     # The Scheduled post's text when it has one, else the latest Version's; the first Part's
     # first line is the Post's title.
