@@ -202,6 +202,23 @@ async def test_write_posts_refuses_the_single_post_with_split_ideas(ready, mcp, 
     assert len(fake_llm.calls) == 1
 
 
+@pytest.mark.parametrize("first_kind", ["whole", "split"])
+async def test_write_posts_refuses_the_other_kind_than_an_idea_written_earlier(
+    client, ready, mcp, fake_llm, split, first_kind
+):
+    planned = await _plan(mcp)
+    whole, split_idea = planned["single_post"]["id"], planned["ideas"][0]["id"]
+    first, later = (whole, split_idea) if first_kind == "whole" else (split_idea, whole)
+    assert (await _write(mcp, planned, [first]))["isError"] is False
+
+    result = await _write(mcp, planned, [later])
+
+    assert error_text(result) == (
+        "Write one post covering everything, or one post per idea, not both."
+    )
+    assert await _generations_used(client) == 1
+
+
 async def test_write_posts_refuses_an_idea_already_written(ready, mcp, fake_llm, split):
     planned = await _plan(mcp)
     first, second, _ = planned["ideas"]

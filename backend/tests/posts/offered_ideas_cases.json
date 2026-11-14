@@ -20,11 +20,6 @@
     "offered": ["split_2"]
   },
   {
-    "note": "with posts of both kinds, the split ideas left",
-    "ideas": [["whole", "written"], ["split_1", "written"], ["split_2", null]],
-    "offered": ["split_2"]
-  },
-  {
     "note": "a post not written still counts as the idea's post",
     "ideas": [["whole", null], ["split_1", "not_written"], ["split_2", null]],
     "offered": ["split_2"]
