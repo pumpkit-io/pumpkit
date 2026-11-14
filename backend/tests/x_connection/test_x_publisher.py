@@ -261,7 +261,9 @@ async def test_reading_the_account_returns_its_id_handle_and_subscription_type()
     assert account == XAccount(user_id="42", handle="ada", subscription_type="Premium")
     request = route.calls.last.request
     assert request.headers["Authorization"] == "Bearer access-1"
-    assert request.url.params["user.fields"] == "subscription_type,profile_image_url"
+    assert request.url.params["user.fields"] == (
+        "subscription_type,profile_image_url,description,location,url,entities"
+    )
 
 
 @respx.mock
@@ -959,6 +961,10 @@ async def test_the_account_returns_confirmed_email_and_display_name():
         "profile_image_url",
         "confirmed_email",
         "name",
+        "description",
+        "location",
+        "url",
+        "entities",
     }
 
 
@@ -1056,3 +1062,68 @@ async def test_malformed_granted_scopes_cannot_be_treated_as_implicit_consent(sc
         await OfficialXPublisher().exchange_code(
             code="c", code_verifier="v", now=NOW, required_scopes=X_SIGN_IN_SCOPES
         )
+
+
+_PROFILE = {
+    "description": "Solo founder. Building a pricing tool in public.",
+    "location": "Lisbon",
+    "url": "https://t.co/abc123",
+    "entities": {
+        "url": {"urls": [{"url": "https://t.co/abc123", "expanded_url": "https://ada.dev"}]}
+    },
+}
+
+
+@pytest.mark.parametrize("for_sign_in", [True, False])
+@respx.mock
+async def test_the_account_returns_its_bio_location_and_website(for_sign_in):
+    data = {"id": "42", "username": "ada", "name": "Ada", **_PROFILE}
+    respx.get(X_USERS_ME_URL).mock(return_value=httpx.Response(200, json={"data": data}))
+
+    account = await OfficialXPublisher().fetch_account(
+        access_token="access-1", for_sign_in=for_sign_in
+    )
+
+    assert account.bio == "Solo founder. Building a pricing tool in public."
+    assert account.location == "Lisbon"
+    assert account.website == "https://ada.dev"
+
+
+@respx.mock
+async def test_a_website_x_did_not_expand_reads_as_x_gave_it():
+    data = {"id": "42", "username": "ada", "url": "https://t.co/abc123"}
+    respx.get(X_USERS_ME_URL).mock(return_value=httpx.Response(200, json={"data": data}))
+
+    account = await OfficialXPublisher().fetch_account(access_token="access-1", for_sign_in=True)
+
+    assert account.website == "https://t.co/abc123"
+
+
+@pytest.mark.parametrize("value", [None, "", "  ", 42, {}])
+@respx.mock
+async def test_a_blank_or_malformed_bio_location_or_website_reads_as_none(value):
+    data = {
+        "id": "42",
+        "username": "ada",
+        "description": value,
+        "location": value,
+        "url": value,
+        "entities": value,
+    }
+    respx.get(X_USERS_ME_URL).mock(return_value=httpx.Response(200, json={"data": data}))
+
+    account = await OfficialXPublisher().fetch_account(access_token="access-1", for_sign_in=True)
+
+    assert (account.bio, account.location, account.website) == (None, None, None)
+
+
+@respx.mock
+async def test_a_bio_is_read_without_what_postgres_cannot_store():
+    body = rb'{"data": {"id": "42", "username": "ada", "description": "Solo\u0000 founder\ud800."}}'
+    respx.get(X_USERS_ME_URL).mock(
+        return_value=httpx.Response(200, content=body, headers={"Content-Type": "application/json"})
+    )
+
+    account = await OfficialXPublisher().fetch_account(access_token="access-1", for_sign_in=True)
+
+    assert account.bio == "Solo founder."

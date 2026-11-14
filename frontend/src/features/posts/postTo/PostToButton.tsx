@@ -17,6 +17,7 @@ export function PostToButton({
   sender,
   initialWhere,
   disabled = false,
+  quiet = false,
   waitingFor = null,
   prepare,
   onDone,
@@ -27,6 +28,8 @@ export function PostToButton({
   sender: PostToSender;
   initialWhere?: DestinationDraft;
   disabled?: boolean;
+  /** An outline button, for a page where no action is primary. */
+  quiet?: boolean;
   /** Why it waits before opening, such as an upload in flight; it stays focusable to say so. */
   waitingFor?: string | null;
   /** Runs before the dialog opens, such as saving the User's last edit; false keeps it shut. */
@@ -53,7 +56,7 @@ export function PostToButton({
         <HoverLabel label={waitingFor ?? ''} quiet={!waitingFor}>
           <Button
             type="button"
-            variant="solid"
+            variant={quiet ? 'outline' : 'solid'}
             className={cn('h-10 shrink-0', waitingFor && 'cursor-not-allowed opacity-50')}
             disabled={disabled || preparing}
             aria-disabled={waitingFor ? true : undefined}

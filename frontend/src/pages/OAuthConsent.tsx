@@ -250,9 +250,9 @@ function Ready({ id, app }: { id: string; app: ConsentApp }) {
       ) : (
         <>
           <p className="font-sans text-sm text-foreground">
-            {app.name} will be able to use {instanceName} as you: write and revise posts, manage
-            your inspiration authors, schedule posts and publish them on X. It can&apos;t see your
-            password or change your subscription.
+            {app.name} will be able to use {instanceName} as you: write and revise posts, edit your
+            positioning, schedule posts and publish them on X. It can&apos;t see your password or
+            change your subscription.
           </p>
           <Identity app={app} />
           {failure && (

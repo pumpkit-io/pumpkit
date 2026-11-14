@@ -29,7 +29,7 @@
 			max_size 10MiB
 		}
 		reverse_proxy backend:8000 {
-			# Writing a Version is two model calls answered in one response; allow minutes.
+			# Planning a Brief and writing Feedback's Version answer in one response; allow minutes.
 			transport http {
 				response_header_timeout 5m
 				read_timeout 5m

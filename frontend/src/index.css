@@ -207,6 +207,25 @@
       animation: none;
     }
   }
+  .post-writing-line {
+    transform-origin: left;
+    animation: post-writing-line 1.6s ease-in-out infinite;
+  }
+  @keyframes post-writing-line {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  /* Still lines: the card's "Writing…" carries the state alone. */
+  @media (prefers-reduced-motion: reduce) {
+    .post-writing-line {
+      animation: none;
+      transform: scaleX(0);
+    }
+  }
   /* Kept in step with TRACE_FADE_MS in TextEditor.tsx. */
   .pumpkin-trace-fade {
     animation: pumpkin-trace-fade 1.2s ease-in forwards;

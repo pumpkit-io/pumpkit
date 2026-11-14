@@ -1,5 +1,13 @@
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { act, render, screen } from '@testing-library/react';
+import { StrictMode, type ReactNode } from 'react';
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  type NavigateFunction,
+} from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
@@ -17,7 +25,8 @@ import { signedInRoutes } from '../signedInRoutes';
 /**
  * For tests: the signed-in route tree at `path` (with any query), as App mounts it behind
  * sign-in. The User starts at `nextStep`, past the Paywall by default; later checks go to the
- * mocked onboardingService.
+ * mocked onboardingService. `routes` adds test-owned routes, such as an inactive feature's.
+ * `strict` mounts it under StrictMode, which runs every effect twice as the dev build does.
  */
 export function renderSignedIn(
   path: string,
@@ -25,9 +34,17 @@ export function renderSignedIn(
     state,
     instance = SELLS_PLANS,
     nextStep = null,
-  }: { state?: unknown; instance?: Instance; nextStep?: NextStep | null } = {},
+    routes,
+    strict = false,
+  }: {
+    state?: unknown;
+    instance?: Instance;
+    nextStep?: NextStep | null;
+    routes?: ReactNode;
+    strict?: boolean;
+  } = {},
 ) {
-  return render(
+  const app = (
     <InstanceProvider instance={instance}>
       <AuthProvider>
         <OnboardingProvider initialNextStep={nextStep}>
@@ -39,14 +56,17 @@ export function renderSignedIn(
               <Routes>
                 <Route path="/" element={<SignedInHome />} />
                 {signedInRoutes()}
+                {routes}
               </Routes>
               <CurrentPath />
+              <Navigator />
             </MemoryRouter>
           </ThemeProvider>
         </OnboardingProvider>
       </AuthProvider>
-    </InstanceProvider>,
+    </InstanceProvider>
   );
+  return render(strict ? <StrictMode>{app}</StrictMode> : app);
 }
 
 function splitPath(path: string): { pathname: string; search: string } {
@@ -59,6 +79,20 @@ function splitPath(path: string): { pathname: string; search: string } {
 /** Where the router is now, as `CurrentPath` shows it. */
 export function currentPath(): string | null {
   return screen.getByRole('status', { name: 'Current path' }).textContent;
+}
+
+let navigate: NavigateFunction | null = null;
+
+/** Moves the router to `path` as an in-app link would, keeping the pages it shares mounted. */
+export function goTo(path: string): void {
+  act(() => {
+    void navigate?.(path);
+  });
+}
+
+function Navigator() {
+  navigate = useNavigate();
+  return null;
 }
 
 /** Shows the router's path and state so a test can read where a click or a redirect landed. */

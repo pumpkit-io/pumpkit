@@ -32,10 +32,6 @@ vi.mock('@/services/billingService', () => ({
 vi.mock('@/services/onboardingService', () => ({
   onboardingService: { fetchNextStep: vi.fn() },
 }));
-vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
-  inspirationAuthorService: { list: vi.fn().mockResolvedValue([]) },
-}));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: { get: vi.fn().mockResolvedValue(null), startAuthorization: vi.fn() },
 }));

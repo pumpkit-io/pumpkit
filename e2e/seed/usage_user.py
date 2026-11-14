@@ -9,11 +9,11 @@ from sqlalchemy import delete
 
 from pumpkit.auth.models import User
 from pumpkit.auth.tokens import create_access_token
-from pumpkit.authors.models import AuthorPost, InspirationAuthor
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.onboarding.models import OnboardingFinish
+from pumpkit.positioning.models import Positioning
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.service import set_text_from_version
 from pumpkit.scheduling.service import create as schedule_post
@@ -64,19 +64,12 @@ async def main() -> None:
                     trial_end=now + timedelta(days=5) if trial else None,
                     current_period_end=now + timedelta(days=5 if trial else 28),
                 ),
-                InspirationAuthor(user_id=user.id, handle="e2e_usage", position=0, added_at=anchor),
+                # Starting a Post is refused without one, before the Allowance is checked.
+                Positioning(
+                    user_id=user.id, text="I post about testing for developers.", saved_at=anchor
+                ),
             ]
         )
-        if await db.get(AuthorPost, "e2e-usage-author-post") is None:
-            db.add(
-                AuthorPost(
-                    id="e2e-usage-author-post",
-                    handle="e2e_usage",
-                    text="A locally seeded post.",
-                    posted_at=anchor,
-                    fetched_at=now,
-                )
-            )
         await save_connection(
             db,
             user_id=user.id,
@@ -98,6 +91,7 @@ async def main() -> None:
         db.add(post)
         for number in range(1, used + 1):
             version = VersionAttempt(
+                user_id=post.user_id,
                 post=post,
                 sequence=number,
                 version_number=number,
@@ -105,6 +99,7 @@ async def main() -> None:
                 status=ATTEMPT_SUCCEEDED,
                 sketch_parts=PARTS,
                 parts=PARTS,
+                first_reply=False,
                 created_at=written_at,
             )
             db.add(version)
@@ -116,6 +111,7 @@ async def main() -> None:
             created_at=anchor - timedelta(days=1),
         )
         version = VersionAttempt(
+            user_id=scheduled.user_id,
             post=scheduled,
             sequence=1,
             version_number=1,
@@ -123,6 +119,7 @@ async def main() -> None:
             status=ATTEMPT_SUCCEEDED,
             sketch_parts=PARTS,
             parts=PARTS,
+            first_reply=False,
             created_at=anchor - timedelta(days=1),
         )
         set_text_from_version(scheduled, version)
@@ -134,6 +131,7 @@ async def main() -> None:
             x_user_id=x_id_for(EMAIL),
             post_id=scheduled.id,
             parts=PARTS,
+            first_reply=False,
             publish_at=now + timedelta(hours=1),
             now=now,
         )

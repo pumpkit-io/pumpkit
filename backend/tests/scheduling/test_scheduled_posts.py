@@ -1,11 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from unittest.mock import MagicMock
 
 import pytest
 from httpx import AsyncClient
 
 import pumpkit.scheduling.publish as publish_module
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
 from pumpkit.posts.models import Post
 from pumpkit.scheduling.publisher import run_pass
@@ -17,7 +16,8 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
     XReconnectNeededError,
 )
-from tests.posts.writing_replies import written, written_thread
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import start_thread, started_post_id
 from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -486,19 +486,11 @@ async def test_a_user_without_a_subscription_schedules_where_no_plans_are_sold(
 @pytest.fixture
 async def post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post written through the API, its Text the first Version, "Version one."."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
-    fake_llm.replies = [written("sketch one"), {"post": "Version one."}]
-    started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
+    await save_positioning(client)
+    fake_llm.replies = [{"post": "Version one."}]
+    started = await client.post("/api/v1/briefs", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def test_scheduling_a_post_records_its_text_and_time(
@@ -524,11 +516,11 @@ async def test_scheduling_a_post_copies_its_text_from_the_latest_feedback(
     client, post, fake_llm, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    fake_llm.replies = [written("sketch two"), {"post": "Version two."}]
+    fake_llm.replies = [{"post": "Version two."}]
     rewritten = await client.post(
         f"/api/v1/posts/{post['id']}/versions", json={"feedback": "punchier"}
     )
-    assert rewritten.status_code == 201, rewritten.text
+    assert rewritten.status_code == 202, rewritten.text
 
     response = await client.post(
         SCHEDULED_POSTS, json={"publish_at": "2026-10-10T14:00:00Z", "post_id": post["id"]}
@@ -566,21 +558,10 @@ THREAD_VERSION = ["Ship small every week.", "It's how you learn.", "Start today.
 @pytest.fixture
 async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post started as a Thread, its Text the THREAD_VERSION Parts."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
-    fake_llm.replies = [written_thread(["one", "two", "three"]), {"parts": THREAD_VERSION}]
-    started = await client.post(
-        "/api/v1/posts", json={"brief": "ship small things", "format": "thread"}
-    )
+    await save_positioning(client)
+    started = await start_thread(client, fake_llm, THREAD_VERSION)
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def test_scheduling_a_thread_copies_its_parts_in_order_and_publishes_a_chain(

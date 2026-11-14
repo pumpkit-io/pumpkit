@@ -6,7 +6,7 @@ import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
 import { useUsage } from '@/features/billing/useUsage';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import type { AllowanceUsedUp } from '@/services/apiErrors';
-import { FEEDBACK_MAX_CHARS, type Format } from '@/services/postService';
+import { FEEDBACK_MAX_CHARS, type FailedFeedback, type Format } from '@/services/postService';
 import { Composer } from '../Composer';
 import { Dock } from './Dock';
 
@@ -16,7 +16,11 @@ export interface FeedbackSending {
   error: string | null;
   notice: string | null;
   allowanceUsedUp: AllowanceUsedUp | null;
+  /** Feedback Pumpkit couldn't write, which the box takes to send again. */
+  failed: FailedFeedback | null;
   onSend: (feedback: string, format: Format) => Promise<boolean>;
+  /** Stops showing the failed Feedback. */
+  onDismiss: () => void;
 }
 
 /**
@@ -48,7 +52,15 @@ export function FeedbackDock({
     setFormatFollowed(textFormat);
     setFormat(textFormat);
   }
-  const { isWriting, error, notice, allowanceUsedUp, onSend } = sending;
+  const { isWriting, error, notice, allowanceUsedUp, failed, onSend, onDismiss } = sending;
+  const [failedShown, setFailedShown] = useState<FailedFeedback | null>(null);
+  if (failed !== failedShown) {
+    setFailedShown(failed);
+    if (failed) {
+      setFeedback(failed.feedback);
+      setFormat(failed.format);
+    }
+  }
   const { usage, reload: reloadUsage } = useUsage();
   const typed = feedback.trim();
 
@@ -56,6 +68,11 @@ export function FeedbackDock({
     const sent = await onSend(typed, format);
     if (sent) setFeedback('');
     reloadUsage();
+  };
+
+  const dismiss = () => {
+    if (failed && feedback === failed.feedback) setFeedback('');
+    onDismiss();
   };
 
   const low = !allowanceUsedUp && (
@@ -72,7 +89,11 @@ export function FeedbackDock({
             {reason}
             {restoreError && <ErrorBanner message={restoreError} />}
             {error && (
-              <ErrorBanner message={error} onRetry={typed ? () => void send() : undefined} />
+              <ErrorBanner
+                message={error}
+                onRetry={typed ? () => void send() : undefined}
+                onDismiss={failed ? dismiss : undefined}
+              />
             )}
             {notice && <Notice message={notice} />}
             {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
