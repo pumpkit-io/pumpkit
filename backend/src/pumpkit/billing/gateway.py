@@ -490,6 +490,20 @@ def _webhook_event(event: dict[str, Any]) -> WebhookEvent:
         raise WebhookSignatureError("Webhook payload is not an event") from error
 
 
+def _seller_params() -> CheckoutSessionCreateParams:
+    """Checkout settings for the seller `STRIPE_MANAGED_PAYMENTS` chooses: Stripe or the Instance."""
+    if settings.STRIPE_MANAGED_PAYMENTS:
+        # Stripe collects tax, VAT IDs and the address itself, and refuses the settings below.
+        return {"managed_payments": {"enabled": True}}
+    return {
+        "automatic_tax": {"enabled": True},
+        "tax_id_collection": {"enabled": True},
+        "customer_update": {"address": "auto", "name": "auto"},
+        # Stripe turns Managed Payments on by default for new accounts, so seller mode turns it off.
+        "managed_payments": {"enabled": False},
+    }
+
+
 _T = TypeVar("_T")
 
 
@@ -554,12 +568,7 @@ class StripeBillingGateway:
             "success_url": settings.stripe_checkout_success_url(),
             "cancel_url": settings.stripe_checkout_cancel_url(),
             "allow_promotion_codes": True,
-            "automatic_tax": {"enabled": True},
-            "tax_id_collection": {"enabled": True},
-            "customer_update": {"address": "auto", "name": "auto"},
-            # Keep the Instance the seller, charging tax through Stripe Tax: Stripe turns on
-            # Managed Payments (Stripe as merchant of record) by default for new accounts.
-            "managed_payments": {"enabled": False},
+            **_seller_params(),
         }
         if trial_period_days is not None:
             params["subscription_data"] = {"trial_period_days": trial_period_days}
@@ -942,10 +951,7 @@ class StripeBillingGateway:
             "metadata": _TOP_UP_METADATA,
             "success_url": settings.stripe_top_up_success_url(),
             "cancel_url": settings.billing_page_url(),
-            "automatic_tax": {"enabled": True},
-            "tax_id_collection": {"enabled": True},
-            "customer_update": {"address": "auto", "name": "auto"},
-            "managed_payments": {"enabled": False},
+            **_seller_params(),
         }
         session = await self._call(
             "create a Top-up Checkout", lambda: self._client.v1.checkout.sessions.create(params)

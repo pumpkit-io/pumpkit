@@ -402,6 +402,67 @@ async def test_the_stripe_checkout_charges_vat_as_the_seller_and_collects_vat_id
     assert form["managed_payments[enabled]"] == ["false"]
 
 
+_CHECKOUT = (
+    '{"id": "cs_1", "object": "checkout.session", "url": "https://checkout.stripe.com/c/cs_1"}'
+)
+
+# Stripe refuses these with Managed Payments on: it collects tax, VAT IDs and the address itself.
+_SELLER_ONLY_PARAMS = ("automatic_tax", "tax_id_collection", "customer_update")
+
+
+@pytest.mark.parametrize("trial_period_days", [None, 7], ids=["no-trial", "trial"])
+async def test_a_managed_payments_subscription_checkout_lets_stripe_be_the_seller(
+    monkeypatch, trial_period_days
+):
+    monkeypatch.setattr(settings, "STRIPE_MANAGED_PAYMENTS", True)
+    gateway, http = _recorded_gateway(_CHECKOUT)
+
+    await gateway.create_subscription_checkout(
+        customer_id="cus_1",
+        price_id="price_1Monthly",
+        quantity=1,
+        user_id="user_1",
+        trial_period_days=trial_period_days,
+    )
+
+    [form] = http.forms
+    assert form["managed_payments[enabled]"] == ["true"]
+    assert not [key for key in form if key.startswith(_SELLER_ONLY_PARAMS)]
+    assert form["mode"] == ["subscription"]
+    assert form["customer"] == ["cus_1"]
+    assert form["client_reference_id"] == ["user_1"]
+    assert form["line_items[0][price]"] == ["price_1Monthly"]
+    assert form["line_items[0][quantity]"] == ["1"]
+    assert form["allow_promotion_codes"] == ["true"]
+    assert form["success_url"] == ["http://localhost:5173/billing/success"]
+    assert form["cancel_url"] == ["http://localhost:5173/billing/cancelled"]
+    if trial_period_days is None:
+        assert not [key for key in form if key.startswith("subscription_data")]
+    else:
+        assert form["subscription_data[trial_period_days]"] == ["7"]
+
+
+async def test_a_managed_payments_top_up_checkout_lets_stripe_be_the_seller(monkeypatch):
+    monkeypatch.setattr(settings, "STRIPE_MANAGED_PAYMENTS", True)
+    gateway, http = _recorded_gateway(_CHECKOUT)
+
+    await gateway.create_top_up_checkout(
+        customer_id="cus_1", price_id="price_1TopUp", user_id="user_1"
+    )
+
+    [form] = http.forms
+    assert form["managed_payments[enabled]"] == ["true"]
+    assert not [key for key in form if key.startswith(_SELLER_ONLY_PARAMS)]
+    assert form["mode"] == ["payment"]
+    assert form["customer"] == ["cus_1"]
+    assert form["client_reference_id"] == ["user_1"]
+    assert form["line_items[0][price]"] == ["price_1TopUp"]
+    assert form["line_items[0][quantity]"] == ["1"]
+    assert form["metadata[pumpkit_purchase]"] == ["top_up"]
+    assert form["success_url"] == ["http://localhost:5173/billing/top-up/success"]
+    assert form["cancel_url"] == ["http://localhost:5173/billing"]
+
+
 async def test_the_fake_lists_a_cancelled_subscription_as_ended():
     gateway = FakeBillingGateway()
     incomplete = SubscriptionState(

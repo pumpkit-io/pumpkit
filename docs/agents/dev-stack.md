@@ -22,6 +22,7 @@ Emulator state resets to its config whenever `up` starts an Emulator, so on the 
   - `emulate.config.ts` seeds the Plans `pumpkit_pro_monthly` and `pumpkit_pro_yearly`, the Top-up `pumpkit_top_up`, and the customers and Subscriptions that `e2e/seed/seed_user.py` and `onboarding_user.py` link their Users to (`cus_e2e` with `sub_e2e`).
   - Its Checkout and billing portal are pages of its own: Pay completes a Checkout and Cancel sets a Subscription's `cancel_at`, each sending its webhooks before the browser returns to Pumpkit. Every payment succeeds.
   - It has no clock: a Trial stays a Trial and a `cancel_at` never cancels until something calls the API.
+  - `STRIPE_MANAGED_PAYMENTS=true scripts/dev-stack up` runs the stack in Managed Payments mode. Like Stripe, the Emulator then refuses a Checkout that also sends `automatic_tax`, `tax_id_collection` or `customer_update`.
   - When `gateway.py` starts a new Stripe call, add the route to `emulators/stripe.ts`, or the dev stack answers it with a 404.
 
 ## Safe mode
