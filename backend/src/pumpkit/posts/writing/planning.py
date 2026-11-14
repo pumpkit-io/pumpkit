@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Literal, Optional, Sequence, Union
+from typing import Literal, Optional, Sequence, Union, get_args
 
 from pydantic import BaseModel, ConfigDict
 
@@ -17,7 +17,9 @@ from pumpkit.posts.plans import (
     Funnel,
     Length,
     Plan,
+    ShortStructure,
     Structure,
+    ThreadStructure,
 )
 from pumpkit.posts.writing.constants import CACHE_TTL, MAX_SPLIT_IDEAS, MAX_TOKENS
 from pumpkit.posts.writing.prompts.plan import SHORT_LIMIT, is_short_only, plan_prompt, plan_user
@@ -29,15 +31,7 @@ PLAN_CALL_SECONDS = 120.0
 
 _PromptFunnel = Literal["TOF", "MOF", "BOF"]
 _FUNNELS: dict[_PromptFunnel, Funnel] = {"TOF": "top", "MOF": "middle", "BOF": "bottom"}
-_ShortStructure = Literal["one_line", "few_lines"]
-_SHORT_STRUCTURES: tuple[Structure, ...] = ("one_line", "few_lines")
-# `one_line` and `few_lines` are a single post's only.
-_ThreadStructure = Literal[
-    "hook_list_closer",
-    "hook_problem_insight_closer",
-    "hook_story_insight_closer",
-    "hook_playbook_closer",
-]
+_SHORT_STRUCTURES: tuple[Structure, ...] = get_args(ShortStructure)
 
 
 class _Strict(BaseModel):
@@ -60,16 +54,16 @@ class _PlannedPost(_PlannedIdea):
 
 class _PlannedShortPost(_PlannedIdea):
     format: Literal["short"]
-    structure: _ShortStructure
+    structure: ShortStructure
 
 
 class _PlannedThread(_PlannedIdea):
     # The prompt's `format` names a single post's Length, or `thread`.
     format: Literal["thread"]
-    structure: _ThreadStructure
+    structure: ThreadStructure
 
 
-_Longer = Union[_PlannedPost, _PlannedThread]
+_PostOrThread = Union[_PlannedPost, _PlannedThread]
 _ShortOrThread = Union[_PlannedShortPost, _PlannedThread]
 
 
@@ -77,8 +71,8 @@ class PostIdeas(_Strict):
     """The plan call's answer: always one post for the whole Brief, and one per idea on a split."""
 
     reasoning: str
-    single_idea: _Longer
-    split_ideas: Optional[list[_Longer]]
+    single_idea: _PostOrThread
+    split_ideas: Optional[list[_PostOrThread]]
 
 
 class ShortPostIdeas(_Strict):

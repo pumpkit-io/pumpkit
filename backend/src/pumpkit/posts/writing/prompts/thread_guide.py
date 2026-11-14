@@ -41,7 +41,7 @@ A thread is a few posts read in order, each replying to the one before. Each pos
 ## The last part
 
 - The closer goes in the last part.
-- When the CTA needs a link, the link goes in the last part too. A thread has no first reply."""
+- When the CTA needs a link, the link goes in the last part too. Use a link only if the raw input gives one; otherwise write [link] where it goes. A thread has no first reply."""
 
 
 STRUCTURE_ACROSS_PARTS = """\

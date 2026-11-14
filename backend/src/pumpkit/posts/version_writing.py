@@ -293,12 +293,12 @@ async def prepare_next_version(
         format=format or text.format,
         char_limit=char_limit,
     )
-    if inputs is None and not post.corpus_post_ids and text.format == FORMAT_THREAD:
-        raise ConflictError(
-            "Feedback on a thread written without inspiration authors isn't available yet. "
-            "Edit the text by hand, or start a new post."
-        )
     if inputs is None and not post.corpus_post_ids:
+        if text.format == FORMAT_THREAD:
+            raise ConflictError(
+                "Feedback on a thread written without inspiration authors isn't available yet. "
+                "Edit the text by hand, or start a new post."
+            )
         raise ConflictError(
             "Feedback can't turn a post written without inspiration authors into a thread yet. "
             "Send it without switching to a thread, or start a new post."

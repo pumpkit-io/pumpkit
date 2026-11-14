@@ -136,17 +136,15 @@ async def _sketches(
 ) -> tuple[list[S], list[dict]]:
     """
     The sketches that succeeded, in the order they were asked for, and a record of every call.
-    A sketch `check` raises an `LLMError` for is skipped like a failed call.
+    A sketch `check` raises an `LLMError` for is skipped like a failed call, but its record keeps
+    the answer and its usage, marked out of bounds, since the call was billed.
     """
     model = settings.LLM_SKETCHING_MODEL
     # One system prompt for every sketch, so they share one cache entry.
     system = system_message(prompt)
 
     async def sketch(angle: HookType) -> StructuredResult[S]:
-        messages = [system, user_message(user(angle))]
-        result = await _call(llm, model, messages, schema)
-        check(result.parsed)
-        return result
+        return await _call(llm, model, [system, user_message(user(angle))], schema)
 
     angles: list[HookType] = [sketch_angle(index) for index in range(SKETCHES_PER_POST)]
     results: list[Union[StructuredResult[S], BaseException]] = await asyncio.gather(
@@ -159,32 +157,42 @@ async def _sketches(
 
     sketches: list[S] = []
     records: list[dict] = []
+    errors: list[BaseException] = []
+
+    def skipped(number: int, angle: HookType, error: BaseException) -> None:
+        logger.warning(
+            "Sketch %d of %d (angle %s) failed for User %s, skipped: %s",
+            number,
+            SKETCHES_PER_POST,
+            angle,
+            user_id,
+            error,
+        )
+        errors.append(error)
+
     for number, (angle, result) in enumerate(zip(angles, results), start=1):
         if isinstance(result, BaseException):
-            logger.warning(
-                "Sketch %d of %d (angle %s) failed for User %s, skipped: %s",
-                number,
-                SKETCHES_PER_POST,
-                angle,
-                user_id,
-                result,
-            )
+            skipped(number, angle, result)
             records.append({"number": number, "angle": angle, "model": model, "error": str(result)})
             continue
+        answered = {
+            "number": number,
+            "angle": angle,
+            "model": result.model,
+            "usage": _usage(result),
+            **result.parsed.model_dump(),
+        }
+        try:
+            check(result.parsed)
+        except LLMError as error:
+            skipped(number, angle, error)
+            records.append({**answered, "out_of_bounds": True, "error": str(error)})
+            continue
         sketches.append(result.parsed)
-        records.append(
-            {
-                "number": number,
-                # The number the merge reads it under: failed sketches leave no gap.
-                "merge_number": len(sketches),
-                "angle": angle,
-                "model": result.model,
-                "usage": _usage(result),
-                **result.parsed.model_dump(),
-            }
-        )
+        # merge_number: the number the merge reads it under, so failed sketches leave no gap.
+        records.append({**answered, "merge_number": len(sketches)})
     if not sketches:
-        raise LLMError(f"Every sketch call failed; the first: {results[0]}")
+        raise LLMError(f"Every sketch call failed; the first: {errors[0]}")
     return sketches, records
 
 

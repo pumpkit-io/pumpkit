@@ -277,7 +277,7 @@ async def test_the_thread_sketch_prompt_is_the_shared_guide_with_the_thread_only
     assert "- One point per part." in prompt
     assert "- The closer goes in the last part." in prompt
     assert "A thread has no first reply." in prompt
-    assert "- The link goes in the last part, with the closer." in prompt
+    assert "- The link goes in the last part, and the closer says what it leads to." in prompt
     assert "a sign-up or waitlist (link in the last part)" in prompt
     assert "- No hashtags and no emoji, unless the raw input asks for it." in prompt
     for post_only in ("first_reply", "first reply under", "Not a thread", "# Format: short"):
@@ -383,6 +383,62 @@ async def test_the_thread_humanizer_gets_its_prompt_the_brief_and_plan_then_the_
     }
 
 
+LINK_RULE = (
+    "- When the CTA needs a link, the link goes in the last part too. Use a link only if the "
+    "raw input gives one; otherwise write [link] where it goes. A thread has no first reply."
+)
+
+
+async def test_a_thread_without_a_link_in_the_raw_input_writes_link_where_it_goes_and_keeps_it(
+    client, ready, fake_llm
+):
+    await _write_thread(client, fake_llm, desired_action="sign-up", funnel="BOF")
+
+    sketch = _system_text(_calls(fake_llm, SKETCHED_THREAD)[0])
+    [merge] = [_system_text(call) for call in _calls(fake_llm, MERGED_THREAD)]
+    for prompt in (sketch, merge):
+        assert f"## The last part\n\n- The closer goes in the last part.\n{LINK_RULE}" in prompt
+    humanizer = _system_text(_calls(fake_llm, HUMANIZED_THREAD)[0])
+    assert (
+        "- The closer and the CTA: keep them in the last part, with the link if there is one. "
+        "Keep a [link] placeholder exactly as it is: I replace it with the link before posting."
+    ) in humanizer
+
+
+@pytest.mark.parametrize(
+    ("desired_action", "funnel", "rule"),
+    [
+        pytest.param(
+            "click",
+            "MOF",
+            "- A native link (another thread, an X Article, my profile, my pinned post) can sit "
+            "in any part. An external link goes in the last part, and the closer says what it "
+            "leads to.",
+            id="click",
+        ),
+        pytest.param(
+            "buy",
+            "BOF",
+            "- The link goes in the last part, and the closer says what it leads to.",
+            id="buy",
+        ),
+    ],
+)
+async def test_every_thread_link_rule_puts_the_link_in_the_last_part_with_a_closer_that_names_it(
+    client, ready, fake_llm, desired_action, funnel, rule
+):
+    await _write_thread(client, fake_llm, desired_action=desired_action, funnel=funnel)
+
+    prompt = _system_text(_calls(fake_llm, SKETCHED_THREAD)[0])
+    assert rule in prompt
+    assert (
+        "- An external link goes in the last part, and the closer says what it leads to. A "
+        "thread has no first reply."
+    ) in prompt
+    assert '- "Link below" -> "Everything above is in the repo. It\'s free."' in prompt
+    assert "Here it is:" not in prompt
+
+
 async def test_a_thread_on_a_premium_account_states_the_accounts_limit_per_part(
     client, ready, fake_llm, premium
 ):
@@ -471,7 +527,17 @@ async def test_a_sketch_outside_the_part_bounds_is_skipped_like_a_failed_sketch(
     assert "contrarian" not in merge.messages[1]["content"]
     stored = (await _version(db)).sketches
     assert stored is not None
-    assert stored[2]["error"] == "The sketch call wrote 1 Parts; a Thread has 2 to 10"
+    assert [sketch.get("merge_number") for sketch in stored] == [1, 2, None, 3, 4]
+    out_of_bounds = stored[2]
+    assert out_of_bounds["error"] == "The sketch call wrote 1 Parts; a Thread has 2 to 10"
+    assert out_of_bounds["out_of_bounds"] is True
+    assert out_of_bounds["parts"] == ["just one"]
+    assert out_of_bounds["model"] == stored[0]["model"]
+    assert out_of_bounds["usage"] == {
+        "prompt_tokens": 100,
+        "completion_tokens": 20,
+        "total_tokens": 120,
+    }
 
 
 async def test_when_every_sketch_is_outside_the_part_bounds_the_attempt_fails(
@@ -521,12 +587,6 @@ async def test_start_post_over_mcp_takes_no_format_and_writes_the_thread_the_pla
     post = result["structuredContent"]
     assert (post["plan"]["format"], post["plan"]["length"]) == ("thread", None)
     assert [part["text"] for part in post["versions"][0]["parts"]] == FINAL
-
-
-async def test_a_thread_needs_no_inspiration_author(client, ready, fake_llm):
-    response = await _write_thread(client, fake_llm)
-
-    assert response.status_code == 201, response.text
 
 
 # Feedback on a Thread still writes from the corpus the Post started with, until #477

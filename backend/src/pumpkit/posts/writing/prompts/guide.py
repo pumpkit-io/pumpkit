@@ -342,11 +342,11 @@ POST_LINKS = LinkPlacement(
 
 # A Thread has no first reply: its link goes in its last Part.
 THREAD_LINKS = LinkPlacement(
-    external_link="- An external link goes in the last part, with the closer. A thread has no first reply. Native links (another thread, an X Article, my profile) are fine in any part.",
-    link_example="The repo is free. Here it is:",
+    external_link="- An external link goes in the last part, and the closer says what it leads to. A thread has no first reply. Native links (another thread, an X Article, my profile) are fine in any part.",
+    link_example="Everything above is in the repo. It's free.",
     link_place="the last part",
-    click_link="- A native link (another thread, an X Article, my profile, my pinned post) can sit in any part. An external link goes in the last part, and the closer says what it is.",
-    link="- The link goes in the last part, with the closer.",
+    click_link="- A native link (another thread, an X Article, my profile, my pinned post) can sit in any part. An external link goes in the last part, and the closer says what it leads to.",
+    link="- The link goes in the last part, and the closer says what it leads to.",
 )
 
 

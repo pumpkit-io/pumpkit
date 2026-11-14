@@ -217,9 +217,9 @@ async def test_the_plan_of_a_thread_the_planner_chose_has_the_thread_format_and_
     assert response.status_code == 201, response.text
     started = response.json()
     assert started["versions"][0]["format"] == "thread"
-    plan = {**PLAN, "core_idea": started["plan"]["core_idea"]}
     assert started["plan"] == {
-        **plan,
+        **PLAN,
+        "core_idea": "Five lessons from shipping small things every week.",
         "format": "thread",
         "length": None,
         "structure": "hook_playbook_closer",
