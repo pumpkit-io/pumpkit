@@ -5,7 +5,7 @@ Post written in parallel in the background (ADR 0025, ADR 0026).
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any, Callable
 
 import pytest
@@ -14,9 +14,9 @@ from pumpkit.core.config import settings
 from pumpkit.core.db.session import get_session_maker
 from pumpkit.core.llm import FakeLLM, LLMCall, LLMError, StructuredResult, get_llm
 from pumpkit.main import app
-from pumpkit.posts.models import Post, VersionAttempt
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
+from tests.posts.generations import use_a_generation
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     MERGED_SKETCH,
@@ -414,26 +414,6 @@ def cap(monkeypatch):
     return _cap
 
 
-async def _use_a_generation(db, user_id: str) -> None:
-    moment = datetime(2026, 10, 2, tzinfo=timezone.utc)
-    post = Post(user_id=user_id, brief="earlier", corpus_post_ids=[], created_at=moment)
-    db.add(post)
-    await db.flush()
-    db.add(
-        VersionAttempt(
-            user_id=post.user_id,
-            post_id=post.id,
-            sequence=1,
-            version_number=1,
-            format="post",
-            status="succeeded",
-            parts=["earlier"],
-            created_at=moment,
-        )
-    )
-    await db.commit()
-
-
 @dataclass
 class _MeanwhilePlanning(FakeLLM):
     """A model that runs `meanwhile` during the plan call, as a concurrent request would."""
@@ -478,7 +458,7 @@ async def test_with_no_generations_left_a_split_brief_is_still_planned(
     client, db, user, ready, fake_llm, split, cap, fixed_clock
 ):
     cap(1)
-    await _use_a_generation(db, user.id)
+    await use_a_generation(db, user.id)
 
     planned = await _plan(client)
 
@@ -491,7 +471,7 @@ async def test_with_no_generations_left_a_brief_with_one_idea_is_planned_and_lef
     client, db, user, ready, fake_llm, cap, fixed_clock
 ):
     cap(1)
-    await _use_a_generation(db, user.id)
+    await use_a_generation(db, user.id)
 
     planned = await _plan(client)
 
@@ -506,7 +486,7 @@ async def test_a_brief_left_unwritten_is_written_later_without_planning_again(
     client, db, user, ready, fake_llm, cap, fixed_clock
 ):
     cap(1)
-    await _use_a_generation(db, user.id)
+    await use_a_generation(db, user.id)
     planned = await _plan(client)
     [idea] = planned["ideas"]
     cap(2)
@@ -528,7 +508,7 @@ async def test_the_last_generation_used_during_the_plan_call_leaves_the_brief_un
         standing={POST_IDEAS: ideas(), SKETCHED_POST: sketched(), MERGED_SKETCH: merged()},
         replies=[{"post": "final", "first_reply": None}],
     )
-    llm.meanwhile = lambda: _use_a_generation(db, user.id)
+    llm.meanwhile = lambda: use_a_generation(db, user.id)
     app.dependency_overrides[get_llm] = lambda: llm
 
     planned = await _plan(client)
@@ -579,7 +559,7 @@ async def test_start_post_with_the_last_generation_used_during_the_plan_call_is_
     await save_positioning(client)
     cap(1)
     llm = _MeanwhilePlanning(standing={POST_IDEAS: ideas()})
-    llm.meanwhile = lambda: _use_a_generation(db, user.id)
+    llm.meanwhile = lambda: use_a_generation(db, user.id)
     app.dependency_overrides[get_llm] = lambda: llm
 
     result = await mcp.call_tool("start_post", brief=BRIEF)

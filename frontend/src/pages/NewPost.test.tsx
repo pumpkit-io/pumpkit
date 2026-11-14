@@ -1,5 +1,5 @@
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -59,7 +59,12 @@ vi.mock('@/services/postService', async (importOriginal) => ({
 }));
 vi.mock('@/services/briefService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/briefService')>()),
-  briefService: { plan: vi.fn(), get: vi.fn(), write: vi.fn() },
+  briefService: {
+    plan: vi.fn(),
+    get: vi.fn(),
+    write: vi.fn(),
+    recent: vi.fn().mockResolvedValue([]),
+  },
 }));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
@@ -88,11 +93,12 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import type { Instance } from '@/lib/instance';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
+import { RECENT_BRIEFS_POLL_MS } from '@/features/briefs/RecentBriefs';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { positioningService } from '@/services/positioningService';
-import { briefService, type Brief } from '@/services/briefService';
+import { briefService, type Brief, type RecentBrief } from '@/services/briefService';
 import { postService, type PostDetail } from '@/services/postService';
 import { usageService } from '@/services/usageService';
 import { xConnectionService } from '@/services/xConnectionService';
@@ -963,5 +969,191 @@ describe('New post', () => {
       expect(screen.queryByRole('link', { name: /subscribe/i })).not.toBeInTheDocument();
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
     });
+  });
+});
+
+function recentBrief(changes: Partial<RecentBrief>): RecentBrief {
+  return {
+    id: 'brief_recent',
+    textStart: 'so I have been testing something this week…',
+    postsWritten: 0,
+    postsWriting: 0,
+    postsNotWritten: 0,
+    ideasOffered: 0,
+    postIds: [],
+    ...changes,
+  };
+}
+
+const PARTLY_WRITTEN = recentBrief({
+  id: 'brief_partly',
+  textStart: 'so I have been testing something this week…',
+  postsWritten: 3,
+  ideasOffered: 1,
+  postIds: ['post_a', 'post_b', 'post_c'],
+});
+const WRITING = recentBrief({
+  id: 'brief_writing',
+  textStart: 'two separate things I learned this month…',
+  postsWritten: 1,
+  postsWriting: 1,
+  postIds: ['post_d', 'post_e'],
+});
+const ALL_WRITTEN = recentBrief({
+  id: 'brief_all',
+  textStart: 'I want to write about my SaaS failures…',
+  postsWritten: 5,
+  postIds: ['post_f', 'post_g', 'post_h', 'post_i', 'post_j'],
+});
+const ONE_POST = recentBrief({
+  id: 'brief_one',
+  textStart: 'ship small things',
+  postsWritten: 1,
+  postIds: ['post_only'],
+});
+const NOT_WRITTEN_YET = recentBrief({
+  id: 'brief_unwritten',
+  textStart: 'a brief planned with no room left',
+  ideasOffered: 1,
+});
+const COULD_NOT_WRITE = recentBrief({
+  id: 'brief_failed',
+  textStart: 'three things about pricing',
+  postsWritten: 1,
+  postsNotWritten: 1,
+  postIds: ['post_k', 'post_l'],
+});
+
+async function recentBriefs() {
+  return within(await screen.findByRole('region', { name: 'Recent briefs' }));
+}
+
+describe('Recent briefs on New post', () => {
+  beforeEach(() => {
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(briefService.recent).mockReset().mockResolvedValue([]);
+    vi.mocked(positioningService.get)
+      .mockReset()
+      .mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true });
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('is not shown when the user has no briefs', async () => {
+    renderNewPost();
+    await writer();
+    await waitFor(() => expect(briefService.recent).toHaveBeenCalled());
+
+    expect(screen.queryByRole('region', { name: 'Recent briefs' })).not.toBeInTheDocument();
+  });
+
+  it('lists each brief by its start with its progress', async () => {
+    vi.mocked(briefService.recent).mockResolvedValue([
+      PARTLY_WRITTEN,
+      ALL_WRITTEN,
+      NOT_WRITTEN_YET,
+      COULD_NOT_WRITE,
+    ]);
+    renderNewPost();
+
+    const list = await recentBriefs();
+    expect(list.getByRole('heading', { level: 2, name: 'Recent briefs' })).toBeVisible();
+    const rows = list.getAllByRole('link');
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toHaveAccessibleName(
+      'so I have been testing something this week…, 3 of 4 written',
+    );
+    expect(rows[1]).toHaveAccessibleName('I want to write about my SaaS failures…, 5 written');
+    expect(rows[2]).toHaveAccessibleName('a brief planned with no room left, Not written yet');
+    expect(rows[3]).toHaveAccessibleName("three things about pricing, 1 post couldn't be written");
+  });
+
+  it('shows a brief with a post being written as writing', async () => {
+    vi.mocked(briefService.recent).mockResolvedValue([WRITING]);
+    renderNewPost();
+
+    const list = await recentBriefs();
+    expect(
+      list.getByRole('link', { name: 'two separate things I learned this month…, Writing…' }),
+    ).toBeVisible();
+  });
+
+  it('opens the brief page from a brief with several posts', async () => {
+    vi.mocked(briefService.recent).mockResolvedValue([PARTLY_WRITTEN]);
+    vi.mocked(briefService.get).mockReturnValue(new Promise(() => {}));
+    renderNewPost();
+
+    fireEvent.click((await recentBriefs()).getByRole('link', { name: /so I have been testing/ }));
+
+    await waitFor(() => expect(currentPath()).toBe('/briefs/brief_partly'));
+  });
+
+  it('opens the post from a brief with one post and no idea left to write', async () => {
+    vi.mocked(briefService.recent).mockResolvedValue([ONE_POST]);
+    renderNewPost();
+
+    fireEvent.click((await recentBriefs()).getByRole('link', { name: /ship small things/ }));
+
+    await waitFor(() => expect(currentPath()).toBe('/posts/post_only'));
+  });
+
+  it('opens the brief page from a brief not written yet, to write its ideas', async () => {
+    vi.mocked(briefService.recent).mockResolvedValue([NOT_WRITTEN_YET]);
+    vi.mocked(briefService.get).mockReturnValue(new Promise(() => {}));
+    renderNewPost();
+
+    fireEvent.click((await recentBriefs()).getByRole('link', { name: /no room left/ }));
+
+    await waitFor(() => expect(currentPath()).toBe('/briefs/brief_unwritten'));
+  });
+
+  it('reads the list again while a brief is writing, and stops once none is', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(briefService.recent)
+      .mockResolvedValueOnce([WRITING])
+      .mockResolvedValue([{ ...WRITING, postsWritten: 2, postsWriting: 0 }]);
+    renderNewPost();
+    await recentBriefs();
+    expect(briefService.recent).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RECENT_BRIEFS_POLL_MS);
+    });
+
+    const list = await recentBriefs();
+    expect(await list.findByRole('link', { name: /2 written/ })).toBeVisible();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RECENT_BRIEFS_POLL_MS * 3);
+    });
+    expect(briefService.recent).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not read the list again while no brief is writing', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(briefService.recent).mockResolvedValue([ALL_WRITTEN]);
+    renderNewPost();
+    await recentBriefs();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(RECENT_BRIEFS_POLL_MS * 3);
+    });
+
+    expect(briefService.recent).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives way to the ideas step while the user picks ideas', async () => {
+    vi.mocked(briefService.recent).mockResolvedValue([ALL_WRITTEN]);
+    vi.mocked(briefService.plan).mockResolvedValue(SPLIT);
+    renderNewPost();
+    await recentBriefs();
+
+    await writeBrief(await writer(), 'three things I learned from my failed SaaS');
+
+    expect(await screen.findByText('We found 3 ideas in your brief')).toBeVisible();
+    expect(screen.queryByRole('region', { name: 'Recent briefs' })).not.toBeInTheDocument();
   });
 });

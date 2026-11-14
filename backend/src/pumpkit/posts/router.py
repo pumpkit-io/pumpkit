@@ -19,6 +19,7 @@ from pumpkit.posts.schemas import (
     BriefRequest,
     BriefResponse,
     PostResponse,
+    RecentBriefsResponse,
     WriteIdeasRequest,
 )
 
@@ -51,6 +52,16 @@ async def plan_brief(
         brief=brief_request.brief,
         clock=clock,
     )
+
+
+@router.get("/briefs", response_model=RecentBriefsResponse, status_code=status.HTTP_200_OK)
+async def list_recent_briefs(
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> RecentBriefsResponse:
+    """The User's latest Briefs, newest first, with their Posts counted by writing state."""
+    return await mediator.list_recent_briefs(db, current_user, clock)
 
 
 @router.post(

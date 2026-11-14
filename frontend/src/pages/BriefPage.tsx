@@ -17,7 +17,13 @@ import type { ShownPart } from '@/features/posts/shownText';
 import { PersonaLink } from '@/features/positioning/PersonaLink';
 import { StatusBadge } from '@/features/scheduledPosts/StatusBadge';
 import { Topbar } from '@/features/topbar/Topbar';
-import { briefPosts, notWrittenIdeas, type BriefPost, type Idea } from '@/services/briefService';
+import {
+  briefPosts,
+  lonePost,
+  notWrittenIdeas,
+  type BriefPost,
+  type Idea,
+} from '@/services/briefService';
 import { FORMAT_THREAD, type PostText } from '@/services/postService';
 
 const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
@@ -364,9 +370,8 @@ export function BriefPage() {
   const { brief } = load;
   const posts = briefPosts(brief);
   const offered = notWrittenIdeas(brief);
-  const [only] = posts;
-  if (only && posts.length === 1 && offered.length === 0)
-    return <Navigate to={`/posts/${only.post.id}`} replace />;
+  const only = lonePost(posts, offered.length);
+  if (only) return <Navigate to={`/posts/${only.post.id}`} replace />;
   // The Brief's Posts, written or not, out of those and the Ideas still offered.
   const count =
     posts.length > 0 ? `${posts.length} of ${posts.length + offered.length} written` : null;

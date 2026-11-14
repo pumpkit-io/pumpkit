@@ -71,7 +71,7 @@ test.describe('logged in', () => {
     await page.keyboard.press('ControlOrMeta+Shift+O');
 
     await expect(page).toHaveURL(/\/new$/);
-    await expect(page.getByLabel('Brief')).toHaveValue('');
+    await expect(page.getByRole('textbox', { name: 'Brief' })).toHaveValue('');
   });
 
   test.describe('on a phone', () => {

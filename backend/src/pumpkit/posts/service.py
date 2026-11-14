@@ -3,7 +3,7 @@ from typing import Optional
 
 from sqlalchemy import delete, exists, func, null, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import lazyload, selectinload
 
 from pumpkit.billing.models import TopUpCharge
 from pumpkit.core.errors import ConflictError
@@ -163,6 +163,39 @@ async def post_ids_of_briefs(db: AsyncSession, *, brief_ids: set[str]) -> dict[s
     for brief_id, post_id in result.tuples():
         post_ids.setdefault(brief_id, []).append(post_id)
     return post_ids
+
+
+async def latest_briefs(
+    db: AsyncSession, *, user_id: str, limit: int, text_chars: int
+) -> list[tuple[str, str]]:
+    """The User's latest Briefs, newest first, as id and the first `text_chars` of the text."""
+    result = await db.execute(
+        select(Brief.id, func.substr(Brief.text, 1, text_chars))
+        .where(Brief.user_id == user_id)
+        .order_by(Brief.created_at.desc(), Brief.id.desc())
+        .limit(limit)
+    )
+    return [(brief_id, text) for brief_id, text in result.tuples()]
+
+
+async def ideas_and_posts_of_briefs(
+    db: AsyncSession, *, brief_ids: list[str]
+) -> dict[str, list[tuple[Idea, Optional[Post]]]]:
+    """Each Brief's Ideas in order, each with its Post or None, in one query."""
+    if not brief_ids:
+        return {}
+    result = await db.execute(
+        select(Idea, Post)
+        .outerjoin(Post, Post.idea_id == Idea.id)
+        .where(Idea.brief_id.in_(brief_ids))
+        .order_by(*IDEA_ORDER)
+        # Only the Ideas and Posts' own columns are read, not a whole Brief's text or any Media.
+        .options(lazyload(Idea.brief), lazyload(Post.idea), lazyload(Post.text_media))
+    )
+    ideas: dict[str, list[tuple[Idea, Optional[Post]]]] = {}
+    for idea, post in result.tuples():
+        ideas.setdefault(idea.brief_id, []).append((idea, post))
+    return ideas
 
 
 async def store_planned_brief(
