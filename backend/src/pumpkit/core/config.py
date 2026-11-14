@@ -136,6 +136,8 @@ class Settings(BaseSettings):
     STRIPE_WEBHOOK_SECRET: Optional[str] = None
     # Dev only: points the Stripe SDK at an Emulator; unset reaches Stripe itself.
     STRIPE_API_URL: Optional[str] = None
+    # On, Stripe is the seller of every Checkout (Managed Payments); off, the Instance is.
+    STRIPE_MANAGED_PAYMENTS: bool = False
 
     # The Plans Pumpkit sells, as Stripe price lookup keys, in display order.
     # Nothing else can be listed or bought.
@@ -264,6 +266,20 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"{ProviderGroup.OPERATOR_DETAILS} are set without SUPPORT_EMAIL, the contact "
                 "address their company footer shows; missing: SUPPORT_EMAIL"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _managed_payments_needs_stripe_billing(self) -> Self:
+        if self.STRIPE_MANAGED_PAYMENTS and not self.is_stripe_billing_configured():
+            missing = [
+                key
+                for key, value in self._provider_groups()[ProviderGroup.STRIPE_BILLING].items()
+                if not value
+            ]
+            raise ValueError(
+                f"STRIPE_MANAGED_PAYMENTS needs {ProviderGroup.STRIPE_BILLING}; "
+                f"missing: {', '.join(missing)}"
             )
         return self
 
