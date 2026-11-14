@@ -179,7 +179,7 @@ def _plans(planned: Sequence[_Planned], user_id: str) -> list[Plan]:
     return plans
 
 
-async def plan_brief(
+async def call_planner(
     llm: LLM, *, user_id: str, brief: str, positioning: str, char_limit: int
 ) -> PlannedBrief:
     """

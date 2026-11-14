@@ -36,6 +36,11 @@ export interface Brief {
   createdAt: string;
   /** The single-post Idea first, then the split Ideas in posting order. */
   ideas: Idea[];
+  /**
+   * The Posts the User can still have written, Top-ups included and writes in progress taken out,
+   * as the server checks a write; null with no cap.
+   */
+  generationsLeft: number | null;
 }
 
 interface BriefApi {
@@ -49,6 +54,7 @@ interface BriefApi {
     plan: PlanApi | null;
     post: { id: string; writing_state: WritingState | null; text: PostTextApi | null } | null;
   }[];
+  generations_left: number | null;
 }
 
 const toBrief = (data: BriefApi): Brief => ({
@@ -66,6 +72,7 @@ const toBrief = (data: BriefApi): Brief => ({
       text: idea.post.text ? toText(idea.post.text) : null,
     },
   })),
+  generationsLeft: data.generations_left,
 });
 
 /** The split Ideas, in posting order; none when the Brief holds one idea. */
@@ -88,7 +95,8 @@ export function briefPosts(brief: Brief): { idea: Idea; post: BriefPost }[] {
 export const briefService = {
   /**
    * Plans the Brief and answers with its Ideas. With no split Ideas, the single-post Idea's Post
-   * is already being written; with split Ideas nothing is written until `write`.
+   * is already being written when the User had room for it; otherwise nothing is written until
+   * `write`.
    */
   plan: async (brief: string): Promise<Brief> => {
     const { data } = await apiService.post<BriefApi>('/briefs', { brief });

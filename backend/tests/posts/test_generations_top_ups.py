@@ -13,7 +13,7 @@ from pumpkit.core.config import settings
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import started_post_id
+from tests.posts.writing_replies import start, started_post_id
 
 POSTS = "/api/v1/posts"
 BRIEFS = "/api/v1/briefs"
@@ -88,7 +88,7 @@ async def _generations_left(client) -> tuple[int, list[int]]:
 
 async def _start_post(client, fake_llm):
     fake_llm.replies = [{"post": "final"}]
-    return await client.post(BRIEFS, json={"brief": "ship"})
+    return await start(client)
 
 
 async def test_with_the_allowance_used_up_a_version_is_charged_to_a_top_up(
@@ -201,7 +201,8 @@ async def test_with_the_allowance_and_top_ups_used_up_the_way_out_is_a_top_up(
         "Failed attempts don't count."
     )
     assert (response.json()["left"], response.json()["way_out"]) == (0, "top_up")
-    assert fake_llm.calls == []
+    # Only the plan call: the Brief is planned, and its Post refused.
+    assert len(fake_llm.calls) == 1
 
 
 async def test_an_expired_top_up_is_not_spent(
@@ -239,7 +240,7 @@ async def test_a_failed_attempt_takes_nothing_from_a_top_up(
     await _use_allowance(db, user.id)
     fake_llm.replies = [LLMError("down")]
 
-    assert (await client.post(BRIEFS, json={"brief": "ship"})).status_code == 201
+    assert (await start(client)).status_code == 201
 
     assert await _generations_left(client) == (0, [2])
 

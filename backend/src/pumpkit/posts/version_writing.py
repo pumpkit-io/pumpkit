@@ -110,6 +110,17 @@ async def check_generation_left(
         )
 
 
+async def generations_left(db: AsyncSession, *, user_id: str, now: datetime) -> Optional[int]:
+    """The most `count` `check_generation_left` allows now; None when the User has no cap."""
+    draw = await _generation_draw(db, user_id=user_id, now=now)
+    if draw is None:
+        return None
+    in_flight = await service.count_writes_in_flight(db, user_id=user_id, now=now)
+    return await billing_service.left_with_top_ups(
+        db, user_id=user_id, draw=replace(draw, used=draw.used + in_flight)
+    )
+
+
 async def charge_generation(
     db: AsyncSession, *, user_id: str, version: VersionAttempt, now: datetime
 ) -> None:

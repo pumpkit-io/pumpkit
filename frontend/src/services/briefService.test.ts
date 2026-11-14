@@ -36,6 +36,7 @@ const BRIEF_API = {
       },
     },
   ],
+  generations_left: 3,
 };
 
 const BRIEF: Brief = {
@@ -84,6 +85,7 @@ const BRIEF: Brief = {
       },
     },
   ],
+  generationsLeft: 3,
 };
 
 describe('briefService', () => {

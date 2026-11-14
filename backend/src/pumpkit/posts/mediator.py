@@ -6,12 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
+from pumpkit.billing.allowance import AllowanceUsedUp
 from pumpkit.core.background import TaskRegistry
 from pumpkit.core.errors import (
     AppError,
     ConflictError,
     NotFoundError,
     RefusedError,
+    RetryLaterError,
     report_background_exception,
 )
 from pumpkit.core.llm import LLM
@@ -30,13 +32,14 @@ from pumpkit.posts.version_writing import (
     charge_generation,
     check_attempt_limit,
     check_generation_left,
+    generations_left,
     plan_response,
     post_still_writing,
     record_failed_attempt,
     text_response,
     user_post,
 )
-from pumpkit.posts.writing.planning import plan_brief as plan_with_model
+from pumpkit.posts.writing.planning import call_planner
 from pumpkit.posts.writing.post_writing import write_planned_version
 from pumpkit.posts.writing.versions import WrittenVersion
 from pumpkit.posts.writing_state import WRITING, writing_state
@@ -57,16 +60,24 @@ async def plan_brief(
     """
     Plan the Brief with the User's Positioning and store it with its Ideas. A Brief with no split
     Ideas also starts writing its single-post Idea in the background, so the simple case stays one
-    request; with split Ideas nothing is written until the User picks. A failed plan stores nothing.
+    request, unless the attempt limit or the Generations left now leave no room: then, as with
+    split Ideas, nothing is written until the User picks. A failed plan stores nothing.
     """
-    planned = await _plan_and_store(db, llm, user, brief, clock)
+    # Planned with no Generation left, so a User can still see a split Brief's Ideas and top up.
+    planned = await _plan_and_store(db, llm, user, brief, clock, need_generation=False)
+    now = clock()
     posts: dict[str, Post] = {}
     writes = []
     if len(planned.brief.ideas) == 1:
-        write = await _create_post(db, planned, planned.brief.ideas[0], now=clock())
-        posts[write.idea_id] = write.post
-        writes.append(write.write)
-    response = _brief_response(planned.brief, posts, planned.char_limit, now=clock())
+        try:
+            await _check_room_for_one(db, user_id=user.id, now=now)
+        except (RetryLaterError, AllowanceUsedUp):
+            pass
+        else:
+            created = await _create_post(db, planned, planned.brief.ideas[0], now=now)
+            posts[created.idea_id] = created.post
+            writes.append(created.write)
+    response = await _brief_response(db, planned.brief, posts, planned.char_limit, now=now)
     await _start_writes(db, llm, tasks, sessions, writes, clock)
     return response
 
@@ -83,19 +94,19 @@ async def start_post(
     """
     Plan the Brief as `plan_brief` does, then start writing its single-post Idea, which covers the
     whole Brief, whether or not the planner split it. The split Ideas stay on the Brief, unwritten.
+    Refused before the plan call with no Generation left, and after it, with the Brief kept
+    unwritten, when the attempt limit or the Generations left ran out meanwhile.
     """
-    planned = await _plan_and_store(db, llm, user, brief, clock)
-    single = planned.brief.ideas[0]
-    created = await _create_post(db, planned, single, now=clock())
-    write = created.write
-    await _start_writes(db, llm, tasks, sessions, [write], clock)
-    return PostResponse(
-        id=write.post_id,
-        brief=write.brief,
-        plan=plan_response(write.plan),
-        versions=[],
-        writing_state=WRITING,
-    )
+    planned = await _plan_and_store(db, llm, user, brief, clock, need_generation=True)
+    now = clock()
+    try:
+        await _check_room_for_one(db, user_id=user.id, now=now)
+    except AppError:
+        await db.commit()
+        raise
+    created = await _create_post(db, planned, planned.brief.ideas[0], now=now)
+    await _start_writes(db, llm, tasks, sessions, [created.write], clock)
+    return _writing_post_response(created.write)
 
 
 @dataclass(frozen=True)
@@ -107,11 +118,12 @@ class _PlannedBrief:
 
 
 async def _plan_and_store(
-    db: AsyncSession, llm: LLM, user: User, brief: str, clock: Clock
+    db: AsyncSession, llm: LLM, user: User, brief: str, clock: Clock, *, need_generation: bool
 ) -> _PlannedBrief:
     """
-    The plan call, with no transaction open across it, then the Brief and its Ideas, flushed.
-    Refused up front when the User couldn't write even one Post, or is at the cap on plan calls.
+    The plan call, with no transaction open across it, then the Brief and its Ideas, flushed, with
+    the User locked. Refused up front at the cap on plan calls, at the attempt limit and, with
+    `need_generation`, when the User has no Generation left.
     """
     user_id = user.id
     now = clock()
@@ -119,13 +131,14 @@ async def _plan_and_store(
     if positioning is None:
         raise RefusedError("Set up your persona before writing a post.", fix_page=PERSONA_PAGE)
     await check_attempt_limit(db, user_id=user_id, now=now)
-    await check_generation_left(db, user_id=user_id, now=now)
+    if need_generation:
+        await check_generation_left(db, user_id=user_id, now=now)
     char_limit = await char_limit_for(db, user_id=user_id)
     await count_plan_call(db, user_id=user_id, now=now)
     # Ends the transaction and the User's lock before the plan call, which can take a minute.
     await db.commit()
 
-    planned = await plan_with_model(
+    planned = await call_planner(
         llm,
         user_id=user_id,
         brief=brief,
@@ -133,10 +146,17 @@ async def _plan_and_store(
         char_limit=char_limit,
     )
 
+    await users_service.lock_user_id(db, user_id=user_id)
     stored = await service.store_planned_brief(
         db, user_id=user_id, text=brief, planned=planned, now=now
     )
     return _PlannedBrief(brief=stored, char_limit=char_limit)
+
+
+async def _check_room_for_one(db: AsyncSession, *, user_id: str, now: datetime) -> None:
+    """Checked again after the plan call: other requests may have used the room meanwhile."""
+    await check_attempt_limit(db, user_id=user_id, now=now)
+    await check_generation_left(db, user_id=user_id, now=now)
 
 
 async def write_ideas(
@@ -165,9 +185,13 @@ async def write_ideas(
     if not wanted <= {idea.id for idea in brief.ideas}:
         raise NotFoundError("Idea not found.")
     picked = [idea for idea in brief.ideas if idea.id in wanted]
+    if len(picked) > 1 and any(idea.whole_brief for idea in picked):
+        # The whole Brief and a part of it would be two Posts saying the same thing.
+        raise RefusedError("Write one post covering everything, or one post per idea, not both.")
     posts = await service.posts_of_ideas(db, idea_ids=[idea.id for idea in brief.ideas])
     if any(idea.id in posts for idea in picked):
-        raise ConflictError("One of these ideas is already written.")
+        # A client whose last write request lost its answer finds the Posts on the Brief's page.
+        raise ConflictError("One of these ideas is already written.", code="IDEAS_ALREADY_WRITTEN")
     if brief.positioning is None or any(idea.plan is None for idea in picked):
         raise ConflictError("This brief was never planned, so its ideas can't be written.")
     await check_attempt_limit(db, user_id=user_id, now=now, count=len(picked))
@@ -178,7 +202,7 @@ async def write_ideas(
         created = await _create_post(db, planned, idea, now=now)
         posts[idea.id] = created.post
         writes.append(created.write)
-    response = _brief_response(brief, posts, planned.char_limit, now=now)
+    response = await _brief_response(db, brief, posts, planned.char_limit, now=now)
     await _start_writes(db, llm, tasks, sessions, writes, clock)
     return response
 
@@ -188,7 +212,7 @@ async def get_brief(db: AsyncSession, *, user: User, brief_id: str, now: datetim
     brief = await _user_brief(db, user=user, brief_id=brief_id)
     posts = await service.posts_of_ideas(db, idea_ids=[idea.id for idea in brief.ideas])
     char_limit = await char_limit_for(db, user_id=user.id)
-    return _brief_response(brief, posts, char_limit, now=now)
+    return await _brief_response(db, brief, posts, char_limit, now=now)
 
 
 async def _user_brief(db: AsyncSession, *, user: User, brief_id: str) -> Brief:
@@ -198,8 +222,8 @@ async def _user_brief(db: AsyncSession, *, user: User, brief_id: str) -> Brief:
     return brief
 
 
-def _brief_response(
-    brief: Brief, posts: dict[str, Post], char_limit: int, *, now: datetime
+async def _brief_response(
+    db: AsyncSession, brief: Brief, posts: dict[str, Post], char_limit: int, *, now: datetime
 ) -> BriefResponse:
     def post_response(post: Optional[Post]) -> Optional[BriefPostResponse]:
         if post is None:
@@ -224,6 +248,7 @@ def _brief_response(
             )
             for idea in brief.ideas
         ],
+        generations_left=await generations_left(db, user_id=brief.user_id, now=now),
     )
 
 
@@ -294,6 +319,11 @@ async def retry_post(
         char_limit=char_limit,
     )
     await _start_writes(db, llm, tasks, sessions, [write], clock)
+    return _writing_post_response(write)
+
+
+def _writing_post_response(write: "_FirstVersionWrite") -> PostResponse:
+    """The Post of `write` as it is just started: its Plan, no Version yet, and being written."""
     return PostResponse(
         id=write.post_id,
         brief=write.brief,

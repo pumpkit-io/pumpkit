@@ -176,6 +176,21 @@ async def written_post(client, response) -> dict:
     return read.json()
 
 
+async def start(client, brief: str = "ship"):
+    """
+    Plan `brief` and, when the plan left its one Idea unwritten for want of room, ask to write it,
+    as New post does: the plan's response, or the write's refusal.
+    """
+    planned = await client.post(BRIEFS, json={"brief": brief})
+    if planned.status_code != 201:
+        return planned
+    body = planned.json()
+    [first, *split] = body["ideas"]
+    if split or first["post"] is not None:
+        return planned
+    return await client.post(f"{BRIEFS}/{body['id']}/posts", json={"idea_ids": [first["id"]]})
+
+
 def started_post_id(response) -> str:
     """The id of the Post a plan `response` started: its single-post Idea's, with no split."""
     assert response.status_code == 201, response.text

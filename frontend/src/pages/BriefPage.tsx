@@ -127,7 +127,7 @@ export function BriefPage() {
     return (
       <Page>
         <p className="font-sans text-sm text-foreground">
-          This brief isn&apos;t here. It may have been written on another account.
+          This brief doesn&apos;t exist, or it isn&apos;t yours.
         </p>
         <Button asChild variant="solid" className="h-10">
           <Link to="/new">Write a new post</Link>

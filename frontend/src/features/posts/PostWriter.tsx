@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useHasPositioning } from '@/features/positioning/useHasPositioning';
 import { track } from '@/lib/analytics';
 import { BRIEF_MAX_CHARS } from '@/services/postService';
+import { errorCode } from '@/services/apiErrors';
 import { briefPosts, briefService, splitIdeas, type Brief } from '@/services/briefService';
 import { IdeasStep, type IdeasChoice } from '@/features/briefs/IdeasStep';
 import { ErrorBanner } from '@/components/ErrorBanner';
@@ -15,9 +16,9 @@ import { useUsage } from '@/features/billing/useUsage';
 import { isRefusal, useWritingFailure } from './useWritingFailure';
 
 /**
- * Plans a Brief. With one Idea its Post is already being written, so it goes to the Post's page;
- * with several it shows them to pick from. On a failure it stays, with the Brief kept, so trying
- * again is one click.
+ * Plans a Brief. With one Idea its Post is usually already being written, so it goes to the Post's
+ * page; with several, or one the User had no room to write, it shows them to pick from. On a
+ * failure it stays, with the Brief kept, so trying again is one click.
  */
 function usePlanBrief() {
   const navigate = useNavigate();
@@ -39,17 +40,17 @@ function usePlanBrief() {
     async (text: string) => {
       setIsPlanning(true);
       clear();
-      track('post_version_requested', { kind: 'brief' });
       try {
         const brief = await briefService.plan(text);
         const split = splitIdeas(brief).length;
         track('brief_planned', { split_ideas: split });
-        if (!mounted.current) return;
         const [started] = briefPosts(brief);
+        if (split === 0 && started) track('post_version_requested', { kind: 'brief' });
+        if (!mounted.current) return;
         if (split === 0 && started) navigate(`/posts/${started.post.id}`);
         else setIdeasOf(brief);
       } catch (e) {
-        if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
+        if (!isRefusal(e)) track('brief_plan_failed');
         fail(e, "Couldn't plan the post. Try again.");
       } finally {
         if (mounted.current) setIsPlanning(false);
@@ -66,11 +67,18 @@ function usePlanBrief() {
       track('ideas_write_requested', { count: ideaIds.length, choice });
       try {
         const written = briefPosts(await briefService.write(brief.id, ideaIds));
+        for (let i = 0; i < ideaIds.length; i++) track('post_version_requested', { kind: 'brief' });
         if (!mounted.current) return;
         const [only] = written;
         if (written.length === 1 && only) navigate(`/posts/${only.post.id}`);
         else navigate(`/briefs/${brief.id}`);
       } catch (e) {
+        // An earlier request wrote them and its answer was lost: the Brief's page has the Posts.
+        if (errorCode(e) === 'IDEAS_ALREADY_WRITTEN') {
+          if (mounted.current) navigate(`/briefs/${brief.id}`);
+          return;
+        }
+        if (!isRefusal(e)) track('ideas_write_failed');
         fail(e, "Couldn't start writing the posts. Try again.");
       } finally {
         if (mounted.current) setIsStarting(false);
@@ -178,7 +186,8 @@ export function PostWriter() {
         value={brief}
         onChange={setBrief}
         maxLength={BRIEF_MAX_CHARS}
-        sendLabel="Write the post"
+        sendLabel="Plan posts"
+        busyLabel="Planning…"
         onSend={send}
         isWriting={isPlanning}
         sendDisabled={hasPositioning === null}

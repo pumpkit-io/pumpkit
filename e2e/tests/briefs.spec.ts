@@ -1,8 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { runSeedScript } from '../backend';
 
-// The stack's model is real and costs money, so the plan call and the writes are answered here:
-// the seed stores the Brief and its Posts, and the requests read them back through the real API.
+// The stack's model is real and costs money, so POST /briefs and POST /briefs/{id}/posts are
+// answered here: the seed stores the Brief and its Posts, and GET /briefs/{id} reads them back.
+// The backend suite covers both POSTs (tests/posts/test_writing_the_ideas_of_a_brief.py).
 let briefId = '';
 
 test.beforeEach(() => {
@@ -45,7 +46,7 @@ test('a brief of several ideas is written as the ideas picked, which fill in on 
   await page.goto('/new');
 
   await page.getByLabel('Brief').fill('Three things my failed SaaS taught me.');
-  await page.getByRole('button', { name: 'Write the post' }).click();
+  await page.getByRole('button', { name: 'Plan posts' }).click();
 
   const step = page.getByRole('region', { name: 'We found 3 ideas in your brief' });
   await expect(step.getByRole('checkbox')).toHaveCount(3);

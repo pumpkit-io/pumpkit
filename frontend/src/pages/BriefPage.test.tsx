@@ -137,6 +137,7 @@ function brief(posts: Partial<Record<1 | 2 | 3 | 4, Idea['post']>>): Brief {
       idea(3, OAUTH, posts[3] ?? null),
       idea(4, PRICE, posts[4] ?? null),
     ],
+    generationsLeft: 382,
   };
 }
 
@@ -246,7 +247,7 @@ describe('Brief page', () => {
     expect(briefService.get).toHaveBeenCalledTimes(1);
   });
 
-  it('says a brief that is not found is not here, and stops reading', async () => {
+  it("says a brief that is not found doesn't exist or isn't the User's, and stops reading", async () => {
     vi.mocked(briefService.get)
       .mockResolvedValueOnce(brief({ 1: beingWritten('post_1') }))
       .mockRejectedValue(apiError(404, 'Brief not found.'));
@@ -256,7 +257,9 @@ describe('Brief page', () => {
     await poll();
     await poll();
 
-    expect(await screen.findByText(/This brief isn't here/)).toBeInTheDocument();
+    expect(
+      await screen.findByText("This brief doesn't exist, or it isn't yours."),
+    ).toBeInTheDocument();
     expect(briefService.get).toHaveBeenCalledTimes(2);
   });
 

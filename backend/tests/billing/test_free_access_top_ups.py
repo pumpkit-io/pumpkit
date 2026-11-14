@@ -17,6 +17,7 @@ from tests.billing.test_top_ups import (
     sells_top_ups as sells_top_ups,
 )
 from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import start
 
 
 async def redeem(client, coupons):
@@ -184,7 +185,7 @@ async def test_free_access_spends_existing_packs_allowance_first_and_keeps_rever
         assert [p["generations_left"] for p in usage["top_ups"]] == (
             [1, 1] if i < 2 else [0, 1] if i == 2 else [0, 0]
         )
-    refused = await client.post("/api/v1/briefs", json={"brief": "No room left"})
+    refused = await start(client, "No room left")
     assert refused.status_code == 409
     assert refused.json()["way_out"] == "top_up"
     fake_billing.set_top_up(

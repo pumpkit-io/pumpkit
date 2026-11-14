@@ -211,8 +211,9 @@ async def test_a_feedback_being_written_holds_its_generation(
 
     response = await client.post(BRIEFS, json={"brief": "ship small things"})
 
-    assert response.status_code == 409
-    assert response.json()["left"] == 0
+    assert response.status_code == 201
+    assert response.json()["generations_left"] == 0
+    assert [idea["post"] for idea in response.json()["ideas"]] == [None]
 
 
 async def test_give_feedback_over_mcp_answers_that_the_version_is_being_written(

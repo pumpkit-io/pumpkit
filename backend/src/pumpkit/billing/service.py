@@ -395,6 +395,20 @@ def _pack_left(pack: Optional[int], charged: int) -> Optional[int]:
     return None if pack is None else pack - charged
 
 
+async def left_with_top_ups(db: AsyncSession, *, user_id: str, draw: Draw) -> Optional[int]:
+    """
+    The most `check_room_with_top_ups` lets the draw's action need, from the Allowance and the
+    User's Top-ups unexpired at its moment; None with no cap.
+    """
+    if draw.limit is None:
+        return None
+    in_top_ups = sum(
+        b.left(draw.count) for b in await top_up_balances(db, user_id=user_id, moment=draw.moment)
+    )
+    # Use over the limit that no Top-up covered takes room from the Top-ups too.
+    return max(0, draw.limit - draw.used + in_top_ups)
+
+
 async def check_room_with_top_ups(db: AsyncSession, *, user_id: str, draw: Draw) -> None:
     """
     Raise `AllowanceUsedUp` unless the Allowance and the User's Top-ups unexpired at the draw's

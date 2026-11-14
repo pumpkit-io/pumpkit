@@ -473,7 +473,7 @@ describe('The signed-in shell', () => {
       fireEvent.change(await screen.findByLabelText('Brief'), {
         target: { value: 'ship small things' },
       });
-      fireEvent.click(await screen.findByRole('button', { name: 'Write the post' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Plan posts' }));
 
       newPostShortcut();
       fireEvent.click((await sidebar()).getByRole('link', { name: 'New post' }));

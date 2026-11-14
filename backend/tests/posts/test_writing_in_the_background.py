@@ -251,8 +251,9 @@ async def test_writes_in_flight_hold_their_generations(
 
     response = await client.post(BRIEFS, json={"brief": BRIEF})
 
-    assert response.status_code == 409
-    assert response.json()["left"] == 0
+    assert response.status_code == 201
+    assert response.json()["generations_left"] == 0
+    assert [idea["post"] for idea in response.json()["ideas"]] == [None]
 
 
 async def test_get_post_over_mcp_reports_a_post_still_being_written(

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { errorStatus } from '@/services/apiErrors';
 import { briefPosts, briefService, type Brief } from '@/services/briefService';
-import { pollDelay } from '@/services/postService';
+import { useReadWhileWriting } from '@/features/posts/useReadWhileWriting';
 
 export type BriefLoad =
   | { kind: 'loading' }
@@ -40,30 +40,9 @@ export function useBrief(briefId: string) {
 
   // The writes run on the server whether or not the page is open, so leaving only stops reading.
   const writing = load.kind === 'loaded' && isWriting(load.brief);
-  const [poll, setPoll] = useState({ count: 0, failures: 0 });
-  useEffect(() => {
-    if (!writing) return;
-    let stopped = false;
-    const timer = setTimeout(() => {
-      briefService.get(briefId).then(
-        (brief) => {
-          if (stopped) return;
-          setPoll(({ count }) => ({ count: count + 1, failures: 0 }));
-          setLoad({ kind: 'loaded', brief });
-        },
-        (e: unknown) => {
-          if (stopped) return;
-          const status = errorStatus(e);
-          if (status === 404 || status === 403) loadFailed(e);
-          else setPoll(({ count, failures }) => ({ count: count + 1, failures: failures + 1 }));
-        },
-      );
-    }, pollDelay(poll.failures));
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [writing, poll, briefId, loadFailed]);
+  const readBrief = useCallback(() => briefService.get(briefId), [briefId]);
+  const show = useCallback((brief: Brief) => setLoad({ kind: 'loaded', brief }), []);
+  useReadWhileWriting(writing, readBrief, show, loadFailed);
 
   return { load, reload };
 }

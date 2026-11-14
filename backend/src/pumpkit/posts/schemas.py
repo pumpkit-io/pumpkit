@@ -181,3 +181,6 @@ class BriefResponse(BaseModel):
     created_at: datetime
     # The single-post Idea first, then the split Ideas in posting order.
     ideas: list[IdeaResponse]
+    # The Posts the User can still have written, Top-ups included and writes in progress taken
+    # out, as writing the Ideas checks it; None with no cap on Generations.
+    generations_left: Optional[int]
