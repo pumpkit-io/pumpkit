@@ -471,7 +471,7 @@ async def test_explicit_future_signup_can_change_frequency_and_redeem_again_with
     authed_client, coupons, fake_billing
 ):
     free, signup, opened = await _open(authed_client, coupons)
-    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    fake_billing.complete_paid_signup_checkout(opened["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + signup["operation_id"])).json()[
         "status"
     ] == "completed"
@@ -619,7 +619,7 @@ async def test_ended_change_history_cannot_price_a_new_explicit_signup_with_same
     }
     opened = await authed_client.post(SIGNUPS, json=signup)
     assert opened.status_code == 200, opened.text
-    fake_billing.complete_paid_signup_setup(opened.json()["session_id"])
+    fake_billing.complete_paid_signup_checkout(opened.json()["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + signup["operation_id"])).json()[
         "status"
     ] == "completed"
