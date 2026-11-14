@@ -39,3 +39,13 @@ npm test -- --config playwright.stripe-portal.config.ts
 ```
 
 Live keys are refused, and the normal E2E configuration excludes these tests. The runbook defines the two tested transitions, credential handling, private artifacts, resource cleanup and the activation conditions; passing this harness alone does not enable production coupons.
+
+## Managed Payments verification
+
+`stripe-checkout.mjs` completes a Stripe test-mode hosted Checkout with Stripe's Visa test card in headless Chromium. Only the opt-in backend test `backend/tests/billing/test_stripe_managed_payments_live.py` uses it, to start Subscriptions Stripe records as Managed Payments ones and check paid signup, Cancel signup, Subscribe now, Coupon deferral, plan change, `cancel_at` and Top-up refunds on them. It doesn't cover immediate cancellation or the restricted Billing portal's own changes. After `npm ci` and `npx playwright install chromium` here, run it from `backend/`:
+
+```sh
+PUMPKIT_STRIPE_TEST_KEY=<sk_test_ key> uv run --extra dev pytest tests/billing/test_stripe_managed_payments_live.py
+```
+
+It creates its own products with an eligible tax code, refuses a live key and deletes or archives what it creates. `PUMPKIT_STRIPE_RESULTS=<file>` also writes what Stripe answered to each call and the Subscription's state after it.
