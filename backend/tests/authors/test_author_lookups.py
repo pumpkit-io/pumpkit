@@ -24,6 +24,8 @@ from pumpkit.authors.x_reader import (
 from pumpkit.core.config import settings
 from pumpkit.main import app
 
+pytestmark = pytest.mark.usefixtures("authors_app")
+
 AUTHORS = "/api/v1/inspiration-authors"
 DIRECTORY = "/api/v1/author-directory"
 

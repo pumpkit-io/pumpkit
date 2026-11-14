@@ -1,4 +1,7 @@
-"""The MCP tools for a User's Inspiration authors, over the same mediator as the router."""
+"""
+The MCP tools for a User's Inspiration authors, over the same mediator as the router. Inactive
+(ADR 0024): the server's tool list leaves them out.
+"""
 
 from pumpkit.auth.models import User
 from pumpkit.authors import mediator

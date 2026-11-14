@@ -9,7 +9,6 @@ from typing import Optional
 import pytest
 
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.formats import format_of
 from pumpkit.posts.models import ATTEMPT_FAILED, ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.models import (
@@ -320,7 +319,7 @@ async def test_a_published_post_carries_its_link_on_x(client, seed_post):
 
 
 async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_parts_link(
-    client, with_author_and_x, fake_llm, fake_x_publisher
+    client, with_positioning_and_x, fake_llm, fake_x_publisher
 ):
     post = (await start_thread(client, fake_llm, ["Live one.", "Refused two."])).json()
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
@@ -337,7 +336,7 @@ async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_par
     assert item["scheduled_post"]["x_post_url"] == failed.json()["parts"][0]["x_post_url"]
 
 
-async def test_unscheduling_moves_the_post_back_to_drafts(client, with_author_and_x, fake_llm):
+async def test_unscheduling_moves_the_post_back_to_drafts(client, with_positioning_and_x, fake_llm):
     fake_llm.replies = [{"post": "Version one."}]
     post = (await client.post(POSTS, json={"brief": "ship"})).json()
     scheduled = (
@@ -359,14 +358,9 @@ async def test_unscheduling_moves_the_post_back_to_drafts(client, with_author_an
 
 
 @pytest.fixture
-async def with_author_and_x(client, subscribed, fake_x_reader, connect_x, fixed_clock) -> None:
+async def with_positioning_and_x(client, subscribed, connect_x, fixed_clock) -> None:
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=T0)
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
 
 
 async def test_the_list_posts_tool_lists_a_status_with_each_scheduled_post_and_the_counts(

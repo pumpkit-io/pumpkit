@@ -59,6 +59,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 
 import { track } from '@/lib/analytics';
 import { billingService } from '@/services/billingService';
+import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { positioningService, type Positioning } from '@/services/positioningService';
 import {
   NOT_SUBSCRIBED,
@@ -110,16 +111,19 @@ describe('Persona: the Positioning panel', () => {
     vi.mocked(positioningService.get).mockReset().mockResolvedValue(NONE);
     vi.mocked(positioningService.draft).mockReset();
     vi.mocked(positioningService.save).mockReset();
+    vi.mocked(inspirationAuthorService.list).mockClear();
     vi.mocked(track).mockClear();
   });
 
-  it("shows the User's saved Positioning in the textarea, above the Inspiration authors", async () => {
+  it("shows the User's saved Positioning in the textarea, and no Inspiration authors", async () => {
     vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
     renderSignedIn('/persona');
 
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
     const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(headings.slice(0, 2)).toEqual(['Who you are on X', 'How your posts sound']);
+    expect(headings).toEqual(['Who you are on X']);
+    expect(screen.queryByRole('combobox', { name: 'Find an author' })).not.toBeInTheDocument();
+    expect(inspirationAuthorService.list).not.toHaveBeenCalled();
   });
 
   it('names the five things a Positioning covers under the textarea', async () => {

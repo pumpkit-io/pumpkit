@@ -3,11 +3,10 @@ While Feedback's Version is being written, the Post's Text doesn't change: an ed
 or more Feedback is refused, so the new Version, which becomes the Text, can't overwrite them.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import FakeLLM, LLMError, get_llm
 from pumpkit.main import app
 from tests.mcp_client import error_text
@@ -22,16 +21,7 @@ BEING_WRITTEN = "Pumpkit is writing a new version of this post. Try again once i
 async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect_x) -> dict:
     """A Post with two Versions, so its Text is Version 2 and Version 1 can be restored."""
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
     fake_llm.replies = [{"post": "Version one."}]
     started = await client.post(POSTS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text

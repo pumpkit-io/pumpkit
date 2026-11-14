@@ -5,7 +5,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import pumpkit.billing.service as billing_service
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.gateway import SubscriptionState
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
@@ -16,7 +15,6 @@ CUSTOMER = "cus_alice"
 SUBSCRIBE_NOW = "/api/v1/billing/subscribe-now"
 USAGE = "/api/v1/usage"
 POSTS = "/api/v1/posts"
-AUTHORS = "/api/v1/inspiration-authors"
 
 
 def _utc(*args: int) -> datetime:
@@ -105,11 +103,7 @@ async def test_a_trial_user_at_the_trials_limit_can_write_again_once_subscribed(
     client, db, user, fake_billing, fake_x_reader, fake_llm, holds
 ):
     await holds("trialing")
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=_utc(2026, 9, 1))
-    ]
     await save_positioning(client)
-    await client.post(AUTHORS, json={"handle": "levelsio"})
     await _trial_attempts(db, user.id, 125)
     assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 409
     fake_llm.replies = [{"post": "final"}]

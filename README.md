@@ -9,7 +9,7 @@
 An open-source AI writing tool for X.
 
 - Write a Brief: what the post is about and what you think about it.
-- Pick up to three X authors whose style you like. Pumpkit writes the post the way they would.
+- Describe your positioning once: who you are on X, what you post about and who you write for. Pumpkit plans each post around it.
 - Give Feedback in plain words, such as "shorter" or "drop the last line", and get a new Version each time.
 - Schedule the result on your X account, or post it now.
 
@@ -71,7 +71,7 @@ X, the LLM endpoint and twitterapi.io are required. Each optional provider stays
 | Provider         | Required | What it adds                                                     |
 | ---------------- | -------- | ---------------------------------------------------------------- |
 | LLM endpoint     | Yes      | Writes and revises Posts                                         |
-| twitterapi.io    | Yes      | Reads your Inspiration authors' posts, which set the style       |
+| twitterapi.io    | Yes      | Reads your X profile's posts to draft your positioning           |
 | X app            | Yes      | Signs users in and authorizes publishing for that same X account |
 | Stripe           | No       | Sells Plans. Without it, every User can use all of Pumpkit       |
 | Operator details | No       | Company footer, Terms and Privacy Policy pages                   |
@@ -81,7 +81,7 @@ The guide's [Providers](./docs/self-hosting.md#providers) section says where to 
 
 ## Use Pumpkit from AI apps
 
-Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Paste that URL into Claude, ChatGPT, Claude Code, Codex, Gemini CLI, Cursor or VS Code, sign in to Pumpkit and click Allow: there is no key to copy. The app can then write and revise posts, manage your inspiration authors, and schedule or publish posts. Settings shows the URL and the steps for each app, and lists the apps you connected. See [docs/mcp.md](./docs/mcp.md).
+Pumpkit serves an MCP server at `PUBLIC_URL/api/v1/mcp`. Paste that URL into Claude, ChatGPT, Claude Code, Codex, Gemini CLI, Cursor or VS Code, sign in to Pumpkit and click Allow: there is no key to copy. The app can then write and revise posts, edit your positioning, and schedule or publish posts. Settings shows the URL and the steps for each app, and lists the apps you connected. See [docs/mcp.md](./docs/mcp.md).
 
 Self-hosted Instances get the MCP server in the first release after 0.1.0.
 

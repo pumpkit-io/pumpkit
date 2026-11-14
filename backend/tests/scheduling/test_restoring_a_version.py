@@ -4,11 +4,8 @@ Restoring a Version as the Post's Text (ADR 0016), through
 Failed Post's Text changes.
 """
 
-from datetime import datetime, timezone
-
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.mcp_server import INSTRUCTIONS
 from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
@@ -32,16 +29,7 @@ ONE = {"text": "Version one.", "char_count": 12, "char_limit": X_POST_MAX_CHARS}
 async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect_x) -> dict:
     """A Post with two Versions, a single post then a Thread, so its Text is Version 2."""
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
     fake_llm.replies = [{"post": "Version one."}]
     started = await client.post(POSTS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text

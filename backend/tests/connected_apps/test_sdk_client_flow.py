@@ -105,11 +105,11 @@ def sdk_client(
 async def test_the_sdk_client_registers_signs_in_and_calls_a_tool(storage, signed_in_user):
     async with sdk_client(storage, signed_in_user) as client:
         tools = await client.list_tools()
-        result = await client.call_tool("list_inspiration_authors", {})
+        result = await client.call_tool("get_positioning", {})
 
     assert "get_usage" in {tool.name for tool in tools.tools}
     assert result.is_error is False
-    assert result.structured_content == {"data": []}
+    assert result.structured_content == {"text": None, "saved_at": None}
     assert storage.client_info is not None
     assert storage.client_info.client_id.startswith("oauth_client_")
     assert signed_in_user.authorizations == 1
@@ -130,7 +130,7 @@ async def test_the_sdk_client_identifies_itself_by_its_metadata_document(
     )
 
     async with sdk_client(storage, signed_in_user, client_metadata_url=DOCUMENT_URL) as client:
-        result = await client.call_tool("list_inspiration_authors", {})
+        result = await client.call_tool("get_positioning", {})
 
     assert result.is_error is False
     assert storage.client_info is not None
@@ -152,7 +152,7 @@ async def test_the_sdk_client_refreshes_an_expired_token_without_signing_in_agai
         # The SDK reads `time.time` to decide a token has expired.
         monkeypatch.setattr(time, "time", lambda: later)
         clock.advance(timedelta(hours=1, minutes=5))
-        result = await client.call_tool("list_inspiration_authors", {})
+        result = await client.call_tool("get_positioning", {})
 
     assert result.is_error is False
     assert signed_in_user.authorizations == 1

@@ -4,7 +4,6 @@ from typing import Any, Optional, TypeVar
 
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
 from pumpkit.core.llm import FakeLLM, StructuredResult, get_llm
@@ -20,7 +19,6 @@ from tests.posts.writing_replies import (
     sketched,
 )
 
-AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
 SETTINGS_URL = "http://localhost:5173/settings"
 
@@ -36,12 +34,8 @@ def _utc(*args: int) -> datetime:
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader):
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=_utc(2026, 9, 1))
-    ]
+async def with_positioning(client, subscribed):
     await save_positioning(client)
-    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
 @pytest.fixture
@@ -85,7 +79,7 @@ def _times(start: datetime, count: int) -> list[datetime]:
 
 
 async def test_starting_a_post_with_no_generations_left_is_refused_with_the_reset_date(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock
 ):
     await _subscription(db, subscribed, billing_cycle_anchor=_utc(2026, 9, 14, 9))
     await _store_attempts(db, user.id, _times(_utc(2026, 9, 20), 500))
@@ -110,7 +104,7 @@ async def test_starting_a_post_with_no_generations_left_is_refused_with_the_rese
 
 
 async def test_versions_written_before_the_period_started_dont_count(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(3)
     await _subscription(db, subscribed, billing_cycle_anchor=_utc(2026, 9, 14, 9))
@@ -124,7 +118,7 @@ async def test_versions_written_before_the_period_started_dont_count(
 
 
 async def test_failed_attempts_dont_use_a_generation(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(3)
     await _store_attempts(db, user.id, _times(_utc(2026, 10, 2), 2))
@@ -139,7 +133,7 @@ async def test_failed_attempts_dont_use_a_generation(
 
 
 async def test_without_an_anchor_synced_periods_start_on_the_subscriptions_start(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     # The `subscribed` fixture started on 1 October.
     cap(1)
@@ -159,7 +153,7 @@ async def test_without_an_anchor_synced_periods_start_on_the_subscriptions_start
     ],
 )
 async def test_an_anchor_on_the_31st_resets_on_the_last_day_of_a_shorter_month(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap, now, reset
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap, now, reset
 ):
     cap(1)
     await _subscription(db, subscribed, billing_cycle_anchor=_utc(2026, 1, 31, 10))
@@ -175,7 +169,7 @@ async def test_an_anchor_on_the_31st_resets_on_the_last_day_of_a_shorter_month(
 
 
 async def test_an_annual_plan_resets_every_month(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(1)
     await _subscription(
@@ -195,7 +189,7 @@ async def test_an_annual_plan_resets_every_month(
 
 
 async def test_a_trial_gets_a_quarter_of_the_generations_for_the_whole_trial(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock
 ):
     await _subscription(
         db,
@@ -222,7 +216,7 @@ async def test_a_trial_gets_a_quarter_of_the_generations_for_the_whole_trial(
 
 
 async def test_the_trial_share_of_a_cap_is_rounded_down(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(7)
     await _subscription(
@@ -240,7 +234,7 @@ async def test_the_trial_share_of_a_cap_is_rounded_down(
 
 
 async def test_a_user_behind_on_payment_is_told_to_update_their_payment_method(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(1)
     await _subscription(db, subscribed, status="past_due")
@@ -252,7 +246,7 @@ async def test_a_user_behind_on_payment_is_told_to_update_their_payment_method(
 
 
 async def test_feedback_with_no_generations_left_is_refused_the_same_way(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(2)
     fake_llm.replies = [{"post": "final"}]
@@ -271,7 +265,7 @@ async def test_feedback_with_no_generations_left_is_refused_the_same_way(
 
 
 async def test_restoring_a_version_and_editing_the_text_use_no_generation(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(2)
     fake_llm.replies = [{"post": "final"}]
@@ -285,7 +279,7 @@ async def test_restoring_a_version_and_editing_the_text_use_no_generation(
 
 
 async def test_an_instance_that_sells_no_plans_has_no_generation_limit(
-    client, db, user, sells_no_plans, with_author, fake_llm, fixed_clock, cap
+    client, db, user, sells_no_plans, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(1)
     await _store_attempts(db, user.id, [_utc(2026, 10, 2)])
@@ -297,7 +291,7 @@ async def test_an_instance_that_sells_no_plans_has_no_generation_limit(
 
 
 async def test_an_empty_cap_means_no_generation_limit(
-    client, db, user, subscribed, with_author, fake_llm, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fake_llm, fixed_clock, cap
 ):
     cap(None)
     await _store_attempts(db, user.id, _times(_utc(2026, 10, 2), 600))
@@ -322,7 +316,7 @@ class _FillsTheAllowanceWhileWriting(FakeLLM):
 
 
 async def test_a_version_written_while_a_concurrent_request_filled_the_allowance_is_kept(
-    client, db, user, subscribed, with_author, fixed_clock, cap
+    client, db, user, subscribed, with_positioning, fixed_clock, cap
 ):
     cap(1)
     llm = _FillsTheAllowanceWhileWriting(

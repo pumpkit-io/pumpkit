@@ -1,6 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from pumpkit.authors.x_reader import FetchedPost
+
+pytestmark = pytest.mark.usefixtures("authors_app")
 
 AUTHORS = "/api/v1/inspiration-authors"
 

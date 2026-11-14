@@ -221,7 +221,6 @@ async def test_month_end_paid_usage_and_accepted_caps_survive_webhooks_and_stack
         {"customer": "cus_monthly"},
     )
     await save_positioning(authed_client)
-    await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     fake_llm.replies = [{"post": "Paid allowance survives redemption"}]
     assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
     offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
