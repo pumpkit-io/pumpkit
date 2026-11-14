@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal, Optional, get_args
+from typing import TYPE_CHECKING, Any, Literal, Optional, get_args
 
 from sqlalchemy import (
     JSON,
@@ -25,8 +25,39 @@ if TYPE_CHECKING:
     from pumpkit.auth.models import User
 
 
+class Brief(Base):
+    """The text a User wrote to get Posts from, kept as they wrote it."""
+
+    __tablename__ = "briefs"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("brief")
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    text: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped["User"] = relationship()
+
+
+class Idea(Base):
+    """One Post proposed from a Brief, written or not."""
+
+    __tablename__ = "ideas"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: ulid_with_prefix("idea")
+    )
+    brief_id: Mapped[str] = mapped_column(ForeignKey("briefs.id", ondelete="CASCADE"), index=True)
+    # Where the Idea comes among its Brief's Ideas when they are posted, from 1.
+    posting_order: Mapped[int] = mapped_column(Integer)
+
+    # Read with the Idea, since an async session can't load it lazily.
+    brief: Mapped[Brief] = relationship(lazy="selectin")
+
+
 class Post(Base):
-    """One piece of writing made from one Brief, with every attempt at a Version of it."""
+    """One piece of writing made from one Idea of a Brief, with every attempt at a Version of it."""
 
     __tablename__ = "posts"
 
@@ -34,10 +65,13 @@ class Post(Base):
         String, primary_key=True, default=lambda: ulid_with_prefix("post")
     )
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    brief: Mapped[str] = mapped_column(Text)
-    # The corpus's author post ids in the order the calls get them, fixed when the Post starts
-    # so changing the User's Inspiration authors later doesn't change it.
-    corpus_post_ids: Mapped[list[str]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
+    # An Idea has at most one Post.
+    idea_id: Mapped[str] = mapped_column(ForeignKey("ideas.id", ondelete="CASCADE"), unique=True)
+    # The corpus's author post ids in call order, fixed when the Post starts so a later change
+    # of Inspiration authors doesn't change it. With no corpus it is SQL NULL, never JSON null.
+    corpus_post_ids: Mapped[Optional[list[str]]] = mapped_column(
+        JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # The Text, set from each new Version; None only while the Post has no Version.
     text_format: Mapped[Optional[Format]] = mapped_column(
@@ -53,6 +87,8 @@ class Post(Base):
     writing_since: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship()
+    # Read with the Post, since the Brief's text is read through it.
+    idea: Mapped[Idea] = relationship(lazy="selectin")
     attempts: Mapped[list["VersionAttempt"]] = relationship(
         back_populates="post", cascade="all, delete-orphan", order_by="VersionAttempt.sequence"
     )
@@ -62,6 +98,19 @@ class Post(Base):
         order_by="(TextMedia.part_index, TextMedia.position)",
         lazy="selectin",
     )
+
+    def __init__(self, *, brief: Optional[str] = None, **fields: Any) -> None:
+        """`brief` starts the Post from a new Brief with that text and one Idea."""
+        super().__init__(**fields)
+        if brief is not None:
+            owner = {"user": fields["user"]} if "user" in fields else {"user_id": self.user_id}
+            self.idea = Idea(
+                brief=Brief(text=brief, created_at=self.created_at, **owner), posting_order=1
+            )
+
+    @property
+    def brief(self) -> str:
+        return self.idea.brief.text
 
 
 VersionAttemptStatus = Literal[

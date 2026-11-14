@@ -68,13 +68,12 @@ async def get_user_post(
 
 async def corpus_for_post(db: AsyncSession, *, post: Post) -> Corpus:
     """The corpus the Post started with, whatever the User's Inspiration authors are now."""
+    post_ids = post.corpus_post_ids or []
     rows = await db.execute(
-        select(AuthorPost.id, AuthorPost.handle, AuthorPost.text).where(
-            AuthorPost.id.in_(post.corpus_post_ids)
-        )
+        select(AuthorPost.id, AuthorPost.handle, AuthorPost.text).where(AuthorPost.id.in_(post_ids))
     )
     by_id = {id_: CorpusPost(post_id=id_, handle=handle, text=text) for id_, handle, text in rows}
-    return group_corpus([by_id[post_id] for post_id in post.corpus_post_ids])
+    return group_corpus([by_id[post_id] for post_id in post_ids])
 
 
 async def attempt_times_since(db: AsyncSession, *, user_id: str, since: datetime) -> list[datetime]:

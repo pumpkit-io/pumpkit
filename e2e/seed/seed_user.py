@@ -18,7 +18,7 @@ from pumpkit.authors.models import InspirationAuthor
 from pumpkit.billing.models import Subscription
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.onboarding.models import OnboardingFinish
-from pumpkit.posts.models import Post
+from pumpkit.posts.models import Brief
 from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.x_connection.models import XConnection
 from tests.browser_seed import bind_x_identity, x_id_for
@@ -45,7 +45,8 @@ async def main() -> None:
         await db.execute(delete(InspirationAuthor).where(InspirationAuthor.user_id == user.id))
         await db.execute(delete(XConnection).where(XConnection.user_id == user.id))
         await db.execute(delete(ScheduledPost).where(ScheduledPost.user_id == user.id))
-        await db.execute(delete(Post).where(Post.user_id == user.id))
+        # Deleting a Brief deletes its Ideas and their Posts.
+        await db.execute(delete(Brief).where(Brief.user_id == user.id))
         # The Stripe Emulator seeds this customer and Subscription (emulate.config.ts).
         user.stripe_customer_id = "cus_e2e"
         held = await db.execute(select(Subscription).where(Subscription.user_id == user.id))

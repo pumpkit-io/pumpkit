@@ -27,7 +27,7 @@ Each Idea's Post is an ordinary Post: one Text, an append-only History, Feedback
 
 Only a Draft can be discarded. Discarding deletes the Post and its Versions for good, the one case where Versions are removed. Every other Post is refused: a Scheduled, Published or Failed one, and a Post still waiting for its first Version. A discarded Post's Generation is not refunded.
 
-No data is migrated, because no Instance has real Users. A Post written before this change has no Plan and is refused Feedback, with a message saying so.
+A Post written before this change gets a Brief and an Idea of its own, so every Post belongs to an Idea. It gets no Plan, so it is refused Feedback, with a message saying so.
 
 ## MCP tools (amends ADR 0012)
 

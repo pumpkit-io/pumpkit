@@ -9,7 +9,7 @@ from sqlalchemy import Connection
 
 from alembic import command
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
-from tests.migrations import insert, migrate
+from tests.migrations import insert, insert_idea, migrate
 
 POSTS = "/api/v1/posts"
 WRITTEN_AT = "2026-10-01 12:00:00"
@@ -27,7 +27,7 @@ def _post(connection: Connection, *, user_id: str, post_id: str) -> None:
         "posts",
         id=post_id,
         user_id=user_id,
-        brief="ship",
+        idea_id=insert_idea(connection, user_id=user_id, brief="ship", created_at=WRITTEN_AT),
         corpus_post_ids="[]",
         created_at=WRITTEN_AT,
     )
