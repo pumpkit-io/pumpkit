@@ -92,7 +92,7 @@ from pumpkit.connected_apps.service.client_metadata import (  # noqa: E402
     FakeClientMetadataFetcher,
     get_client_metadata_fetcher,
 )
-from pumpkit.core.background import BackgroundTasks, get_background_tasks  # noqa: E402
+from pumpkit.core.background import TaskRegistry, get_background_tasks  # noqa: E402
 from pumpkit.core.classifier import FakeClassifier, get_classifier  # noqa: E402
 from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
@@ -295,7 +295,7 @@ def fake_llm():
     app.dependency_overrides.pop(get_llm, None)
 
 
-class InlineTasks(BackgroundTasks):
+class InlineTasks(TaskRegistry):
     """Runs each task to its end before the request goes on, so the next step reads its outcome."""
 
     async def start(self, name, work) -> None:
@@ -322,7 +322,7 @@ async def background_tasks(db_session_maker):
     The app's own registry of background tasks, which a test awaits with `wait()`. Tasks still
     running when the test ends are cancelled, as a restart would stop them.
     """
-    tasks = BackgroundTasks()
+    tasks = TaskRegistry()
     app.dependency_overrides[get_background_tasks] = lambda: tasks
     yield tasks
     await tasks.cancel()

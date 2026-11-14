@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pumpkit.auth.models import User
 from pumpkit.billing.dependencies import require_subscribed_user
-from pumpkit.core.background import BackgroundTasks, get_background_tasks
+from pumpkit.core.background import TaskRegistry, get_background_tasks
 from pumpkit.core.db.session import get_async_db, get_session_maker
 from pumpkit.core.llm import LLM, get_llm
 from pumpkit.core.rate_limit import limiter
@@ -28,7 +28,7 @@ async def start_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     llm: LLM = Depends(get_llm),
-    tasks: BackgroundTasks = Depends(get_background_tasks),
+    tasks: TaskRegistry = Depends(get_background_tasks),
     sessions: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
     clock: Clock = Depends(get_clock),
 ) -> PostResponse:
@@ -57,7 +57,7 @@ async def retry_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     llm: LLM = Depends(get_llm),
-    tasks: BackgroundTasks = Depends(get_background_tasks),
+    tasks: TaskRegistry = Depends(get_background_tasks),
     sessions: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
     clock: Clock = Depends(get_clock),
 ) -> PostResponse:

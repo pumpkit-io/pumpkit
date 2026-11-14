@@ -190,7 +190,7 @@ def report_unexpected_exception(request: Request, exc: Exception) -> str:
     return error_id
 
 
-def report_background_exception(task_name: str, exc: BaseException) -> str:
+def report_background_exception(task_name: str, exc: BaseException) -> None:
     """Log and capture an exception a background task met, with no request to answer."""
     error_id = uuid4().hex[:8]
     logger.error(
@@ -201,7 +201,6 @@ def report_background_exception(task_name: str, exc: BaseException) -> str:
         exc_info=exc,
     )
     posthog_client.capture_exception(exc, properties={"error_id": error_id, "task": task_name})
-    return error_id
 
 
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

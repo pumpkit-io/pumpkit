@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
-from pumpkit.core.background import BackgroundTasks
+from pumpkit.core.background import TaskRegistry
 from pumpkit.core.errors import (
     AppError,
     ConflictError,
@@ -44,7 +44,7 @@ PERSONA_PAGE = "/persona"
 async def start_post(
     db: AsyncSession,
     llm: LLM,
-    tasks: BackgroundTasks,
+    tasks: TaskRegistry,
     sessions: async_sessionmaker[AsyncSession],
     user: User,
     brief: str,
@@ -78,6 +78,7 @@ async def start_post(
     idea = await service.store_planned_brief(
         db, user_id=user_id, text=brief, planned=planned, now=now
     )
+    # Read again: the write's timeout counts from after the plan call, not from the request.
     started_at = clock()
     post = await service.create_post(db, user_id=user_id, idea=idea, now=started_at)
     write = _FirstVersionWrite(
@@ -89,22 +90,13 @@ async def start_post(
         plan=planned.single,
         char_limit=char_limit,
     )
-    response = PostResponse(
-        id=post.id,
-        brief=post.brief,
-        plan=plan_response(idea.plan),
-        versions=[],
-        writing_state=WRITING,
-    )
-    await db.commit()
-    await tasks.start(_task_name(post.id), _write_first_version(write, llm, sessions, clock))
-    return response
+    return await _start_first_version_write(db, llm, tasks, sessions, write, clock)
 
 
 async def retry_post(
     db: AsyncSession,
     llm: LLM,
-    tasks: BackgroundTasks,
+    tasks: TaskRegistry,
     sessions: async_sessionmaker[AsyncSession],
     user: User,
     post_id: str,
@@ -130,7 +122,7 @@ async def retry_post(
     await check_attempt_limit(db, user_id=user.id, now=now)
     await check_generation_left(db, user_id=user.id, now=now)
     char_limit = await char_limit_for(db, user_id=user.id)
-    post.writing_since = now
+    service.start_writing(post, now=now)
     write = _FirstVersionWrite(
         user_id=user.id,
         post_id=post.id,
@@ -140,15 +132,27 @@ async def retry_post(
         plan=plan,
         char_limit=char_limit,
     )
+    return await _start_first_version_write(db, llm, tasks, sessions, write, clock)
+
+
+async def _start_first_version_write(
+    db: AsyncSession,
+    llm: LLM,
+    tasks: TaskRegistry,
+    sessions: async_sessionmaker[AsyncSession],
+    write: "_FirstVersionWrite",
+    clock: Clock,
+) -> PostResponse:
+    """Commit the Post in its writing state, then start the write and answer with the Post."""
     response = PostResponse(
-        id=post.id,
-        brief=post.brief,
-        plan=plan_response(plan),
+        id=write.post_id,
+        brief=write.brief,
+        plan=plan_response(write.plan),
         versions=[],
         writing_state=WRITING,
     )
     await db.commit()
-    await tasks.start(_task_name(post.id), _write_first_version(write, llm, sessions, clock))
+    await tasks.start(_task_name(write.post_id), _write_first_version(write, llm, sessions, clock))
     return response
 
 

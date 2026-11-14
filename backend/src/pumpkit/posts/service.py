@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,7 +63,7 @@ async def writes_started_since(
     rows = await db.execute(
         select(Post.writing_since).where(Post.user_id == user_id, Post.writing_since > since)
     )
-    return [as_utc(started) for started in rows.scalars() if started is not None]
+    return [as_utc(cast(datetime, started)) for started in rows.scalars()]
 
 
 async def count_writes_in_flight(db: AsyncSession, *, user_id: str, now: datetime) -> int:

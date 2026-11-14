@@ -110,8 +110,8 @@ class PostDetailResponse(BaseModel):
     # None until the Post's first Version is written.
     text: Optional[TextResponse]
     versions: list[VersionResponse]
-    # "writing" while a Version is being written; "not_written" for a Post with no Text that
-    # isn't, whose first Version failed or was lost and may be retried; else None.
+    # "writing" while a Version is being written; "not_written" for a Post with no Text and no
+    # write in progress, whose first Version failed or was lost and may be retried; else None.
     writing_state: Optional[WritingState]
     # None until the Post's first Version is written: a Post being written is not a Draft.
     status: Optional[PostStatus]

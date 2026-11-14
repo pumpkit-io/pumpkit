@@ -83,10 +83,9 @@ by hand.
 - A post goes out once, so it has at most one scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
 failed post takes feedback: a scheduled or published one doesn't.
-- Each post written and each feedback uses one generation of the user's allowance, none when \
-the writing fails, \
-and each X post published uses one X post, each part of a thread and each first reply \
-counting as one. Write a new version only when the user asks for one. `get_usage` says what is \
+- Each post written and each feedback uses one generation of the user's allowance. Writing \
+that fails uses none. Each X post published uses one X post, each part of a thread and each \
+first reply counting as one. Write a new version only when the user asks for one. `get_usage` says what is \
 left and when it resets.
 - `attach_media` attaches an image, a GIF or a video to a part from a public URL, or, without \
 one, answers with a one-time upload link and the `curl` command that sends local media to it. `remove_media` \

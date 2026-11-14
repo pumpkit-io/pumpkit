@@ -156,5 +156,5 @@ async def test_the_instructions_tell_claude_about_the_allowance(subscribed, mcp)
     instructions = (await mcp.initialize())["instructions"]
 
     assert "Each post written and each feedback uses one generation" in instructions
-    assert "each X post published uses one X post" in instructions
+    assert "Each X post published uses one X post" in instructions
     assert "`get_usage`" in instructions

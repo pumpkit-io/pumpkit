@@ -158,7 +158,7 @@ export const EVENTS = {
   },
   post_version_failed: {
     description:
-      'New post (brief) or the Post page (feedback): writing a Version failed. Props: kind (brief | feedback).',
+      'New post (brief), the Post page (feedback), or a Post page that watched its first Version fail (brief, or retry when that page retried it): writing a Version failed. Props: kind (brief | feedback | retry).',
   },
   allowance_used_up: {
     description:

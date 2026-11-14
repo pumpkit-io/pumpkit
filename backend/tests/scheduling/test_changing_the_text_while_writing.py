@@ -133,6 +133,19 @@ async def test_the_text_changes_again_once_a_write_fails(client, post):
     assert response.status_code == 200, response.text
 
 
+async def test_feedback_still_holds_the_text_twenty_minutes_in(client, post, fixed_clock):
+    async def save_later():
+        fixed_clock.advance(timedelta(minutes=20))
+        return await client.put(f"{POSTS}/{post['id']}/text", json={"parts": ["Typed later."]})
+
+    answers = _llm_that_meanwhile(save_later, *_written_next())
+
+    await client.post(f"{POSTS}/{post['id']}/versions", json={"feedback": "shorter"})
+
+    assert answers[0].status_code == 409
+    assert answers[0].json()["detail"] == BEING_WRITTEN
+
+
 async def test_a_write_running_past_its_time_stops_holding_the_text(client, post, fixed_clock):
     async def save_much_later():
         fixed_clock.advance(timedelta(hours=1))

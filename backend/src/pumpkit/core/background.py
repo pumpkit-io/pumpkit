@@ -13,7 +13,7 @@ from typing import Any
 from pumpkit.core.errors import report_background_exception
 
 
-class BackgroundTasks:
+class TaskRegistry:
     """The tasks running now, kept so none is garbage collected mid-run and tests can await them."""
 
     def __init__(self) -> None:
@@ -42,9 +42,9 @@ class BackgroundTasks:
         await self.wait()
 
 
-_tasks = BackgroundTasks()
+_tasks = TaskRegistry()
 
 
-def get_background_tasks() -> BackgroundTasks:
+def get_background_tasks() -> TaskRegistry:
     """FastAPI dependency for the process's tasks; tests override it."""
     return _tasks

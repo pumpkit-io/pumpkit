@@ -1,6 +1,6 @@
 import { Button } from '@/components/ui/button';
 import type { UnwrittenPost } from '@/services/postService';
-import { planLine } from './planLine';
+import { OriginLine } from './panels/OriginLine';
 
 // The lines a written post would fill, widest first, as the loading placeholder draws them.
 const LINES = ['w-full', 'w-4/5', 'w-3/5'];
@@ -19,12 +19,9 @@ export function UnwrittenPostCard({
   onRetry: () => void;
 }) {
   const writing = post.writingState === 'writing';
-  const origin = ['From your brief', post.plan && planLine(post.plan, post.plan.format)]
-    .filter(Boolean)
-    .join(' · ');
   return (
     <div className="space-y-3">
-      <p className="truncate font-sans text-[13px] text-muted-foreground">{origin}</p>
+      <OriginLine brief={post.brief} plan={post.plan} edited={false} />
       <div className="flex gap-3 rounded-xl border border-border bg-card px-4 py-4 sm:px-5">
         <div aria-hidden className="h-10 w-10 shrink-0 rounded-full bg-muted" />
         {writing ? (

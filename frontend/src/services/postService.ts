@@ -113,7 +113,7 @@ export function isUnwritten(post: PostDetail | UnwrittenPost): post is Unwritten
 export interface PostDetail extends Post {
   /** Null for a Post written before Briefs were planned. */
   plan: Plan | null;
-  /** Null only for a Post whose first Version was never written. */
+  /** Never null from `get`: a Post with no Text reads as an `UnwrittenPost`. */
   text: PostText | null;
   status: PostStatus;
   /** Null while the Post is a Draft. */
@@ -233,7 +233,7 @@ interface PostApi {
 
 interface StartedPostApi extends PostApi {
   plan: PlanApi | null;
-  writing_state: WritingState | null;
+  writing_state: 'writing';
 }
 
 interface PostTextApi {
@@ -308,17 +308,12 @@ export function textOf(version: Version): PostText {
   };
 }
 
-function unwritten(post: UnwrittenPost): UnwrittenPost {
-  return { id: post.id, brief: post.brief, plan: post.plan, writingState: post.writingState };
-}
-
-const startedPost = (data: StartedPostApi): UnwrittenPost =>
-  unwritten({
-    id: data.id,
-    brief: data.brief,
-    plan: data.plan ? toPlan(data.plan) : null,
-    writingState: data.writing_state ?? 'writing',
-  });
+const startedPost = (data: StartedPostApi): UnwrittenPost => ({
+  id: data.id,
+  brief: data.brief,
+  plan: data.plan ? toPlan(data.plan) : null,
+  writingState: data.writing_state,
+});
 
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */
 export const BRIEF_MAX_CHARS = 200_000;
@@ -355,7 +350,12 @@ export const postService = {
     const { data } = await apiService.get<PostDetailApi>(`/posts/${encodeURIComponent(postId)}`);
     const plan = data.plan ? toPlan(data.plan) : null;
     if (data.status === null)
-      return unwritten({ ...data, plan, writingState: data.writing_state ?? 'not_written' });
+      return {
+        id: data.id,
+        brief: data.brief,
+        plan,
+        writingState: data.writing_state ?? 'not_written',
+      };
     return {
       id: data.id,
       brief: data.brief,

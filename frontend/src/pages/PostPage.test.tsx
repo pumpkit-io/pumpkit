@@ -5902,7 +5902,9 @@ describe('A post before its first version', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
       'Shipping small things beats planning big ones.',
     );
-    expect(screen.getByText(/^From your brief · Built for trust/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^From your brief · Built for trust/ }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: 'Text' })).not.toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: 'Feedback' })).not.toBeInTheDocument();
   });
@@ -5923,18 +5925,59 @@ describe('A post before its first version', () => {
     expect(postService.get).toHaveBeenCalledTimes(3);
   });
 
-  it('keeps polling after a read fails', async () => {
+  it('keeps polling after a read fails, waiting twice as long after each failure', async () => {
     vi.mocked(postService.get)
       .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValueOnce(new Error('Network Error'))
       .mockRejectedValueOnce(new Error('Network Error'))
       .mockResolvedValueOnce(postWith('the final text'));
     renderSignedIn('/posts/post_01');
     await screen.findByText('Writing…');
 
     await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(3);
+    await poll();
+    await poll();
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(3);
     await poll();
 
     expect((await textCard()).getByText('the final text')).toBeInTheDocument();
+    expect(postService.get).toHaveBeenCalledTimes(4);
+  });
+
+  it('stops polling and says the post is gone when a read answers 404', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValue(apiError(404, 'Post not found.'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+
+    expect(await screen.findByText(/This post isn't here/)).toBeInTheDocument();
+    await poll();
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops polling and shows the load error when a read answers 403', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValue(apiError(403, 'Not allowed.'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+
+    expect(await screen.findByText('Not allowed.')).toBeInTheDocument();
+    await poll();
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
   });
 
   it('stops reading the post once the user leaves the page', async () => {
@@ -5983,6 +6026,53 @@ describe('A post before its first version', () => {
     expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'retry' });
     await poll();
     expect((await textCard()).getByText('written on retry')).toBeInTheDocument();
+  });
+
+  it('tells a failed retry apart from a failed first write', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(unwritten('not_written'));
+    vi.mocked(postService.retry).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    await screen.findByText('Writing…');
+    await poll();
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'retry' });
+    expect(track).not.toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+  });
+
+  it('shows the text when a retry finds the late write already finished', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(postWith('written late'));
+    vi.mocked(postService.retry).mockRejectedValue(apiError(409, 'This post is already written.'));
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect((await textCard()).getByText('written late')).toBeInTheDocument();
+    expect(screen.queryByText('This post is already written.')).not.toBeInTheDocument();
+  });
+
+  it('follows a retry another tab started, then shows its text', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockResolvedValueOnce(postWith('written from the other tab'));
+    vi.mocked(postService.retry).mockRejectedValue(
+      apiError(409, 'Pumpkit is still writing this post.'),
+    );
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Writing…')).toBeInTheDocument();
+    expect(screen.queryByText('Pumpkit is still writing this post.')).not.toBeInTheDocument();
+    await poll();
+    expect((await textCard()).getByText('written from the other tab')).toBeInTheDocument();
   });
 
   it('says why a retry was refused and keeps Retry', async () => {
