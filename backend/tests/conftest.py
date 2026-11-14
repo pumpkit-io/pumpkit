@@ -120,12 +120,14 @@ from tests.posts.writing_replies import (  # noqa: E402
     MERGED_THREAD,
     POST_IDEAS,
     REVISED_POST,
+    REVISED_THREAD,
     SKETCHED_POST,
     SKETCHED_THREAD,
     ideas,
     merged,
     merged_thread,
     revised,
+    revised_thread,
     sketched,
     sketched_thread,
 )
@@ -281,6 +283,7 @@ def fake_llm():
             SKETCHED_POST: sketched(),
             MERGED_SKETCH: merged(),
             REVISED_POST: revised(),
+            REVISED_THREAD: revised_thread(),
             SKETCHED_THREAD: sketched_thread(),
             MERGED_THREAD: merged_thread(),
         }

@@ -5,7 +5,6 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from pumpkit.authors.models import AuthorPost, InspirationAuthor
 from pumpkit.billing.models import TopUpCharge
 from pumpkit.core.errors import ConflictError
 from pumpkit.core.time import as_utc
@@ -19,35 +18,9 @@ from pumpkit.posts.models import (
     Post,
     VersionAttempt,
 )
-from pumpkit.posts.writing.constants import CORPUS_POSTS_PER_AUTHOR
-from pumpkit.posts.writing.corpus import Corpus, CorpusPost, group_corpus
 from pumpkit.posts.writing.planning import PlannedBrief
 from pumpkit.posts.writing.starting_text import StartingText
 from pumpkit.posts.writing.versions import WrittenVersion
-
-
-async def corpus_for_user(db: AsyncSession, *, user_id: str) -> Corpus:
-    """
-    The newest stored posts of each of the User's Inspiration authors, in list order.
-    Ties on the posting time go to the higher post id, as in pumpkit-v6, so a corpus is stable.
-    """
-    handles = (
-        await db.execute(
-            select(InspirationAuthor.handle)
-            .where(InspirationAuthor.user_id == user_id)
-            .order_by(InspirationAuthor.position)
-        )
-    ).scalars()
-    posts: list[CorpusPost] = []
-    for handle in list(handles):
-        rows = await db.execute(
-            select(AuthorPost.id, AuthorPost.text)
-            .where(AuthorPost.handle == handle)
-            .order_by(AuthorPost.posted_at.desc(), AuthorPost.id.desc())
-            .limit(CORPUS_POSTS_PER_AUTHOR)
-        )
-        posts.extend(CorpusPost(post_id=id_, handle=handle, text=text) for id_, text in rows.all())
-    return group_corpus(posts)
 
 
 async def get_user_post(
@@ -67,16 +40,6 @@ async def get_user_post(
         query = query.with_for_update(of=Post).execution_options(populate_existing=True)
     result = await db.execute(query)
     return result.scalar_one_or_none()
-
-
-async def corpus_for_post(db: AsyncSession, *, post: Post) -> Corpus:
-    """The corpus the Post started with, whatever the User's Inspiration authors are now."""
-    post_ids = post.corpus_post_ids or []
-    rows = await db.execute(
-        select(AuthorPost.id, AuthorPost.handle, AuthorPost.text).where(AuthorPost.id.in_(post_ids))
-    )
-    by_id = {id_: CorpusPost(post_id=id_, handle=handle, text=text) for id_, handle, text in rows}
-    return group_corpus([by_id[post_id] for post_id in post_ids])
 
 
 async def attempt_times_since(db: AsyncSession, *, user_id: str, since: datetime) -> list[datetime]:
@@ -138,14 +101,11 @@ async def store_planned_brief(
     return single
 
 
-async def create_post(
-    db: AsyncSession, *, user_id: str, idea: Idea, corpus: Corpus, now: datetime
-) -> Post:
+async def create_post(db: AsyncSession, *, user_id: str, idea: Idea, now: datetime) -> Post:
     """A Post of `user_id`, who must be the User of the Idea's Brief. Flushes."""
     post = Post(
         user_id=user_id,
         idea=idea,
-        corpus_post_ids=list(corpus.post_ids),
         created_at=now,
         # Set empty so the collection never loads lazily, which an async session can't do.
         text_media=[],

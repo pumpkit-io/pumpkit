@@ -82,6 +82,7 @@ def _switch_message(feedback: str, subject: str, format: Format) -> str:
         ask = (
             f"Rewrite {subject} as a single post, according to this feedback. "
             "Keep what it says and how it says it wherever the feedback does not ask for a "
-            "change and one post has room for it, and return the whole post."
+            "change and one post has room for it, and return the whole post. An external link "
+            "in the thread, or its [link], goes in the first reply, not in the post."
         )
     return f"{ask}\n\nThe feedback:\n{feedback}"

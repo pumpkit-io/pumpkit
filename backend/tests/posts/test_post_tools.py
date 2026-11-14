@@ -20,7 +20,6 @@ from tests.posts.writing_replies import (
     ideas,
     planned_thread,
     revised,
-    written_thread,
 )
 
 
@@ -190,7 +189,7 @@ async def test_get_post_reads_the_text_from_the_newest_version(post_id, mcp, fak
 async def test_feedback_with_a_format_switches_the_post_and_keeps_earlier_versions(
     post_id, mcp, fake_llm
 ):
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+    fake_llm.replies = [{"parts": ["final one", "final two"]}]
 
     result = await mcp.call_tool(
         "give_feedback", post_id=post_id, feedback="expand it", format="thread"
@@ -206,9 +205,9 @@ async def test_feedback_with_a_format_switches_the_post_and_keeps_earlier_versio
 
 
 async def test_feedback_without_a_format_keeps_the_latest_versions_thread(post_id, mcp, fake_llm):
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+    fake_llm.replies = [{"parts": ["final one", "final two"]}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="expand it", format="thread")
-    fake_llm.replies = [written_thread(["one", "2"]), {"parts": ["final one", "final 2"]}]
+    fake_llm.replies = [{"parts": ["final one", "final 2"]}]
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter Part 2")
 

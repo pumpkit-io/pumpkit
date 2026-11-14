@@ -65,9 +65,9 @@ other than the version before keeps that text as its starting text.
 each one X post, published on X with each part replying to the one before. Pumpkit chooses the \
 format when it plans the post: a thread when the material needs more room than one post on the \
 user's account holds, or when the brief asks for one ("as a thread"). A thread puts its link in \
-its last part and has no first reply. Feedback may switch the format. Feedback on a thread is \
-still written in the style of X accounts the user picked, their inspiration authors, so it is \
-refused on a thread started while none of them had posts.
+its last part and has no first reply. Feedback may switch the format: a single post's first \
+reply then moves into the thread's last part, and a thread turned into a single post gets the \
+length the user's account allows.
 - A single X post may end with a first reply, a reply the user's account posts under it, where \
 the writing puts an external link: `first_reply` on a version or the text says its last part is \
 one. Feedback may add, change or remove it. Where the writing has no real link it writes \

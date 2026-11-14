@@ -15,6 +15,7 @@ from pumpkit.posts.writing.prompts.guide import (
     PROMPT_FUNNELS,
     char_limit_for_plan,
     effective_length,
+    plan_structure,
     prompt_format,
     writing_guide,
 )
@@ -59,6 +60,7 @@ SKETCH_FIELDS = (
 def post_inputs_block(inputs: PostInputs) -> str:
     """The inputs of the sketch and merge calls, a single post's or a Thread's, as the model reads them."""
     plan = inputs.plan
+    structure = plan_structure(plan)
     return (
         f"<raw_input>\n{inputs.brief.strip()}\n</raw_input>\n\n"
         f"<positioning>\n{inputs.positioning.strip()}\n</positioning>\n\n"
@@ -68,8 +70,8 @@ def post_inputs_block(inputs: PostInputs) -> str:
         f"funnel: {PROMPT_FUNNELS[plan.funnel]}\n"
         f"desired_action: {plan.desired_action}\n"
         f"format: {prompt_format(plan)}\n"
-        f"structure: {plan.structure}\n"
-        "</choices>"
+        + (f"structure: {structure}\n" if structure else "")
+        + "</choices>"
     )
 
 

@@ -46,8 +46,6 @@ async def start_post(
     positioning = await positioning_service.get_positioning(db, user_id=user_id)
     if positioning is None:
         raise RefusedError("Set up your persona before writing a post.", fix_page=PERSONA_PAGE)
-    # Kept on the Post for Feedback on a Thread, which still writes from it.
-    corpus = await service.corpus_for_user(db, user_id=user_id)
     await check_attempt_limit(db, user_id=user_id, now=now)
     await check_generation_left(db, user_id=user_id, now=now)
     char_limit = await char_limit_for(db, user_id=user_id)
@@ -66,7 +64,7 @@ async def start_post(
         idea = await service.store_planned_brief(
             db, user_id=user_id, text=brief, planned=planned, now=now
         )
-        post = await service.create_post(db, user_id=user_id, idea=idea, corpus=corpus, now=now)
+        post = await service.create_post(db, user_id=user_id, idea=idea, now=now)
         return idea, post
 
     try:

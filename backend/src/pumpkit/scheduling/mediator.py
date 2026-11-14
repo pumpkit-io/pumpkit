@@ -40,7 +40,7 @@ from pumpkit.posts.media_upload import ReceivedMedia
 from pumpkit.posts.media_upload_links import NewUploadLink
 from pumpkit.posts.models import Media, Post
 from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
-from pumpkit.posts.writing.post_writing import write_planned_next_version
+from pumpkit.posts.writing.post_writing import revise_version
 from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -772,16 +772,12 @@ async def give_feedback(
     await db.commit()
 
     try:
-        written = await write_planned_next_version(
+        written = await revise_version(
             llm,
-            inputs=next_version.inputs,
-            corpus=next_version.corpus,
-            brief=post.brief,
-            earlier=next_version.earlier,
-            starting=next_version.starting_text,
-            feedback=feedback,
-            format=next_version.format,
-            char_limit=next_version.char_limit,
+            next_version.inputs,
+            next_version.earlier,
+            next_version.starting_text,
+            feedback,
         )
         # The Post may have been scheduled, or its Media changed, during the calls. User before
         # Post, as every path that takes both locks them, since the charge below locks the User.

@@ -8,7 +8,7 @@ from typing import Sequence
 
 from pumpkit.posts.writing.constants import THREAD_MAX_PARTS, THREAD_MIN_PARTS
 from pumpkit.posts.writing.post_replies import HookType, SketchedThread
-from pumpkit.posts.writing.prompts.guide import ACTION, PROMPT_FUNNELS
+from pumpkit.posts.writing.prompts.guide import ACTION, PROMPT_FUNNELS, plan_structure
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZATION_GUIDELINES
 from pumpkit.posts.writing.prompts.parts import numbered_parts
 from pumpkit.posts.writing.prompts.post import (
@@ -125,6 +125,8 @@ def thread_merge_user(inputs: PostInputs, sketches: Sequence[SketchedThread]) ->
 
 def thread_humanizer_prompt(inputs: PostInputs) -> str:
     limit = inputs.char_limit
+    named = plan_structure(inputs.plan)
+    structure = f" ({named})" if named else ""
     return (
         f"""\
 # Role
@@ -148,7 +150,7 @@ The thread you are given has its parts numbered in <part> tags. Rewrite each par
 The thread you are given was planned on purpose. The brief lists the plan. Removing AI-tellers must not undo it.
 
 - The hook: part 1 stays the hook. Keep what it promises and its specifics, and keep it standing on its own in the feed. Reword it only where the wording itself is an AI-teller. Don't flatten it into a plain statement that no longer makes a reader stop.
-- The structure ({inputs.plan.structure}): keep the order of the parts, one point per part, and the line breaks that carry it.
+- The structure{structure}: keep the order of the parts, one point per part, and the line breaks that carry it.
 - The closer and the CTA: keep them in the last part, with the link if there is one. Keep a [link] placeholder exactly as it is: I replace it with the link before posting. Keep the one specific ask the thread makes, if it makes one. Remove an ask only if it is generic engagement bait.
 - The facts: every number, name and claim stays as it is. Add none.
 - The length: each part at most {limit:,} characters as X counts them (a link counts as 23). Don't make the thread longer than it is.
@@ -164,6 +166,7 @@ def thread_brief_message(inputs: PostInputs) -> str:
     """The brief, framed as what the rewrite must stay true to rather than more text to rewrite."""
     plan = inputs.plan
     cta = ACTION[plan.desired_action]["cta"]
+    structure = plan_structure(plan)
     return (
         "This is the brief the thread below was written from. Use it only to "
         "keep the rewrite true to what it asks for - its position and any "
@@ -175,9 +178,7 @@ def thread_brief_message(inputs: PostInputs) -> str:
         f"takeaway: {plan.takeaway.strip()}\n"
         f"funnel: {PROMPT_FUNNELS[plan.funnel]}\n"
         f"desired_action: {plan.desired_action} (cta: {cta})\n"
-        "format: thread\n"
-        f"structure: {plan.structure}\n"
-        "</plan>"
+        "format: thread\n" + (f"structure: {structure}\n" if structure else "") + "</plan>"
     )
 
 

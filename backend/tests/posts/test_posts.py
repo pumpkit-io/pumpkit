@@ -11,7 +11,7 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import start_thread, written_thread
+from tests.posts.writing_replies import start_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -92,45 +92,20 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
         assert "sketch" not in str(version)
 
 
-async def _thread_corpus(client, fake_llm) -> str:
-    """The corpus a Thread's Feedback is written from: the one the Post started with."""
+async def test_no_version_is_written_from_the_inspiration_authors_posts(
+    client, db, with_author, fake_llm
+):
     post_id = (await start_thread(client, fake_llm, ["a", "b"], brief="ship")).json()["id"]
-    fake_llm.calls.clear()
-    fake_llm.replies = [written_thread(["c", "d"]), {"parts": ["c", "d"]}]
-    response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "shorter"})
-    assert response.status_code == 201, response.text
-    return fake_llm.calls[0].messages[1]["content"]
+    fake_llm.replies = [{"parts": ["c", "d"]}, {"post": "one"}, {"post": "two"}]
+    for body in ({"feedback": "shorter"}, {"feedback": "condense", "format": "post"}):
+        response = await client.post(f"{POSTS}/{post_id}/versions", json=body)
+        assert response.status_code == 201, response.text
+    fake_llm.replies = [{"post": "a post"}]
+    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
 
-
-async def test_a_threads_corpus_is_the_newest_20_posts_of_each_author_in_list_order(
-    client, subscribed, fake_x_reader, fake_llm
-):
-    fake_x_reader.posts["paulg"] = _posts("paulg", 21)
-    fake_x_reader.posts["levelsio"] = _posts("levelsio", 1)
-    await client.post(AUTHORS, json={"handle": "paulg"})
-    await save_positioning(client)
-    await client.post(AUTHORS, json={"handle": "levelsio"})
-    corpus = await _thread_corpus(client, fake_llm)
-
-    assert corpus.count("<post>") == 21
-    assert "<post>paulg post 19</post>" in corpus
-    assert "paulg post 20<" not in corpus
-    assert corpus.index('<creator handle="paulg">') < corpus.index('<creator handle="levelsio">')
-
-
-async def test_posts_posted_in_the_same_second_are_ordered_by_post_id_descending(
-    client, subscribed, fake_x_reader, fake_llm
-):
-    same_time = datetime(2026, 10, 1, tzinfo=timezone.utc)
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="aaa", text="lower id", posted_at=same_time),
-        FetchedPost(post_id="bbb", text="higher id", posted_at=same_time),
-    ]
-    await save_positioning(client)
-    await client.post(AUTHORS, json={"handle": "levelsio"})
-    corpus = await _thread_corpus(client, fake_llm)
-
-    assert corpus.index("higher id") < corpus.index("lower id")
+    prompts = "\n".join(str(m["content"]) for call in fake_llm.calls for m in call.messages)
+    assert "levelsio" not in prompts
+    assert [post.corpus_post_ids for post in await _stored_posts(db)] == [None, None]
 
 
 async def test_the_final_is_counted_as_x_counts_it_and_kept_when_over_the_limit(
@@ -198,7 +173,7 @@ async def _stored_posts(db) -> list[Post]:
     return list(result.scalars())
 
 
-async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
+async def test_a_post_stores_its_brief_and_version_with_models_and_usage(
     client, db, with_author, fake_llm, clock
 ):
     fake_llm.replies = [{"post": "final"}]
@@ -208,7 +183,7 @@ async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
     [post] = await _stored_posts(db)
     assert post.id == response.json()["id"]
     assert post.brief == "ship"
-    assert post.corpus_post_ids == ["levelsio-0", "levelsio-1"]
+    assert post.corpus_post_ids is None
     [attempt] = post.attempts
     assert attempt.status == "succeeded"
     assert (attempt.format, attempt.sketch_parts, attempt.parts) == (
@@ -225,20 +200,6 @@ async def test_a_post_stores_its_brief_corpus_and_version_with_models_and_usage(
     assert attempt.humanizing_usage == attempt.sketch_usage
     assert attempt.error is None
     assert as_utc(attempt.created_at) == clock()
-
-
-async def test_a_post_keeps_its_corpus_when_the_users_authors_change(
-    client, db, with_author, fake_x_reader, fake_llm
-):
-    fake_llm.replies = [{"post": "final"}]
-    await client.post(POSTS, json={"brief": "ship"})
-
-    await client.delete(f"{AUTHORS}/levelsio")
-    fake_x_reader.posts["paulg"] = _posts("paulg", 1)
-    await client.post(AUTHORS, json={"handle": "paulg"})
-
-    [post] = await _stored_posts(db)
-    assert post.corpus_post_ids == ["levelsio-0", "levelsio-1"]
 
 
 async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_returns_502(

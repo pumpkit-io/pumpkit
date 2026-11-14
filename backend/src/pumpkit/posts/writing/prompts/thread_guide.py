@@ -19,6 +19,7 @@ from pumpkit.posts.writing.prompts.guide import (
     THREAD_LINKS,
     action_section,
     closer_section,
+    plan_structure,
 )
 
 
@@ -53,7 +54,11 @@ STRUCTURE_ACROSS_PARTS = """\
 
 
 def thread_guide(plan: Plan, char_limit: int) -> str:
-    """Everything a writer needs to write this Thread, tailored to the Plan's choices."""
+    """
+    Everything a writer needs to write this Thread, tailored to the Plan's choices. A post's
+    structure a Thread can't take, after a switch, is left out.
+    """
+    structure = plan_structure(plan)
     return "\n\n".join(
         [
             CONTENT_RULES,
@@ -61,7 +66,7 @@ def thread_guide(plan: Plan, char_limit: int) -> str:
             FUNNEL[PROMPT_FUNNELS[plan.funnel]],
             action_section(plan, THREAD_LINKS),
             _format_section(char_limit),
-            STRUCTURE[plan.structure],
+            *([STRUCTURE[structure]] if structure else []),
             STRUCTURE_ACROSS_PARTS,
             HOOK,
             OPENING,

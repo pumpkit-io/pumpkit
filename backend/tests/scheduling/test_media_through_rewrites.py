@@ -15,7 +15,7 @@ from pumpkit.main import app
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import png
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import start_thread, written, written_thread
+from tests.posts.writing_replies import REVISED_THREAD, revised_thread, start_thread
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -68,7 +68,7 @@ async def test_feedback_keeps_each_parts_media_where_it_is(client, with_author, 
     post_id = await _start_thread(client, fake_llm, "one", "two")
     first = await _attach(client, post_id, part=1)
     second = await _attach(client, post_id, part=2)
-    fake_llm.replies = [written_thread(["uno", "dos"]), {"parts": ["uno", "dos"]}]
+    fake_llm.replies = [{"parts": ["uno", "dos"]}]
 
     await _feedback(client, post_id, "in Spanish")
 
@@ -82,7 +82,7 @@ async def test_feedback_that_drops_parts_moves_their_media_last_on_the_last_part
     on_two = await _attach(client, post_id, part=2)
     on_three = [await _attach(client, post_id, part=3) for _ in range(2)]
     on_four = await _attach(client, post_id, part=4)
-    fake_llm.replies = [written_thread(["short", "shorter"]), {"parts": ["short", "shorter"]}]
+    fake_llm.replies = [{"parts": ["short", "shorter"]}]
 
     await _feedback(client, post_id, "two parts")
 
@@ -95,7 +95,7 @@ async def test_switching_a_thread_to_a_single_post_puts_every_parts_media_on_it_
     post_id = await _start_thread(client, fake_llm, "one", "two")
     on_one = await _attach(client, post_id, part=1)
     on_two = await _attach(client, post_id, part=2)
-    fake_llm.replies = [written("one post"), {"post": "one post"}]
+    fake_llm.replies = [{"post": "one post"}]
 
     await _feedback(client, post_id, "condense it", "post")
 
@@ -108,7 +108,7 @@ async def test_media_moved_onto_a_part_past_xs_rule_stays_and_scheduling_refuses
     post_id = await _start_thread(client, fake_llm, "one", "two")
     on_one = [await _attach(client, post_id, part=1) for _ in range(3)]
     on_two = [await _attach(client, post_id, part=2) for _ in range(2)]
-    fake_llm.replies = [written("one post"), {"post": "one post"}]
+    fake_llm.replies = [{"post": "one post"}]
 
     await _feedback(client, post_id, "condense it", "post")
 
@@ -120,7 +120,7 @@ async def test_media_moved_onto_a_part_past_xs_rule_stays_and_scheduling_refuses
 
 async def test_restoring_a_version_keeps_each_parts_media(client, with_author, fake_llm):
     post_id = await _start_thread(client, fake_llm, "one", "two")
-    fake_llm.replies = [written_thread(["uno", "dos"]), {"parts": ["uno", "dos"]}]
+    fake_llm.replies = [{"parts": ["uno", "dos"]}]
     await _feedback(client, post_id, "in Spanish")
     first = await _attach(client, post_id, part=1)
     second = await _attach(client, post_id, part=2)
@@ -137,7 +137,6 @@ async def test_restoring_a_shorter_version_moves_media_onto_its_last_part_and_ba
 ):
     post_id = await _start_thread(client, fake_llm, "one", "two")
     fake_llm.replies = [
-        written_thread(["a", "b", "c"]),
         {"parts": ["a", "b", "c"]},
     ]
     await _feedback(client, post_id, "three parts")
@@ -165,7 +164,7 @@ async def test_media_attached_while_feedback_writes_stays_and_moves_with_its_par
             return await super().structured(**kwargs)
 
     app.dependency_overrides[get_llm] = lambda: MeanwhileLLM(
-        replies=[written_thread(["a", "b"]), {"parts": ["a", "b"]}]
+        standing={REVISED_THREAD: revised_thread()}, replies=[{"parts": ["a", "b"]}]
     )
 
     await _feedback(client, post_id, "two parts")
@@ -186,7 +185,7 @@ async def test_media_removed_while_feedback_writes_stays_removed(client, with_au
             return await super().structured(**kwargs)
 
     app.dependency_overrides[get_llm] = lambda: MeanwhileLLM(
-        replies=[written_thread(["a", "b"]), {"parts": ["a", "b"]}]
+        standing={REVISED_THREAD: revised_thread()}, replies=[{"parts": ["a", "b"]}]
     )
 
     await _feedback(client, post_id, "two parts")
@@ -204,7 +203,7 @@ async def test_no_prompt_holds_anything_of_the_texts_media(client, with_author, 
     )
     assert described.status_code == 200, described.text
     fake_llm.calls.clear()
-    fake_llm.replies = [written("one post"), {"post": "one post"}]
+    fake_llm.replies = [{"post": "one post"}]
 
     await _feedback(client, post_id, "condense it", "post")
 
@@ -234,7 +233,7 @@ async def test_restoring_a_version_that_would_put_media_on_a_part_already_on_x_i
     fake_llm.replies = [{"post": "one post"}]
     started = await client.post(POSTS, json={"brief": "ship small things"})
     post_id = started.json()["id"]
-    fake_llm.replies = [written_thread(["a", "b", "c"]), {"parts": ["a", "b", "c"]}]
+    fake_llm.replies = [{"parts": ["a", "b", "c"]}]
     await _feedback(client, post_id, "three parts", "thread")
     on_three = await _attach(client, post_id, part=3)
     await _fail_after(client, fake_x_publisher, post_id, live=2)
@@ -252,12 +251,12 @@ async def test_feedback_that_would_put_media_on_a_part_already_on_x_is_refused(
     post_id = await _start_thread(client, fake_llm, "a", "b", "c")
     on_three = await _attach(client, post_id, part=3)
     await _fail_after(client, fake_x_publisher, post_id, live=2)
-    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["a", "b"]}]
+    fake_llm.replies = [{"parts": ["a", "b"]}]
 
     refused = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "two parts"})
 
     assert refused.status_code == 409, refused.text
     assert "Part 2 is already on X" in refused.json()["detail"]
     assert await _media_by_part(client, post_id) == [[], [], [on_three]]
-    fake_llm.replies = [written_thread(["a", "b", "d"]), {"parts": ["a", "b", "d"]}]
+    fake_llm.replies = [{"parts": ["a", "b", "d"]}]
     assert (await _feedback(client, post_id, "change the last part"))["number"] == 2

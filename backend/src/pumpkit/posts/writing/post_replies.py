@@ -97,9 +97,13 @@ class HumanizedThread(_Strict):
     parts: list[str]
 
 
-# The model reads the schema names, v5's and their thread equivalents. `refined_post`,
-# `revised_post` and `refined_thread` also name the old path's replies, other classes: each call
-# sends its own class's schema under that name.
+class RevisedThread(_Strict):
+    reasoning: str
+    cta_type: CtaType
+    parts: list[str]
+
+
+# The model reads the schema names, v5's and their thread equivalents.
 SketchedPost.__name__ = "sketched_post"
 MergedSketch.__name__ = "merged_sketch"
 HumanizedPost.__name__ = "refined_post"
@@ -107,3 +111,4 @@ RevisedPost.__name__ = "revised_post"
 SketchedThread.__name__ = "sketched_thread"
 MergedThread.__name__ = "merged_thread"
 HumanizedThread.__name__ = "refined_thread"
+RevisedThread.__name__ = "revised_thread"

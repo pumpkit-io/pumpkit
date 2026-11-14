@@ -299,8 +299,8 @@ async def give_feedback(
     question", "make part 3 punchier" or "like version 2, with a different hook". It rewrites
     the post's text as it is now, hand edits and a restored version included, into the next
     version, which becomes the text, keeping the earlier ones. `format` switches the new version
-    to "post" (a single X post) or "thread"; leave it out to keep the text's format. A post
-    written while the user had no inspiration author with posts can't switch to a thread yet.
+    to "post" (a single X post) or "thread"; leave it out to keep the text's format. A post's
+    first reply moves into a thread's last part. A post written before plans existed is refused.
     Only a draft or a failed post takes feedback: a scheduled one is edited or deleted first, and
     a published one is done. Show the user the new version's text, with every part and its
     character count. Takes up to a minute.

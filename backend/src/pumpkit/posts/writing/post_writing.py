@@ -2,13 +2,14 @@
 Writing a Post's Versions from its Plan, as pumpkit-new-architecture-v5 does (ADR 0026).
 The first, a single post's or a Thread's under its own prompts: sketches in parallel, each trying
 a different hook type first, then the merge, the scrub, the humanizer and the scrub again; the
-merged sketch, scrubbed, is the Version's Sketch. After Feedback on a single post: the revise
-call, the scrub, the revision humanizer and the scrub again; the revised post, scrubbed, is the
-Sketch.
+merged sketch, scrubbed, is the Version's Sketch. After Feedback, under the prompts of the Format
+it asks for: the revise call, the scrub, the revision humanizer and the scrub again; the revised
+text, scrubbed, is the Sketch.
 """
 
 import asyncio
 import logging
+from dataclasses import replace
 from typing import Any, Callable, Optional, Sequence, TypeVar, Union
 
 from pydantic import BaseModel
@@ -20,7 +21,6 @@ from pumpkit.core.text import drop_unstorable
 from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
 from pumpkit.posts.plans import Plan
 from pumpkit.posts.writing.constants import MAX_TOKENS, SKETCHES_PER_POST
-from pumpkit.posts.writing.corpus import Corpus
 from pumpkit.posts.writing.post_replies import (
     HookType,
     HumanizedPost,
@@ -28,9 +28,11 @@ from pumpkit.posts.writing.post_replies import (
     MergedSketch,
     MergedThread,
     RevisedPost,
+    RevisedThread,
     SketchedPost,
     SketchedThread,
 )
+from pumpkit.posts.writing.prompts.guide import length_for_limit
 from pumpkit.posts.writing.prompts.post import (
     PostInputs,
     brief_message,
@@ -44,14 +46,16 @@ from pumpkit.posts.writing.prompts.post import (
     sketch_user,
 )
 from pumpkit.posts.writing.prompts.revise import (
-    previous_post_message,
+    previous_message,
     revise_prompt,
     revised_post_message,
+    thread_revise_prompt,
 )
 from pumpkit.posts.writing.prompts.revision_humanizer import (
     earlier_feedback_message,
     hand_written_message,
     latest_feedback_message,
+    revised_sketch_message,
 )
 from pumpkit.posts.writing.prompts.thread import (
     thread_brief_message,
@@ -73,7 +77,6 @@ from pumpkit.posts.writing.versions import (
     system_message,
     thread_parts,
     user_message,
-    write_next_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -336,24 +339,45 @@ async def write_planned_version(
     return await write_post(llm, inputs, user_id=user_id)
 
 
+def plan_in(plan: Plan, format: Format, char_limit: int, *, previous: Format) -> Plan:
+    """
+    The Plan as Feedback in `format`, given on a text in `previous`, writes from it. A Thread
+    turned into a post takes the Length the account's limit allows, whatever the Plan's; a post
+    turned into a Thread keeps its structure, which the Thread's guide leaves out when a Thread
+    can't take it.
+    """
+    if format == FORMAT_THREAD:
+        return (
+            plan
+            if plan.format == FORMAT_THREAD
+            else replace(plan, format=FORMAT_THREAD, length=None)
+        )
+    if plan.format == FORMAT_POST and previous == FORMAT_POST:
+        return plan
+    return replace(plan, format=FORMAT_POST, length=length_for_limit(char_limit))
+
+
 def revision_inputs(
     *,
     brief: str,
     positioning: Optional[str],
     plan: Optional[Plan],
-    text_format: Format,
     format: Format,
+    previous: Format,
     char_limit: int,
 ) -> Optional[PostInputs]:
     """
-    What the revise call writes Feedback from, or None when the Feedback is written the pumpkit-v6
-    way: on a Thread either side of it, or on a Post planned without a single post's Plan.
+    What Feedback in `format` on a text in `previous` is written from, or None for a Post written
+    before Plans.
     """
-    if positioning is None or plan is None or plan.format != FORMAT_POST:
+    if positioning is None or plan is None:
         return None
-    if text_format != FORMAT_POST or format != FORMAT_POST:
-        return None
-    return PostInputs(brief=brief, positioning=positioning, plan=plan, char_limit=char_limit)
+    return PostInputs(
+        brief=brief,
+        positioning=positioning,
+        plan=plan_in(plan, format, char_limit, previous=previous),
+        char_limit=char_limit,
+    )
 
 
 def revise_messages(
@@ -362,12 +386,24 @@ def revise_messages(
     starting: Optional[StartingText],
     feedback: str,
 ) -> list[dict]:
-    """v5's revise conversation, with Pumpkit's Feedback framings: Versions and Feedback only."""
+    """
+    v5's revise conversation under the prompt of the Format `inputs` plans, with Pumpkit's Feedback
+    framings: Versions and Feedback only, each Version in its own Format.
+    """
+    format = inputs.plan.format
+    prompt = thread_revise_prompt if format == FORMAT_THREAD else revise_prompt
     return [
-        system_message(revise_prompt(inputs)),
+        system_message(prompt(inputs)),
         user_message(post_inputs_block(inputs)),
-        *replayed_versions(earlier, starting, feedback, FORMAT_POST),
+        *replayed_versions(earlier, starting, feedback, format),
     ]
+
+
+def _feedback_given_on(
+    earlier: Sequence[EarlierVersion], starting: Optional[StartingText]
+) -> Union[EarlierVersion, StartingText]:
+    """The text the Feedback was given on: the Starting text, or else the latest Version."""
+    return earlier[-1] if starting is None else starting
 
 
 def revision_humanizer_messages(
@@ -375,28 +411,31 @@ def revision_humanizer_messages(
     earlier: Sequence[EarlierVersion],
     starting: Optional[StartingText],
     feedback: str,
-    revised: tuple[str, Optional[str]],
+    to_rewrite: str,
 ) -> list[dict]:
     """
-    v5's revision humanizer, plus Pumpkit's message of the sentences the User wrote by hand. The
-    post the Feedback was given on is the Starting text, or else the latest Version.
+    v5's revision humanizer in the Format `inputs` plans, plus Pumpkit's message of the sentences
+    the User wrote by hand. The text the Feedback was given on keeps its own Format; `to_rewrite`
+    is the message of the text to rewrite.
     """
-    shown = earlier[-1] if starting is None else starting
-    previous = shown.parts[0]
-    first_reply = shown.parts[-1] if shown.first_reply else None
-    messages = [
-        system_message(humanizer_prompt(inputs)),
-        user_message(brief_message(inputs)),
-    ]
+    format = inputs.plan.format
+    shown = _feedback_given_on(earlier, starting)
+    if format == FORMAT_THREAD:
+        prompt, brief = thread_humanizer_prompt(inputs), thread_brief_message(inputs)
+    else:
+        prompt, brief = humanizer_prompt(inputs), brief_message(inputs)
+    messages = [system_message(prompt), user_message(brief)]
     earlier_feedback = [v.feedback for v in earlier if v.feedback is not None]
     if earlier_feedback:
         messages.append(user_message(earlier_feedback_message(earlier_feedback)))
-    messages.append(user_message(previous_post_message(previous, first_reply)))
-    messages.append(user_message(latest_feedback_message(feedback, FORMAT_POST, FORMAT_POST)))
+    messages.append(
+        user_message(previous_message(shown.format, shown.parts, first_reply=shown.first_reply))
+    )
+    messages.append(user_message(latest_feedback_message(feedback, shown.format, format)))
     written_by_hand = hand_written(earlier, starting)
     if written_by_hand:
-        messages.append(user_message(hand_written_message(written_by_hand, FORMAT_POST)))
-    messages.append(user_message(revised_post_message(*revised)))
+        messages.append(user_message(hand_written_message(written_by_hand, format)))
+    messages.append(user_message(to_rewrite))
     return messages
 
 
@@ -411,6 +450,7 @@ async def revise_post(
     Write a single post's next Version from Feedback on `starting`, or else the latest Version.
     Raises an `LLMError` when either call fails or writes a blank post; stores nothing.
     """
+    shown = _feedback_given_on(earlier, starting)
     revised = await _call(
         llm,
         settings.LLM_REVISING_MODEL,
@@ -426,7 +466,11 @@ async def revise_post(
         llm,
         settings.LLM_HUMANIZING_MODEL,
         revision_humanizer_messages(
-            inputs, earlier, starting, feedback, (revised_post, revised_reply)
+            inputs,
+            earlier,
+            starting,
+            feedback,
+            revised_post_message(revised_post, revised_reply, shown.format),
         ),
         HumanizedPost,
     )
@@ -449,21 +493,73 @@ async def revise_post(
     )
 
 
-async def write_planned_next_version(
+async def revise_thread(
     llm: LLM,
-    *,
-    inputs: Optional[PostInputs],
-    corpus: Corpus,
-    brief: str,
+    inputs: PostInputs,
     earlier: Sequence[EarlierVersion],
     starting: Optional[StartingText],
     feedback: str,
-    format: Format,
-    char_limit: int,
 ) -> WrittenVersion:
-    """The Version after `earlier`: by the revise call from `inputs`, or else from the corpus."""
-    if inputs is None:
-        return await write_next_version(
-            llm, corpus, brief, earlier, starting, feedback, format, char_limit
-        )
+    """
+    Write a Thread's next Version from Feedback on `starting`, or else the latest Version. The
+    thread revise prompt moves a post's first reply into the last Part (ADR 0027). Raises an
+    `LLMError` when either call fails or writes Parts outside the bounds; stores nothing.
+    """
+    shown = _feedback_given_on(earlier, starting)
+    revised = await _call(
+        llm,
+        settings.LLM_REVISING_MODEL,
+        revise_messages(inputs, earlier, starting, feedback),
+        RevisedThread,
+    )
+    revised_parts = _clean_parts("revise", revised.parsed.parts)
+
+    humanized = await _call(
+        llm,
+        settings.LLM_HUMANIZING_MODEL,
+        revision_humanizer_messages(
+            inputs,
+            earlier,
+            starting,
+            feedback,
+            revised_sketch_message(shown.format, FORMAT_THREAD, revised_parts),
+        ),
+        HumanizedThread,
+    )
+    parts = _clean_parts("revision humanizer", humanized.parsed.parts)
+
+    return WrittenVersion(
+        format=FORMAT_THREAD,
+        sketch_parts=revised_parts,
+        parts=parts,
+        sketch_model=revised.model,
+        humanizing_model=humanized.model,
+        sketch_usage=_usage(revised),
+        humanizing_usage=_usage(humanized),
+        hook=Hook(reasoning=drop_unstorable(revised.parsed.reasoning), name=None),
+        cta_type=revised.parsed.cta_type,
+    )
+
+
+def _without_blank_first_reply[V: (EarlierVersion, StartingText)](text: V) -> V:
+    """`text` without its first reply when that is blank: a blank first reply is no reply."""
+    if isinstance(text, EarlierVersion) and text.starting_text is not None:
+        text = replace(text, starting_text=_without_blank_first_reply(text.starting_text))
+    if not text.first_reply or text.parts[-1].strip():
+        return text
+    return replace(text, parts=text.parts[:-1], first_reply=False)
+
+
+async def revise_version(
+    llm: LLM,
+    inputs: PostInputs,
+    earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
+    feedback: str,
+) -> WrittenVersion:
+    """The Version after `earlier`, in the Format `inputs` plans, from Feedback on `starting`."""
+    earlier = [_without_blank_first_reply(version) for version in earlier]
+    starting = _without_blank_first_reply(starting) if starting is not None else None
+    if inputs.plan.format == FORMAT_THREAD:
+        return await revise_thread(llm, inputs, earlier, starting, feedback)
     return await revise_post(llm, inputs, earlier, starting, feedback)

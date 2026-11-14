@@ -135,8 +135,7 @@ class Post(Base):
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     # An Idea has at most one Post.
     idea_id: Mapped[str] = mapped_column(ForeignKey("ideas.id", ondelete="CASCADE"), unique=True)
-    # The corpus's author post ids in call order, fixed when the Post starts so a later change
-    # of Inspiration authors doesn't change it. With no corpus it is SQL NULL, never JSON null.
+    # Unused: the author post ids of the corpus Posts were once written from. SQL NULL, never JSON null.
     corpus_post_ids: Mapped[Optional[list[str]]] = mapped_column(
         JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
     )
@@ -221,8 +220,8 @@ class VersionAttempt(Base):
     parts: Mapped[Optional[list[str]]] = mapped_column(JSON().with_variant(JSONB, "postgresql"))
     # Whether the last of `parts` is a single post's first reply (ADR 0027).
     first_reply: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
-    # The model of the call that wrote the Sketch: the merge, or the sketch call on a first Version
-    # written with a corpus, or the revision call after Feedback.
+    # The model of the call that wrote the Sketch: the merge on a first Version, the revise call
+    # after Feedback, or on older Versions the call that wrote from a corpus.
     sketch_model: Mapped[Optional[str]] = mapped_column(String)
     humanizing_model: Mapped[Optional[str]] = mapped_column(String)
     # The provider's whole usage payload, cost and cache counts included.
