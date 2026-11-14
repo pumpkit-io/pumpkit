@@ -210,6 +210,32 @@ class BriefResponse(BriefFields):
     ideas: list[IdeaResponse]
 
 
+class PlannedBriefToolResponse(BaseModel):
+    """A Brief as `plan_posts` answers it, with no Idea written yet."""
+
+    brief_id: str
+    # The split Ideas in posting order; empty when the Brief holds one idea.
+    ideas: list[IdeaFields]
+    # The Idea covering the whole Brief, the alternative to the split Ideas.
+    single_post: IdeaFields
+    # As `BriefFields.generations_left`.
+    generations_left: Optional[int]
+
+
+class StartedPostToolResponse(BaseModel):
+    id: str
+    idea_id: str
+    # "writing" until its first Version is written, as `get_post` reports it.
+    writing_state: Optional[WritingState]
+
+
+class StartedPostsToolResponse(BaseModel):
+    """The Posts `write_posts` started, in the Brief's order."""
+
+    brief_id: str
+    posts: list[StartedPostToolResponse]
+
+
 class RecentBriefResponse(BaseModel):
     """A Brief as New post lists it: what its page header and its row's label are read from."""
 

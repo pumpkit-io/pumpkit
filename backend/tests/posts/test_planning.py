@@ -12,7 +12,6 @@ from pumpkit.main import app
 from pumpkit.posts.models import Brief, Idea, Post, VersionAttempt
 from pumpkit.posts.writing import planning
 from pumpkit.x_connection.x_publisher import XAccount
-from tests.mcp_client import error_text
 from tests.positioning.positioning import POSITIONING, TEXT, save_positioning
 from tests.posts.writing_replies import (
     PLAN,
@@ -399,17 +398,6 @@ async def test_starting_a_post_with_no_positioning_is_refused_with_the_persona_p
     }
     assert fake_llm.calls == []
     assert await _count(db, Brief) == 0
-
-
-async def test_start_post_over_mcp_is_refused_with_no_positioning_and_links_to_the_persona_page(
-    subscribed, mcp, fake_llm
-):
-    result = await mcp.call_tool("start_post", brief=BRIEF)
-
-    assert error_text(result) == (
-        "Set up your persona before writing a post. http://localhost:5173/persona"
-    )
-    assert fake_llm.calls == []
 
 
 async def test_a_failed_plan_call_stores_nothing_and_charges_nothing(

@@ -253,7 +253,7 @@ async def test_an_unexpected_error_is_reported_and_answered_without_its_details(
     await mcp.call_tool("set_positioning", text=POSITIONING)
     fake_llm.standing[POST_IDEAS] = RuntimeError("secret internals")
 
-    result = await mcp.call_tool("start_post", brief="ship small things")
+    result = await mcp.call_tool("plan_posts", brief="ship small things")
 
     assert error_text(result) == (
         "Something went wrong. Please try again later or contact us for support."

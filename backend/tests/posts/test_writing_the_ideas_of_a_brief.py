@@ -14,7 +14,6 @@ from pumpkit.core.config import settings
 from pumpkit.core.db.session import get_session_maker
 from pumpkit.core.llm import FakeLLM, LLMCall, LLMError, StructuredResult, get_llm
 from pumpkit.main import app
-from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
 from tests.posts.generations import use_a_generation
 from tests.posts.writing_replies import (
@@ -551,36 +550,3 @@ async def test_planning_is_still_refused_up_front_at_the_attempt_limit(
 
     assert response.status_code == 429
     assert fake_llm.calls == []
-
-
-async def test_start_post_with_the_last_generation_used_during_the_plan_call_is_refused(
-    subscribed, mcp, client, db, user, cap, fixed_clock
-):
-    await save_positioning(client)
-    cap(1)
-    llm = _MeanwhilePlanning(standing={POST_IDEAS: ideas()})
-    llm.meanwhile = lambda: use_a_generation(db, user.id)
-    app.dependency_overrides[get_llm] = lambda: llm
-
-    result = await mcp.call_tool("start_post", brief=BRIEF)
-
-    assert result["isError"] is True
-    assert error_text(result).startswith("You've used this period's 1 generations.")
-    assert [call.response_model.__name__ for call in llm.calls] == [POST_IDEAS]
-
-
-# MCP's start_post, until plan_posts and write_posts replace it
-
-
-async def test_start_post_over_mcp_writes_one_post_covering_a_split_brief(
-    subscribed, mcp, client, fake_llm, split
-):
-    await save_positioning(client)
-
-    started = await mcp.call_tool("start_post", brief=BRIEF)
-
-    assert not started["isError"], started
-    post = (await client.get(f"{POSTS}/{started['structuredContent']['id']}")).json()
-    assert post["plan"]["core_idea"] == WHOLE
-    assert [part["text"] for part in post["text"]["parts"]] == [f"Post on: {WHOLE}"]
-    assert await _generations_used(client) == 1

@@ -12,6 +12,7 @@ import pytest
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.writing_state import WRITING_TIMEOUT
 from tests.positioning.positioning import save_positioning
+from tests.posts.mcp_writing import write_single_post
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     PLAN,
@@ -261,10 +262,11 @@ async def test_get_post_over_mcp_reports_a_post_still_being_written(
 ):
     await save_positioning(client)
     fake_llm.replies.append({"post": "The final.", "first_reply": None})
-    started = await mcp.call_tool("start_post", brief=BRIEF)
+    started = await write_single_post(mcp, BRIEF)
     assert not started["isError"], started
-    post_id = started["structuredContent"]["id"]
-    assert started["structuredContent"]["writing_state"] == "writing"
+    [post] = started["structuredContent"]["posts"]
+    post_id = post["id"]
+    assert post["writing_state"] == "writing"
 
     result = await mcp.call_tool("get_post", post_id=post_id)
 

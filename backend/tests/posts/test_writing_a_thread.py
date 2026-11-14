@@ -15,6 +15,7 @@ from pumpkit.posts.writing.constants import THREAD_MAX_PARTS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import TEXT, save_positioning
 from tests.posts.feedback import written_version
+from tests.posts.mcp_writing import single_post_id
 from tests.posts.writing_replies import (
     HUMANIZED_THREAD,
     MERGED_THREAD,
@@ -583,19 +584,17 @@ async def test_starting_a_post_takes_no_format(client, ready, fake_llm):
     assert fake_llm.calls == []
 
 
-async def test_start_post_over_mcp_takes_no_format_and_writes_the_thread_the_planner_chose(
+async def test_writing_over_mcp_takes_no_format_and_writes_the_thread_the_planner_chose(
     subscribed, mcp, fake_llm
 ):
     await mcp.call_tool("set_positioning", text=TEXT)
     tools = await mcp.list_tools()
-    assert list(tools["start_post"]["inputSchema"]["properties"]) == ["brief"]
+    assert list(tools["plan_posts"]["inputSchema"]["properties"]) == ["brief"]
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread())
     fake_llm.replies = [{"parts": FINAL}]
 
-    result = await mcp.call_tool("start_post", brief=BRIEF)
+    post_id = await single_post_id(mcp, BRIEF)
 
-    assert result["isError"] is False, result
-    post_id = result["structuredContent"]["id"]
     post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
     assert (post["plan"]["format"], post["plan"]["length"]) == ("thread", None)
     assert [part["text"] for part in post["versions"][0]["parts"]] == FINAL

@@ -66,8 +66,7 @@ async def plan_brief(
     request, unless the attempt limit or the Generations left now leave no room: then, as with
     split Ideas, nothing is written until the User picks. A failed plan stores nothing.
     """
-    # Planned with no Generation left, so a User can still see a split Brief's Ideas and top up.
-    planned = await _plan_and_store(db, llm, user, brief, clock, need_generation=False)
+    planned = await _plan_and_store(db, llm, user, brief, clock)
     now = clock()
     posts: dict[str, Post] = {}
     writes = []
@@ -85,31 +84,17 @@ async def plan_brief(
     return response
 
 
-async def start_post(
-    db: AsyncSession,
-    llm: LLM,
-    tasks: TaskRegistry,
-    sessions: async_sessionmaker[AsyncSession],
-    user: User,
-    brief: str,
-    clock: Clock,
-) -> PostResponse:
+async def plan_posts(
+    db: AsyncSession, llm: LLM, user: User, brief: str, clock: Clock
+) -> BriefResponse:
     """
-    Plan the Brief as `plan_brief` does, then start writing its single-post Idea, which covers the
-    whole Brief, whether or not the planner split it. The split Ideas stay on the Brief, unwritten.
-    Refused before the plan call with no Generation left, and after it, with the Brief kept
-    unwritten, when the attempt limit or the Generations left ran out meanwhile.
+    Plan the Brief and store it with its Ideas, as `plan_brief` does, but start writing nothing,
+    even with no split Ideas: an AI app shows the Ideas and writes the ones the User picks.
     """
-    planned = await _plan_and_store(db, llm, user, brief, clock, need_generation=True)
-    now = clock()
-    try:
-        await _check_room_for_one(db, user_id=user.id, now=now)
-    except AppError:
-        await db.commit()
-        raise
-    created = await _create_post(db, planned, planned.brief.ideas[0], now=now)
-    await _start_writes(db, llm, tasks, sessions, [created.write], clock)
-    return _writing_post_response(created.write)
+    planned = await _plan_and_store(db, llm, user, brief, clock)
+    response = await brief_response(db, planned.brief, {}, planned.char_limit, now=clock())
+    await db.commit()
+    return response
 
 
 @dataclass(frozen=True)
@@ -121,12 +106,12 @@ class _PlannedBrief:
 
 
 async def _plan_and_store(
-    db: AsyncSession, llm: LLM, user: User, brief: str, clock: Clock, *, need_generation: bool
+    db: AsyncSession, llm: LLM, user: User, brief: str, clock: Clock
 ) -> _PlannedBrief:
     """
     The plan call, with no transaction open across it, then the Brief and its Ideas, flushed, with
-    the User locked. Refused up front at the cap on plan calls, at the attempt limit and, with
-    `need_generation`, when the User has no Generation left.
+    the User locked. Refused up front at the cap on plan calls and at the attempt limit, but not
+    with no Generation left, so a User can still see a split Brief's Ideas and top up.
     """
     user_id = user.id
     now = clock()
@@ -134,8 +119,6 @@ async def _plan_and_store(
     if positioning is None:
         raise RefusedError("Set up your persona before writing a post.", fix_page=PERSONA_PAGE)
     await check_attempt_limit(db, user_id=user_id, now=now)
-    if need_generation:
-        await check_generation_left(db, user_id=user_id, now=now)
     char_limit = await char_limit_for(db, user_id=user_id)
     await count_plan_call(db, user_id=user_id, now=now)
     # Ends the transaction and the User's lock before the plan call, which can take a minute.

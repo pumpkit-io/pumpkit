@@ -16,6 +16,7 @@ from pumpkit.posts.models import VersionAttempt
 from pumpkit.posts.writing import post_writing
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import TEXT, save_positioning
+from tests.posts.mcp_writing import single_post_id
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     MERGED_SKETCH,
@@ -369,15 +370,14 @@ async def test_a_written_single_post_uses_one_generation(client, ready, fake_llm
     assert await _generations_used(client) == 1
 
 
-async def test_starting_a_single_post_over_mcp_needs_no_inspiration_author(
+async def test_writing_a_single_post_over_mcp_needs_no_inspiration_author(
     client, ready, mcp, fake_llm
 ):
     fake_llm.replies = [{"post": "The final.", "first_reply": None}]
 
-    result = await mcp.call_tool("start_post", brief=BRIEF)
+    post_id = await single_post_id(mcp, BRIEF)
 
-    assert result["isError"] is False, result
-    post = await mcp.call_tool("get_post", post_id=result["structuredContent"]["id"])
+    post = await mcp.call_tool("get_post", post_id=post_id)
     [version] = post["structuredContent"]["versions"]
     assert version["parts"][0]["text"] == "The final."
     assert len(_calls(fake_llm, SKETCHED_POST)) == 5
