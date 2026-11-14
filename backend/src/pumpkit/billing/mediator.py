@@ -934,7 +934,7 @@ async def _recover_paid_signup(
         if operation.status != "pending":
             return paid_signups.response(operation)
         operation.customer_id = customer_id
-        # Recovery must retain the customer before a hosted setup can succeed independently.
+        # Recovery must retain the customer before its Checkout can start a Subscription independently.
         await db.commit()
         user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)

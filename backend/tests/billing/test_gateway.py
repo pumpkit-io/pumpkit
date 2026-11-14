@@ -695,6 +695,14 @@ async def test_pending_subscription_checkout_read_is_customer_scoped_and_does_no
     assert parse_qs(urlsplit(http.urls[0]).query)["status"] == ["open"]
 
 
+def _setup_checkout(intent_status: str) -> dict:
+    return {
+        "mode": "setup",
+        "status": "complete",
+        "setup_intent": {"id": "seti_check", "object": "setup_intent", "status": intent_status},
+    }
+
+
 @pytest.mark.parametrize(
     "state,pending",
     [
@@ -745,6 +753,11 @@ async def test_pending_subscription_checkout_read_is_customer_scoped_and_does_no
             False,
         ),
         ({"mode": "payment", "status": "expired", "payment_status": "unpaid"}, False),
+        # Paid signup in 0.11 and earlier left setup Checkouts, finished by their SetupIntent.
+        (_setup_checkout("succeeded"), False),
+        (_setup_checkout("canceled"), False),
+        (_setup_checkout("requires_action"), True),
+        ({"mode": "setup", "status": "open"}, True),
         ({"mode": "payment", "status": "complete"}, True),
         ({"mode": "payment", "payment_status": "paid"}, True),
         ({"status": "complete", "payment_status": "paid"}, True),
@@ -779,6 +792,10 @@ async def test_pending_checkout_read_includes_async_payment_and_fails_closed(sta
     query = parse_qs(urlsplit(http.urls[0]).query)
     assert query["customer"] == ["cus_Contract"]
     assert "status" not in query
+    expanded = {
+        value for key, values in query.items() if key.startswith("expand") for value in values
+    }
+    assert expanded == {"data.payment_intent", "data.setup_intent"}
 
 
 async def test_coupon_deferral_sends_absolute_target_without_proration_and_stable_identity():
@@ -894,7 +911,7 @@ async def _arrange(gateway: StripeBillingGateway):
 
 
 @pytest.mark.parametrize("managed", [False, True], ids=["seller", "managed-payments"])
-async def test_an_arranged_subscription_checkout_starts_the_plan_at_the_agreed_date(
+async def test_an_arranged_signup_checkout_sends_the_plan_trial_end_metadata_and_seller_settings(
     monkeypatch, managed
 ):
     monkeypatch.setattr(settings, "STRIPE_MANAGED_PAYMENTS", managed)

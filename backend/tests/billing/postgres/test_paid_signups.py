@@ -95,18 +95,13 @@ async def test_cancellation_racing_recovery_removes_future_payment_and_retains_f
     assert me["free_access"]["ends_at"] == free["ends_at"]
 
 
-@pytest.mark.parametrize("cancel", [True, False])
-async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletion_lock(
-    db_engine, db_session_maker, authed_client, coupons, user, fake_billing, fixed_clock, cancel
+async def _race_late_listing(
+    db_engine, db_session_maker, client, user, fake_billing, request, opened, action
 ):
-    free, request, opened = await _open(authed_client, coupons)
-    fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
-    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
-        "status"
-    ] == "pending"
-    if not cancel:
-        target = datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00"))
-        fixed_clock.advance(target - fixed_clock())
+    """
+    Race `action` against account deletion while the completed Checkout's Subscription is unlisted,
+    then race a status read against its late listing; answer the read and the Subscriptions.
+    """
 
     async def delete():
         async with db_session_maker() as deletion_db:
@@ -115,11 +110,6 @@ async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletio
 
     async with db_session_maker() as control:
         await control.scalar(select(User).where(User.id == user.id).with_for_update())
-        action = (
-            authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")
-            if cancel
-            else authed_client.get(SIGNUPS + "/" + request["operation_id"])
-        )
         tasks = [asyncio.create_task(action), asyncio.create_task(delete())]
         results = await blocked_requests(db_engine, control, tasks, 2)
     assert results[0].json()["status"] == "pending"
@@ -127,10 +117,10 @@ async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletio
     async with db_session_maker() as control:
         await control.scalar(select(User).where(User.id == user.id).with_for_update())
         tasks = [
-            asyncio.create_task(authed_client.get(SIGNUPS + "/" + request["operation_id"])),
+            asyncio.create_task(client.get(SIGNUPS + "/" + request["operation_id"])),
             asyncio.create_task(
                 _send(
-                    authed_client,
+                    client,
                     fake_billing,
                     "evt_pg_late",
                     "customer.subscription.created",
@@ -139,10 +129,53 @@ async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletio
             ),
         ]
         results = await blocked_requests(db_engine, control, tasks, 2)
-    states = await fake_billing.list_subscriptions(customer_id="cus_fake_1")
-    # Without a cancellation, the Checkout the User completed in time stands.
-    assert results[0].json()["status"] == ("refused" if cancel else "completed")
-    assert len(states) == 1 and states[0].status == ("canceled" if cancel else "active")
+    return results[0], await fake_billing.list_subscriptions(customer_id="cus_fake_1")
+
+
+async def _complete_unlisted(client, coupons, fake_billing):
+    free, request, opened = await _open(client, coupons)
+    fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
+    assert (await client.get(SIGNUPS + "/" + request["operation_id"])).json()["status"] == "pending"
+    return free, request, opened
+
+
+async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletion_lock(
+    db_engine, db_session_maker, authed_client, coupons, user, fake_billing
+):
+    _, request, opened = await _complete_unlisted(authed_client, coupons, fake_billing)
+    result, states = await _race_late_listing(
+        db_engine,
+        db_session_maker,
+        authed_client,
+        user,
+        fake_billing,
+        request,
+        opened,
+        authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel"),
+    )
+    assert result.json()["status"] == "refused"
+    assert len(states) == 1 and states[0].status == "canceled"
+
+
+async def test_late_provider_write_after_the_agreed_date_stands_behind_the_deletion_lock(
+    db_engine, db_session_maker, authed_client, coupons, user, fake_billing, fixed_clock
+):
+    free, request, opened = await _complete_unlisted(authed_client, coupons, fake_billing)
+    target = datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00"))
+    fixed_clock.advance(target - fixed_clock())
+    result, states = await _race_late_listing(
+        db_engine,
+        db_session_maker,
+        authed_client,
+        user,
+        fake_billing,
+        request,
+        opened,
+        authed_client.get(SIGNUPS + "/" + request["operation_id"]),
+    )
+    # The Checkout the User completed in time stands.
+    assert result.json()["status"] == "completed"
+    assert len(states) == 1 and states[0].status == "active"
 
 
 @pytest.mark.parametrize("after_mutation", [True, False])
