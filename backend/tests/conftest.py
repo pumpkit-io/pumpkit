@@ -92,10 +92,12 @@ from pumpkit.connected_apps.service.client_metadata import (  # noqa: E402
     FakeClientMetadataFetcher,
     get_client_metadata_fetcher,
 )
+from pumpkit.core.background import BackgroundTasks, get_background_tasks  # noqa: E402
 from pumpkit.core.classifier import FakeClassifier, get_classifier  # noqa: E402
 from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
-from pumpkit.core.db.session import get_async_db  # noqa: E402
+from pumpkit.core.db.session import get_async_db, get_session_maker  # noqa: E402
+from pumpkit.core.errors import report_background_exception  # noqa: E402
 from pumpkit.core.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.core.photos import FakePhotoFetcher, get_photo_fetcher  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
@@ -291,6 +293,39 @@ def fake_llm():
     app.dependency_overrides[get_llm] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_llm, None)
+
+
+class InlineTasks(BackgroundTasks):
+    """Runs each task to its end before the request goes on, so the next step reads its outcome."""
+
+    async def start(self, name, work) -> None:
+        try:
+            await work
+        except Exception as error:
+            report_background_exception(name, error)
+
+
+@pytest.fixture(autouse=True)
+def inline_tasks():
+    """
+    Every test runs the work a request starts in the background inside that request. Request
+    `background_tasks` to run it apart from the request, as the app does.
+    """
+    app.dependency_overrides[get_background_tasks] = InlineTasks
+    yield
+    app.dependency_overrides.pop(get_background_tasks, None)
+
+
+@pytest_asyncio.fixture
+async def background_tasks(db_session_maker):
+    """
+    The app's own registry of background tasks, which a test awaits with `wait()`. Tasks still
+    running when the test ends are cancelled, as a restart would stop them.
+    """
+    tasks = BackgroundTasks()
+    app.dependency_overrides[get_background_tasks] = lambda: tasks
+    yield tasks
+    await tasks.cancel()
 
 
 @pytest.fixture(autouse=True)
@@ -506,6 +541,7 @@ async def client(db_session_maker, user, http_app):
         return db_user
 
     app.dependency_overrides[get_async_db] = _get_db
+    app.dependency_overrides[get_session_maker] = lambda: db_session_maker
     app.dependency_overrides[get_current_user] = _get_user
     transport = ASGITransport(app=http_app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -525,6 +561,7 @@ async def new_browser(db_session_maker, http_app):
             yield session
 
     app.dependency_overrides[get_async_db] = _get_db
+    app.dependency_overrides[get_session_maker] = lambda: db_session_maker
     browsers: list[AsyncClient] = []
 
     def _new() -> AsyncClient:
@@ -537,6 +574,7 @@ async def new_browser(db_session_maker, http_app):
     for browser in browsers:
         await browser.aclose()
     app.dependency_overrides.pop(get_async_db, None)
+    app.dependency_overrides.pop(get_session_maker, None)
 
 
 @dataclass(frozen=True)

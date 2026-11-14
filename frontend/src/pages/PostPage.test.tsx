@@ -52,6 +52,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     }),
     get: vi.fn(),
     start: vi.fn(),
+    retry: vi.fn(),
     addVersion: vi.fn(),
     restoreVersion: vi.fn(),
     saveText: vi.fn(),
@@ -104,6 +105,7 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import type { Instance } from '@/lib/instance';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from '@/features/posts/text/textSaver';
+import { WRITING_POLL_MS } from '@/features/posts/usePost';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
@@ -115,6 +117,7 @@ import {
   type Plan,
   type PostDetail,
   type PostText,
+  type UnwrittenPost,
   type Version,
 } from '@/services/postService';
 import {
@@ -5850,5 +5853,162 @@ describe('A first reply on the Post page', () => {
     const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
 
     expect(dialog.getByText('Replace [link] with the real link first.')).toBeInTheDocument();
+  });
+});
+
+describe('A post before its first version', () => {
+  const PLANNED: Plan = {
+    coreIdea: 'Shipping small things beats planning big ones.',
+    takeaway: 'Ship the smallest thing that works this week.',
+    funnel: 'middle',
+    desiredAction: 'bookmark',
+    format: 'post',
+    length: 'short',
+    structure: 'few_lines',
+  };
+
+  function unwritten(writingState: UnwrittenPost['writingState']): UnwrittenPost {
+    return { id: 'post_01', brief: 'ship small things', plan: PLANNED, writingState };
+  }
+
+  async function poll() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
+    vi.mocked(postService.get).mockReset();
+    vi.mocked(postService.retry).mockReset();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+    vi.mocked(track).mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows the card being written, with its plan, and no dock or text', async () => {
+    vi.mocked(postService.get).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+
+    expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('Writing…');
+    expect(screen.getByText(/You can leave this page and come back/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Shipping small things beats planning big ones.',
+    );
+    expect(screen.getByText(/^From your brief · Built for trust/)).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Text' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Feedback' })).not.toBeInTheDocument();
+  });
+
+  it('reads the post again until its text is written, then shows it', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockResolvedValueOnce(postWith('the final text'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+    expect(screen.getByText('Writing…')).toBeInTheDocument();
+    await poll();
+
+    expect((await textCard()).getByText('the final text')).toBeInTheDocument();
+    expect(postService.get).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps polling after a read fails', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValueOnce(postWith('the final text'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+    await poll();
+
+    expect((await textCard()).getByText('the final text')).toBeInTheDocument();
+  });
+
+  it('stops reading the post once the user leaves the page', async () => {
+    vi.mocked(postService.get).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    fireEvent.click(
+      within(screen.getAllByRole('navigation', { name: 'Main' })[0]!).getByRole('link', {
+        name: 'New post',
+      }),
+    );
+    await poll();
+    await poll();
+
+    expect(postService.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a write that failed while the page was open, with Retry', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockResolvedValueOnce(unwritten('not_written'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("This post couldn't be written.");
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries the write and shows the post being written again, then its text', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(postWith('written on retry'));
+    vi.mocked(postService.retry).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Writing…')).toBeInTheDocument();
+    expect(postService.retry).toHaveBeenCalledWith('post_01');
+    expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'retry' });
+    await poll();
+    expect((await textCard()).getByText('written on retry')).toBeInTheDocument();
+  });
+
+  it('says why a retry was refused and keeps Retry', async () => {
+    vi.mocked(postService.get).mockResolvedValue(unwritten('not_written'));
+    vi.mocked(postService.retry).mockRejectedValue(
+      apiError(409, 'This post was started before plans existed.'),
+    );
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(
+      await screen.findByText('This post was started before plans existed.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+  });
+
+  it('shows the allowance refusal when no generation is left for a retry', async () => {
+    vi.mocked(postService.get).mockResolvedValue(unwritten('not_written'));
+    vi.mocked(postService.retry).mockRejectedValue(
+      allowanceUsedUp("You've used this month's 500 generations."),
+    );
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText(/You've used this month's 500 generations/)).toBeInTheDocument();
   });
 });

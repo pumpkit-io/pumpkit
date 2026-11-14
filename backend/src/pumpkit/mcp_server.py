@@ -51,9 +51,11 @@ INSTRUCTIONS = """\
 Pumpkit writes X posts from the user's positioning and publishes them on X.
 
 - A brief says what a post is about and what the user thinks about it. Starting a post from \
-a brief plans it around the user's positioning, then makes its first version. A user with no \
-positioning can't start a post: save one with `set_positioning`, or send them to the Persona \
-page of the web app.
+a brief plans it around the user's positioning, then writes its first version in the \
+background: `get_post` says `writing_state` "writing" until it is written, and "not_written" \
+when Pumpkit couldn't write it, which the user retries from the post's page in the web app. A \
+user with no positioning can't start a post: save one with `set_positioning`, or send them to \
+the Persona page of the web app.
 - A post has one text, the text meant for X, with one text per part for a thread. It is what \
 the user sees and edits by hand in the web app, and `get_post` says whether it was `edited` \
 since the version it came from.
@@ -81,7 +83,8 @@ by hand.
 - A post goes out once, so it has at most one scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
 failed post takes feedback: a scheduled or published one doesn't.
-- Each post started and each feedback uses one generation of the user's allowance, \
+- Each post written and each feedback uses one generation of the user's allowance, none when \
+the writing fails, \
 and each X post published uses one X post, each part of a thread and each first reply \
 counting as one. Write a new version only when the user asks for one. `get_usage` says what is \
 left and when it resets.

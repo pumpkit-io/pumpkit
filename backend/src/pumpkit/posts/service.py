@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import exists, func, select
@@ -21,6 +21,7 @@ from pumpkit.posts.models import (
 from pumpkit.posts.writing.planning import PlannedBrief
 from pumpkit.posts.writing.starting_text import StartingText
 from pumpkit.posts.writing.versions import WrittenVersion
+from pumpkit.posts.writing_state import WRITING_TIMEOUT, is_writing
 
 
 async def get_user_post(
@@ -50,6 +51,24 @@ async def attempt_times_since(db: AsyncSession, *, user_id: str, since: datetime
         .where(Post.user_id == user_id, VersionAttempt.created_at > since)
     )
     return [as_utc(created_at) for created_at in rows.scalars()]
+
+
+async def writes_started_since(
+    db: AsyncSession, *, user_id: str, since: datetime
+) -> list[datetime]:
+    """
+    When the User's writes still unrecorded started after `since`: each becomes an attempt once
+    it ends, and stops counting here then.
+    """
+    rows = await db.execute(
+        select(Post.writing_since).where(Post.user_id == user_id, Post.writing_since > since)
+    )
+    return [as_utc(started) for started in rows.scalars() if started is not None]
+
+
+async def count_writes_in_flight(db: AsyncSession, *, user_id: str, now: datetime) -> int:
+    """The User's writes started within the timeout, each charged a Generation if it succeeds."""
+    return len(await writes_started_since(db, user_id=user_id, since=now - WRITING_TIMEOUT))
 
 
 async def count_versions_between(
@@ -102,11 +121,15 @@ async def store_planned_brief(
 
 
 async def create_post(db: AsyncSession, *, user_id: str, idea: Idea, now: datetime) -> Post:
-    """A Post of `user_id`, who must be the User of the Idea's Brief. Flushes."""
+    """
+    A Post of `user_id`, who must be the User of the Idea's Brief, in its writing state until its
+    first Version is recorded. Flushes.
+    """
     post = Post(
         user_id=user_id,
         idea=idea,
         created_at=now,
+        writing_since=now,
         # Set empty so the collection never loads lazily, which an async session can't do.
         text_media=[],
     )
@@ -174,10 +197,6 @@ def set_text_from_version(post: Post, version: VersionAttempt) -> None:
     media.move_dropped_parts_media(post)
 
 
-# Longer than both model calls can take, so only a write whose request died holds the Text past it.
-WRITING_TIMEOUT = timedelta(minutes=30)
-
-
 class VersionBeingWritten(ConflictError):
     pass
 
@@ -187,7 +206,7 @@ def check_not_writing(post: Post, *, now: datetime) -> None:
     Refuses while Feedback's Version is being written, since the Version replaces the Text: an
     edit, a restore or other Feedback made meanwhile would be lost.
     """
-    if post.writing_since is not None and now - as_utc(post.writing_since) < WRITING_TIMEOUT:
+    if is_writing(post, now=now):
         raise VersionBeingWritten(
             "Pumpkit is writing a new version of this post. Try again once it's written."
         )

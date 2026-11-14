@@ -29,7 +29,13 @@ A Post that Feedback is rewriting keeps its status while the next Version is wri
 
 ## The timeout rule
 
-The task lives in the backend process and nothing else records that it is running, so a restart loses the writes in flight. Pumpkit therefore treats a Post whose writing state is older than a timeout as one it couldn't write, and shows it with Retry. Retry reuses the Idea's Plan and counts toward the hourly attempt limit again. #479 sets the timeout.
+The task lives in the backend process and nothing else records that it is running, so a restart loses the writes in flight. Pumpkit therefore treats a Post whose writing state is older than a timeout as one it couldn't write, and shows it with Retry. Retry reuses the Idea's Plan and counts toward the hourly attempt limit again.
+
+The timeout is 15 minutes (`WRITING_TIMEOUT`), for the first Version and for Feedback alike. A write is three steps whose model calls each time out at 240 seconds once they hold a slot under the in-flight cap, plus the wait for a slot; real writes take about 40 seconds. A write that ends after its Post was retried records nothing, so a Post never gets two first Versions or two charges.
+
+This holds because the backend runs as one process: `backend/start.sh` starts one uvicorn worker, and the tasks and the in-flight cap live in that process. Running several workers or replicas would keep every write working, since each task records its own outcome in the database, but each process would have its own cap on model calls in flight.
+
+Writes in flight count toward the hourly attempt limit from when they started, and each holds one Generation until it ends, so a User can't start more writes than they have Generations left.
 
 ## Consequences
 

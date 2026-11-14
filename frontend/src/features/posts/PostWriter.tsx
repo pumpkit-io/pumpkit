@@ -13,14 +13,15 @@ import { useUsage } from '@/features/billing/useUsage';
 import { isRefusal, useWritingFailure } from './useWritingFailure';
 
 /**
- * Starts a Post from a Brief and goes to its page once the first Version is written. On a
- * failure it stays, with the Brief kept, so trying again is one click.
+ * Starts a Post from a Brief and goes to its page once the Brief is planned, where the first
+ * Version appears when it is written. On a failure it stays, with the Brief kept, so trying again
+ * is one click.
  */
 function useStartPost() {
   const navigate = useNavigate();
   const [isWriting, setIsWriting] = useState(false);
   const { error, notice, allowanceUsedUp, fail, clear } = useWritingFailure();
-  // A User who leaves New post while it writes is not pulled back: the Post is kept under Posts.
+  // A User who leaves New post while the Brief is planned is not pulled back to the Post.
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -40,7 +41,7 @@ function useStartPost() {
         if (mounted.current) navigate(`/posts/${post.id}`);
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
-        fail(e, "Couldn't write the post. Try again.");
+        fail(e, "Couldn't plan the post. Try again.");
       } finally {
         if (mounted.current) setIsWriting(false);
       }
@@ -65,7 +66,7 @@ export function PostWriter() {
   const shownKey = useRef(key);
 
   // New post navigates to /new even from /new, so a new location empties the composer, unless
-  // it is writing: then the Brief stays until the Post's page opens.
+  // it is planning: then the Brief stays until the Post's page opens.
   useEffect(() => {
     if (shownKey.current === key) return;
     shownKey.current = key;
@@ -110,7 +111,7 @@ export function PostWriter() {
       {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}
       {isWriting && (
         <p role="status" className="font-sans text-[13px] text-muted-foreground">
-          Writing your post. This takes a minute or two.
+          Reading your brief…
         </p>
       )}
       {error && <ErrorBanner message={error} onRetry={typed ? send : undefined} />}

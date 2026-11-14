@@ -16,7 +16,7 @@ from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import PLAN, start_thread
+from tests.posts.writing_replies import PLAN, start_thread, written_post
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -43,9 +43,7 @@ async def with_author(client, subscribed, fake_x_reader, connect_x) -> None:
 async def post(client, with_author, fake_llm, fixed_clock) -> dict:
     """A Post written through the API, with one Version."""
     fake_llm.replies = [{"post": "Version one."}]
-    started = await client.post(POSTS, json={"brief": "ship small things"})
-    assert started.status_code == 201, started.text
-    return started.json()
+    return await written_post(client, await client.post(POSTS, json={"brief": "ship small things"}))
 
 
 async def _schedule(client, post_id: str, **when) -> dict:
@@ -82,6 +80,7 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
                 "created_at": "2026-10-10T12:00:30Z",
             }
         ],
+        "writing_state": None,
         "status": "draft",
         "scheduled_post": None,
     }
@@ -231,6 +230,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
                 "created_at": "2026-10-10T12:00:30Z",
             }
         ],
+        "writing_state": None,
         "status": "failed",
         "scheduled_post": failed,
     }

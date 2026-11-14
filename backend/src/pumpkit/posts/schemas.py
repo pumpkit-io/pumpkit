@@ -3,11 +3,13 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from pumpkit.core.text import drop_unstorable
 from pumpkit.posts.formats import Format
 from pumpkit.posts.media_files import cleaned_alt_text
 from pumpkit.posts.models import MediaKind
 from pumpkit.posts.plans import DesiredAction, Funnel, Length, Structure
 from pumpkit.posts.writing.constants import BRIEF_MAX_CHARS
+from pumpkit.posts.writing_state import WritingState
 
 # Per caller, for the routes and MCP tools that write a Version.
 WRITE_RATE = "20/minute"
@@ -24,7 +26,7 @@ class PostStartRequest(BaseModel):
     @field_validator("brief")
     @classmethod
     def _strip(cls, value: str) -> str:
-        stripped = value.strip()
+        stripped = drop_unstorable(value).strip()
         if not stripped:
             raise ValueError("Write a brief first.")
         return stripped
@@ -127,3 +129,5 @@ class PostResponse(BaseModel):
     # None for a Post written before Briefs were planned.
     plan: Optional[PlanResponse]
     versions: list[VersionResponse]
+    # "writing" while its first Version is written in the background, then None.
+    writing_state: Optional[WritingState]

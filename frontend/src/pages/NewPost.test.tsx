@@ -89,7 +89,7 @@ import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { positioningService } from '@/services/positioningService';
-import { postService, type PostDetail } from '@/services/postService';
+import { postService, type PostDetail, type UnwrittenPost } from '@/services/postService';
 import { usageService } from '@/services/usageService';
 import { xConnectionService } from '@/services/xConnectionService';
 import {
@@ -157,6 +157,14 @@ function postWith(final: string): PostDetail {
 }
 
 /** A Subscribed User with one Inspiration author, ready to write. */
+/** What starting a Post answers: the Post, its first Version being written. */
+const STARTED: UnwrittenPost = {
+  id: 'post_01',
+  brief: 'ship small things',
+  plan: null,
+  writingState: 'writing',
+};
+
 async function readyToWrite() {
   vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
   vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
@@ -367,7 +375,7 @@ describe('New post', () => {
 
     it('lets a User with no Inspiration author write, since the planner chooses a single post or a thread', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
+      vi.mocked(postService.start).mockResolvedValue(STARTED);
       renderNewPost();
 
       const area = await writer();
@@ -447,8 +455,8 @@ describe('New post', () => {
       expect(postService.start).not.toHaveBeenCalled();
     });
 
-    it("writes the first Version, locking the composer while it waits, then opens the Post's page", async () => {
-      let answer: (post: PostDetail) => void = () => {};
+    it("plans the Brief, locking the composer while it waits, then opens the Post's page", async () => {
+      let answer: (post: UnwrittenPost) => void = () => {};
       vi.mocked(postService.start).mockReturnValue(new Promise((resolve) => (answer = resolve)));
       const area = await readyToWrite();
 
@@ -457,13 +465,11 @@ describe('New post', () => {
       expect(area.getByLabelText('Brief')).toBeDisabled();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
       expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
-      expect(area.getByRole('status')).toHaveTextContent(
-        'Writing your post. This takes a minute or two.',
-      );
+      expect(area.getByRole('status')).toHaveTextContent('Reading your brief…');
       expect(postService.start).toHaveBeenCalledWith('ship small things');
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'brief' });
 
-      answer(postWith('the final text'));
+      answer(STARTED);
 
       await waitFor(() =>
         expect(screen.getByRole('status', { name: 'Current path' })).toHaveTextContent(
@@ -493,7 +499,7 @@ describe('New post', () => {
     it('shows a failure, keeps the Brief and retries it as a new Post', async () => {
       vi.mocked(postService.start)
         .mockRejectedValueOnce(apiError(502, 'Writing the post failed. Please try again.'))
-        .mockResolvedValueOnce(postWith('the final text'));
+        .mockResolvedValueOnce(STARTED);
       const area = await readyToWrite();
 
       await writeBrief(area, 'ship small things');

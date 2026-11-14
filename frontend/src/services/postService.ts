@@ -91,11 +91,29 @@ export interface Plan {
   structure: string;
 }
 
+/**
+ * Whether Pumpkit is writing a Post's first Version, or couldn't write it and offers Retry
+ * (ADR 0026). A write that outlives the backend's timeout reads as `not_written`.
+ */
+export type WritingState = 'writing' | 'not_written';
+
+/** A Post with no Text yet: no Draft, no status, only its Brief, Plan and writing state. */
+export interface UnwrittenPost {
+  id: string;
+  brief: string;
+  plan: Plan | null;
+  writingState: WritingState;
+}
+
+export function isUnwritten(post: PostDetail | UnwrittenPost): post is UnwrittenPost {
+  return 'writingState' in post;
+}
+
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
   /** Null for a Post written before Briefs were planned. */
   plan: Plan | null;
-  /** Null only for a Post whose first Version failed. */
+  /** Null only for a Post whose first Version was never written. */
   text: PostText | null;
   status: PostStatus;
   /** Null while the Post is a Draft. */
@@ -213,6 +231,11 @@ interface PostApi {
   versions: VersionApi[];
 }
 
+interface StartedPostApi extends PostApi {
+  plan: PlanApi | null;
+  writing_state: WritingState | null;
+}
+
 interface PostTextApi {
   format: Format;
   parts: (PartApi & { media: MediaApi[] })[];
@@ -234,7 +257,9 @@ interface PlanApi {
 interface PostDetailApi extends PostApi {
   plan: PlanApi | null;
   text: PostTextApi | null;
-  status: PostStatus;
+  writing_state: WritingState | null;
+  /** Null until the first Version is written. */
+  status: PostStatus | null;
   scheduled_post: ScheduledPostApi | null;
 }
 
@@ -283,6 +308,18 @@ export function textOf(version: Version): PostText {
   };
 }
 
+function unwritten(post: UnwrittenPost): UnwrittenPost {
+  return { id: post.id, brief: post.brief, plan: post.plan, writingState: post.writingState };
+}
+
+const startedPost = (data: StartedPostApi): UnwrittenPost =>
+  unwritten({
+    id: data.id,
+    brief: data.brief,
+    plan: data.plan ? toPlan(data.plan) : null,
+    writingState: data.writing_state ?? 'writing',
+  });
+
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */
 export const BRIEF_MAX_CHARS = 200_000;
 /** The backend refuses longer Feedback; the UI shows a counter as it gets close. */
@@ -310,13 +347,19 @@ export const postService = {
       nextOffset: data.next_offset,
     };
   },
-  /** Open to a User who isn't Subscribed, so their history stays readable. */
-  get: async (postId: string): Promise<PostDetail> => {
+  /**
+   * The Post as its page shows it, or as an `UnwrittenPost` until its first Version is written.
+   * Open to a User who isn't Subscribed, so their history stays readable.
+   */
+  get: async (postId: string): Promise<PostDetail | UnwrittenPost> => {
     const { data } = await apiService.get<PostDetailApi>(`/posts/${encodeURIComponent(postId)}`);
+    const plan = data.plan ? toPlan(data.plan) : null;
+    if (data.status === null)
+      return unwritten({ ...data, plan, writingState: data.writing_state ?? 'not_written' });
     return {
       id: data.id,
       brief: data.brief,
-      plan: data.plan ? toPlan(data.plan) : null,
+      plan,
       text: data.text ? toText(data.text) : null,
       versions: data.versions.map(toVersion),
       status: data.status,
@@ -324,10 +367,20 @@ export const postService = {
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
     };
   },
-  /** Plans the Brief, which chooses the Format, and writes the first Version before answering. */
-  start: async (brief: string): Promise<Post> => {
-    const { data } = await apiService.post<PostApi>('/posts', { brief });
-    return { id: data.id, brief: data.brief, versions: data.versions.map(toVersion) };
+  /**
+   * Plans the Brief, which chooses the Format, and answers with the Post while its first Version
+   * is written in the background.
+   */
+  start: async (brief: string): Promise<UnwrittenPost> => {
+    const { data } = await apiService.post<StartedPostApi>('/posts', { brief });
+    return startedPost(data);
+  },
+  /** Writes the first Version of a Post Pumpkit couldn't write again, from the same Plan. */
+  retry: async (postId: string): Promise<UnwrittenPost> => {
+    const { data } = await apiService.post<StartedPostApi>(
+      `/posts/${encodeURIComponent(postId)}/retry`,
+    );
+    return startedPost(data);
   },
   /**
    * Writes the next Version from Feedback on the Text before answering, which can take a minute

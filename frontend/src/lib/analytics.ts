@@ -154,7 +154,7 @@ export const EVENTS = {
   },
   post_version_requested: {
     description:
-      'New post (brief) or the Post page (feedback): asked for a Version. Props: kind (brief | feedback).',
+      "New post (brief) or the Post page (feedback, or retry of a first Version Pumpkit couldn't write): asked for a Version. Props: kind (brief | feedback | retry).",
   },
   post_version_failed: {
     description:

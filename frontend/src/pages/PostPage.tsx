@@ -29,6 +29,9 @@ import { useCreateFromText } from '@/features/posts/postTo/senders';
 import { cardParts, copiedText, type ShownPart } from '@/features/posts/shownText';
 import type { TextController, TextSnapshot } from '@/features/posts/text/textController';
 import { TextEditor } from '@/features/posts/TextEditor';
+import { UnwrittenPostCard } from '@/features/posts/UnwrittenPostCard';
+import { Notice } from '@/components/Notice';
+import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { X_POST_MAX_CHARS } from '@/lib/xLength';
 import { usePost } from '@/features/posts/usePost';
 import { Topbar } from '@/features/topbar/Topbar';
@@ -395,6 +398,8 @@ export function PostPage() {
   const {
     load,
     reload,
+    retry,
+    retrying,
     setScheduledPost,
     gone,
     text,
@@ -417,6 +422,17 @@ export function PostPage() {
         onScheduledPost={setScheduledPost}
         onGone={gone}
       />
+    );
+  }
+  if (load.kind === 'unwritten') {
+    const { post } = load;
+    return (
+      <Page title={postTitle(post.plan?.coreIdea ?? post.brief)}>
+        <UnwrittenPostCard post={post} retrying={retrying} onRetry={() => void retry()} />
+        {error && <ErrorBanner message={error} />}
+        {notice && <Notice message={notice} />}
+        {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
+      </Page>
     );
   }
   if (load.kind === 'notFound') {

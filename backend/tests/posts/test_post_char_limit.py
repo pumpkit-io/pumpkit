@@ -10,7 +10,7 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import start_thread
+from tests.posts.writing_replies import start_thread, written_post
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -67,8 +67,8 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
     fake_llm.calls.clear()
     thread = await start_thread(client, fake_llm, ["one", "two"], brief="ship")
 
-    assert _limits(post.json()["versions"][0]) == [X_POST_MAX_CHARS]
-    assert _limits(thread.json()["versions"][0]) == [X_POST_MAX_CHARS, X_POST_MAX_CHARS]
+    assert _limits((await written_post(client, post))["versions"][0]) == [X_POST_MAX_CHARS]
+    assert _limits((await written_post(client, thread))["versions"][0]) == [X_POST_MAX_CHARS] * 2
     assert _thread_limits(fake_llm) == [X_POST_MAX_CHARS] * 7
 
 
@@ -91,8 +91,8 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
     fake_llm.calls.clear()
     thread = await start_thread(client, fake_llm, ["one", "two"], brief="ship")
 
-    assert _limits(post.json()["versions"][0]) == [char_limit]
-    assert _limits(thread.json()["versions"][0]) == [char_limit, char_limit]
+    assert _limits((await written_post(client, post))["versions"][0]) == [char_limit]
+    assert _limits((await written_post(client, thread))["versions"][0]) == [char_limit] * 2
     assert _thread_limits(fake_llm) == [char_limit] * 7
 
 

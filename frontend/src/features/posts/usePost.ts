@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
-import { postService, type Format, type PostDetail } from '@/services/postService';
+import {
+  isUnwritten,
+  postService,
+  type Format,
+  type PostDetail,
+  type UnwrittenPost,
+} from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { statusFrom } from './postStatus';
 import { browserClock } from './text/clock';
@@ -11,10 +17,13 @@ import { useWritingFailure } from './useWritingFailure';
 
 /** How long "Newer rewrites are in History" stays in the origin line. */
 export const REWRITES_DROPPED_MS = 4_000;
+/** How often the page reads a Post again while its first Version is being written. */
+export const WRITING_POLL_MS = 3_000;
 
 export type PostLoad =
   | { kind: 'loading' }
   | { kind: 'loaded'; post: PostDetail; controller: TextController }
+  | { kind: 'unwritten'; post: UnwrittenPost }
   | { kind: 'notFound' }
   | { kind: 'failed'; message: string };
 
@@ -51,20 +60,68 @@ export function usePost(postId: string) {
     controller?.snapshot ?? noSnapshot,
   );
 
+  const show = useCallback((post: PostDetail | UnwrittenPost) => {
+    if (isUnwritten(post)) setLoad({ kind: 'unwritten', post });
+    else setLoad({ kind: 'loaded', post, controller: controllerFor(post) });
+  }, []);
+
   const reload = useCallback(async () => {
     setLoad({ kind: 'loading' });
     try {
-      const post = await postService.get(postId);
-      setLoad({ kind: 'loaded', post, controller: controllerFor(post) });
+      show(await postService.get(postId));
     } catch (e) {
       if (errorStatus(e) === 404) setLoad({ kind: 'notFound' });
       else setLoad({ kind: 'failed', message: errorMessage(e, "Couldn't load the post.") });
     }
-  }, [postId]);
+  }, [postId, show]);
 
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  // The write runs on the server whether or not the page is open, so leaving only stops reading.
+  const writingPost = load.kind === 'unwritten' && load.post.writingState === 'writing';
+  const [polls, setPolls] = useState(0);
+  useEffect(() => {
+    if (!writingPost) return;
+    let stopped = false;
+    const timer = setTimeout(() => {
+      postService.get(postId).then(
+        (post) => {
+          if (stopped) return;
+          if (isUnwritten(post) && post.writingState === 'writing') {
+            setPolls((n) => n + 1);
+            return;
+          }
+          if (isUnwritten(post)) track('post_version_failed', { kind: 'brief' });
+          show(post);
+        },
+        // A read that fails is tried again at the next poll.
+        () => {
+          if (!stopped) setPolls((n) => n + 1);
+        },
+      );
+    }, WRITING_POLL_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [writingPost, polls, postId, show]);
+
+  const [retrying, setRetrying] = useState(false);
+  /** Writes the first Version again, after Pumpkit couldn't write it. */
+  const retry = useCallback(async () => {
+    clear();
+    setRetrying(true);
+    track('post_version_requested', { kind: 'retry' });
+    try {
+      show(await postService.retry(postId));
+    } catch (e) {
+      fail(e, "Couldn't start writing the post again. Try again.");
+    } finally {
+      setRetrying(false);
+    }
+  }, [postId, show, clear, fail]);
 
   useEffect(() => (controller ? () => controller.dispose() : undefined), [controller]);
 
@@ -123,6 +180,8 @@ export function usePost(postId: string) {
   return {
     load,
     reload,
+    retry,
+    retrying,
     setScheduledPost,
     gone,
     text,

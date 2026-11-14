@@ -15,6 +15,7 @@ import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.billing.allowance import Draw
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
+from pumpkit.core.text import drop_unstorable
 from pumpkit.core.time import as_utc
 from pumpkit.posts import media as media_service
 from pumpkit.posts import service
@@ -33,6 +34,7 @@ from pumpkit.posts.writing.post_writing import revision_inputs
 from pumpkit.posts.writing.prompts.post import PostInputs
 from pumpkit.posts.writing.starting_text import StartingText, starting_text
 from pumpkit.posts.writing.versions import EarlierVersion
+from pumpkit.posts.writing_state import is_writing
 from pumpkit.x_connection.x_length import x_post_max_chars, x_weighted_length
 
 # Starting a Post and giving Feedback share one budget per User, failed attempts included,
@@ -54,9 +56,10 @@ def next_attempt_at(attempted_at: list[datetime]) -> Optional[datetime]:
 
 
 async def check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) -> None:
-    attempted_at = await service.attempt_times_since(
-        db, user_id=user_id, since=now - VERSION_ATTEMPT_WINDOW
-    )
+    """Writes still in flight count from when they started, lost ones included."""
+    since = now - VERSION_ATTEMPT_WINDOW
+    attempted_at = await service.attempt_times_since(db, user_id=user_id, since=since)
+    attempted_at += await service.writes_started_since(db, user_id=user_id, since=since)
     retry_at = next_attempt_at(attempted_at)
     if retry_at is not None:
         raise RetryLaterError(
@@ -80,12 +83,15 @@ async def _generation_draw(db: AsyncSession, *, user_id: str, now: datetime) -> 
 async def check_generation_left(db: AsyncSession, *, user_id: str, now: datetime) -> None:
     """
     Room for one more Generation in the User's Allowance or, once it is used up, their Top-ups,
-    checked before the model calls. A Version recorded after concurrent requests filled both is
-    kept, over the limit.
+    checked before the model calls. Writes in flight hold one each. A Version recorded after
+    concurrent requests filled both is kept, over the limit.
     """
     draw = await _generation_draw(db, user_id=user_id, now=now)
     if draw is not None:
-        await billing_service.check_room_with_top_ups(db, user_id=user_id, draw=draw)
+        in_flight = await service.count_writes_in_flight(db, user_id=user_id, now=now)
+        await billing_service.check_room_with_top_ups(
+            db, user_id=user_id, draw=replace(draw, used=draw.used + in_flight)
+        )
 
 
 async def charge_generation(
@@ -122,7 +128,7 @@ async def record_failed_attempt(
         sequence=sequence,
         feedback=feedback,
         format=format,
-        error=f"{type(error).__name__}: {error}",
+        error=drop_unstorable(f"{type(error).__name__}: {error}"),
         now=now,
     )
 
@@ -280,6 +286,10 @@ async def prepare_next_version(
     versions = versions_of(post)
     text = post_text(post)
     if not versions or text is None:
+        if is_writing(post, now=now):
+            raise ConflictError(
+                "Pumpkit is still writing this post's first version. Give feedback once it's written."
+            )
         raise ConflictError("This post has no version to give feedback on. Start a new post.")
     char_limit = await char_limit_for(db, user_id=user.id)
     inputs = revision_inputs(
