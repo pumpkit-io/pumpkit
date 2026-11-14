@@ -84,6 +84,12 @@ function periodEnd(start: number, price: StripeObject): number {
   return start + INTERVAL_DAYS[interval] * (count ?? 1) * DAY;
 }
 
+function trialEndOf(trialEnd: unknown, days: unknown): number | null {
+  if (trialEnd !== undefined) return Number(trialEnd);
+  if (days !== undefined) return now() + Number(days) * DAY;
+  return null;
+}
+
 function newSubscription(
   customer: string,
   price: StripeObject,
@@ -439,12 +445,7 @@ export function pumpkitStripe(target: WebhookTarget) {
           livemode: false,
           // Kept for completing the session; Stripe's own sessions expand line items instead.
           pumpkit_line_item: { price: item.price, quantity: Number(item.quantity ?? 1) },
-          pumpkit_trial_end:
-            trialEnd !== undefined
-              ? Number(trialEnd)
-              : days === undefined
-                ? null
-                : now() + Number(days) * DAY,
+          pumpkit_trial_end: trialEndOf(trialEnd, days),
           pumpkit_subscription_metadata: params.subscription_data?.metadata ?? {},
         };
         // The browser opens it, so it uses the advertised route, not the address the backend called.

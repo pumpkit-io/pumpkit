@@ -753,7 +753,7 @@ def _setup_checkout(intent_status: str) -> dict:
             False,
         ),
         ({"mode": "payment", "status": "expired", "payment_status": "unpaid"}, False),
-        # Paid signup in 0.11 and earlier left setup Checkouts, finished by their SetupIntent.
+        # The old paid signup flow left setup Checkouts, finished by their SetupIntent.
         (_setup_checkout("succeeded"), False),
         (_setup_checkout("canceled"), False),
         (_setup_checkout("requires_action"), True),

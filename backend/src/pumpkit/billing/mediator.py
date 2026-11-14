@@ -554,8 +554,9 @@ _TOP_UP_NUDGES = {
 
 def _is_subscription_nudge(event: WebhookEvent) -> bool:
     """Whether the event says a customer's Subscriptions may have changed."""
-    return event.type.startswith("customer.subscription.") or (
-        event.type == "checkout.session.completed"
+    return (
+        event.type.startswith("customer.subscription.")
+        or event.type == "checkout.session.completed"
     )
 
 
