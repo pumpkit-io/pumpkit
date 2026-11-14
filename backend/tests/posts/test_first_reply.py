@@ -14,6 +14,7 @@ from tests.posts.writing_replies import (
     MERGED_SKETCH,
     REVISED_POST,
     REVISED_THREAD,
+    SKETCHED_POST,
     merged,
     revised,
     written_post,
@@ -31,6 +32,36 @@ async def ready(client, subscribed):
 
 def _texts(parts: list[dict]) -> list[str]:
     return [part["text"] for part in parts]
+
+
+def _system_prompt(fake_llm, schema: type) -> str:
+    [call, *_] = [c for c in fake_llm.calls if c.response_model is schema]
+    return call.messages[0]["content"][0]["text"]
+
+
+HUMANIZER_KEEPS_THE_LINK = (
+    "- The first reply: keep a link or a [link] placeholder in it exactly as it is: I replace "
+    "[link] with the link before posting.\n"
+)
+HUMANIZER_RETURNS_THE_LINK = (
+    "- first_reply: the rewritten first reply, if one was given with the post, with its link or "
+    "[link] exactly as it is. null otherwise.\n"
+)
+
+
+async def test_every_call_writing_a_single_post_keeps_a_first_replys_link(client, ready, fake_llm):
+    await _written(client, fake_llm, "Try it: [link]", "Try it: [link]")
+
+    for schema in (SKETCHED_POST, MERGED_SKETCH):
+        assert (
+            "- first_reply: the text of my first reply under the post, only when the CTA needs an "
+            "external link or a follow-up there. When the CTA needs a link, the first reply holds "
+            "it: the link the raw input gives, or [link] where it goes if it gives none. null in "
+            "every other case."
+        ) in _system_prompt(fake_llm, schema)
+    humanizer = _system_prompt(fake_llm, HUMANIZED_POST)
+    assert HUMANIZER_KEEPS_THE_LINK in humanizer
+    assert HUMANIZER_RETURNS_THE_LINK in humanizer
 
 
 async def _written(client, fake_llm, merged_reply, humanized_reply) -> dict:
@@ -123,6 +154,26 @@ async def test_feedback_reads_the_first_reply_and_can_change_it(client, with_rep
     assert humanizer.messages[-1]["content"].endswith(
         "<post>\nThe post.\n</post>\n\n<first_reply>\nGet it: pumpkit.io/calc\n</first_reply>"
     )
+
+
+async def test_every_call_revising_a_single_post_keeps_a_first_replys_link(
+    client, with_reply, fake_llm
+):
+    fake_llm.standing[REVISED_POST] = revised("The post.", first_reply="Try it: [link]")
+    fake_llm.replies = [{"post": "The post.", "first_reply": "Try it: [link]"}]
+
+    await written_version(client, with_reply, "Shorter")
+
+    assert (
+        "- first_reply: the text of my first reply under the post, only when the CTA needs an "
+        "external link or a follow-up there. Keep the one the latest version has unless my "
+        "feedback changes it. When the CTA needs a link, the first reply holds it: the link the "
+        "raw input or my feedback gives, or [link] where it goes if they give none. null in every "
+        "other case."
+    ) in _system_prompt(fake_llm, REVISED_POST)
+    humanizer = _system_prompt(fake_llm, HUMANIZED_POST)
+    assert HUMANIZER_KEEPS_THE_LINK in humanizer
+    assert HUMANIZER_RETURNS_THE_LINK in humanizer
 
 
 async def test_feedback_can_remove_the_first_reply(client, with_reply, fake_llm):
