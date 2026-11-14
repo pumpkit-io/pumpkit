@@ -58,6 +58,10 @@ class CheckoutSession:
     url: str
 
 
+# Stripe refuses a Checkout whose trial ends less than 48 hours after the Checkout opens.
+TRIAL_END_FLOOR = timedelta(hours=48)
+
+
 @dataclass(frozen=True)
 class PaidSignupCheckout:
     """
@@ -637,7 +641,7 @@ class StripeBillingGateway:
             sessions = self._client.v1.checkout.sessions.list(
                 {
                     "customer": customer_id,
-                    "expand": ["data.payment_intent"],
+                    "expand": ["data.payment_intent", "data.setup_intent"],
                     "limit": 100,
                 }
             )
@@ -645,6 +649,11 @@ class StripeBillingGateway:
                 state = session.to_dict()
                 if state.get("status") == "expired":
                     continue
+                # Paid signup in 0.11 and earlier left setup Checkouts, finished by their SetupIntent.
+                if state.get("mode") == "setup" and state.get("status") == "complete":
+                    setup = state.get("setup_intent")
+                    if isinstance(setup, dict) and setup.get("status") in {"succeeded", "canceled"}:
+                        continue
                 intent = state.get("payment_intent")
                 if (
                     state.get("status") == "complete"
@@ -952,6 +961,13 @@ class TopUpCheckoutCall:
     user_id: str
 
 
+@dataclass(frozen=True)
+class _PaidSignupTerms:
+    price_id: str
+    first_payment_at: datetime
+    expires_at: datetime
+
+
 @dataclass
 class FakeBillingGateway:
     """
@@ -1050,10 +1066,7 @@ class FakeBillingGateway:
         return CheckoutSession(id=session_id, url=self.checkout_url)
 
     paid_signup_checkouts: dict[str, PaidSignupCheckout] = field(default_factory=dict)
-    # Each paid signup Checkout's price, trial end and expiry.
-    _paid_signup_terms: dict[str, tuple[str, datetime, datetime]] = field(
-        default_factory=dict, init=False
-    )
+    _paid_signup_terms: dict[str, _PaidSignupTerms] = field(default_factory=dict, init=False)
     # Completed paid signup Checkouts whose Subscription reads don't list yet, with when they completed.
     _unlisted_paid_signups: dict[str, datetime] = field(default_factory=dict, init=False)
     paid_signups_created: list[str] = field(default_factory=list)
@@ -1074,7 +1087,7 @@ class FakeBillingGateway:
         ]
         if previous:
             return previous[0]
-        if first_payment_at < self.clock() + timedelta(hours=48):
+        if first_payment_at < self.clock() + TRIAL_END_FLOOR:
             raise BillingProviderError("Stripe refuses a trial end less than 48 hours away")
         checkout = PaidSignupCheckout(
             id=f"cs_signup_{len(self.paid_signup_checkouts) + 1}",
@@ -1084,7 +1097,9 @@ class FakeBillingGateway:
             url=self.checkout_url,
         )
         self.paid_signup_checkouts[checkout.id] = checkout
-        self._paid_signup_terms[checkout.id] = (price_id, first_payment_at, expires_at)
+        self._paid_signup_terms[checkout.id] = _PaidSignupTerms(
+            price_id, first_payment_at, expires_at
+        )
         self._maybe_fail("after_create_paid_signup_checkout")
         return checkout
 
@@ -1097,7 +1112,7 @@ class FakeBillingGateway:
         for checkout in list(self.paid_signup_checkouts.values()):
             if (
                 checkout.status == "open"
-                and self._paid_signup_terms[checkout.id][2] <= self.clock()
+                and self._paid_signup_terms[checkout.id].expires_at <= self.clock()
             ):
                 self.paid_signup_checkouts[checkout.id] = replace(
                     checkout, status="expired", url=None
@@ -1127,12 +1142,12 @@ class FakeBillingGateway:
 
     def list_paid_signup_subscription(self, session_id: str) -> None:
         checkout = self.paid_signup_checkouts[session_id]
-        price_id, first_payment_at, _ = self._paid_signup_terms[session_id]
+        terms = self._paid_signup_terms[session_id]
         subscription_id = self._complete_paid_signup_creation(
             checkout.customer_id,
-            price_id,
+            terms.price_id,
             checkout.operation_id,
-            first_payment_at,
+            terms.first_payment_at,
             accepted_at=self._unlisted_paid_signups.pop(session_id),
         )
         self.paid_signup_checkouts[session_id] = replace(checkout, subscription_id=subscription_id)
@@ -1148,10 +1163,11 @@ class FakeBillingGateway:
         started_paying = self.clock() >= first_payment_at
         plan = next(p for p in self.plans if p.price_id == price_id)
         self.paid_signups_created.append(operation_id)
+        subscription_id = f"sub_signup_{len(self.paid_signups_created)}"
         self.set_subscription(
             customer_id,
             SubscriptionState(
-                id=f"sub_signup_{len(self.paid_signups_created)}",
+                id=subscription_id,
                 status="active" if started_paying else "trialing",
                 price_id=price_id,
                 plan_key=plan.key,
@@ -1175,7 +1191,7 @@ class FakeBillingGateway:
                 paid_current_period=started_paying,
             ),
         )
-        return f"sub_signup_{len(self.paid_signups_created)}"
+        return subscription_id
 
     async def has_open_subscription_checkout(self, *, customer_id: str) -> bool:
         self._maybe_fail("has_open_subscription_checkout")

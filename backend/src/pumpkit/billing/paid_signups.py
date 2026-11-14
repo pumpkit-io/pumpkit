@@ -11,6 +11,7 @@ from pumpkit.auth.models import User
 from pumpkit.billing import coupon_service, service
 from pumpkit.billing.allowance import limits
 from pumpkit.billing.gateway import (
+    TRIAL_END_FLOOR,
     BillingGateway,
     BillingProviderError,
     SubscriptionState,
@@ -22,12 +23,12 @@ from pumpkit.core.config import BILLING_PAGE, settings
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError
 from pumpkit.core.time import Clock, as_utc
 
-# Stripe refuses a Checkout whose trial ends less than 48 hours after the Checkout opens.
-TRIAL_END_FLOOR = timedelta(hours=48)
 # Room for clock differences between Pumpkit and Stripe when the Checkout opens.
 _CLOCK_MARGIN = timedelta(minutes=5)
 # Room for reviewing and accepting an offer before its Checkout opens.
 _OFFER_MARGIN = timedelta(hours=1)
+# Creation states of a signup 0.11 sent to subscriptions.create, whose Subscription may still appear.
+_DISPATCHED_BEFORE_UPGRADE = {"uncertain", "acknowledged"}
 _TOO_SOON = "Your free access ends too soon to arrange payment now: Stripe needs at least two days. Subscribe once it ends; your free access is unchanged."
 
 
@@ -324,6 +325,15 @@ async def reconcile(
         if any(s.status not in {"canceled", "incomplete_expired"} for s in states):
             operation.detail = "Another subscription needs review. Your free access is unchanged."
             return _cancellation_response(operation, cancel=cancel)
+        target = as_utc(datetime.fromisoformat(operation.offer["first_payment_at"]))
+        if operation.creation_state in _DISPATCHED_BEFORE_UPGRADE:
+            # Stripe may still list the Subscription 0.11 asked for; the attributed branch settles it.
+            if cancel or target <= now:
+                operation.cancel_requested_at = operation.cancel_requested_at or now
+                operation.detail = "Your cancellation is not confirmed yet. Check its status again; billing changes and account deletion will be available when confirmation finishes."
+            else:
+                operation.detail = "Your subscription request is being confirmed. Its agreed plan and payment date stay unchanged."
+            return _cancellation_response(operation, cancel=cancel)
         checkouts = [
             c
             for c in await gateway.list_paid_signup_checkouts(customer_id=customer_id)
@@ -340,7 +350,6 @@ async def reconcile(
             # Only the completed Checkout starts the Subscription, which the next read finds.
             operation.detail = "Your subscription is being confirmed. Its agreed plan and payment date stay unchanged."
             return _cancellation_response(operation, cancel=cancel)
-        target = as_utc(datetime.fromisoformat(operation.offer["first_payment_at"]))
         if cancel or target <= now:
             if checkout and checkout.status == "open":
                 if not mutate:
