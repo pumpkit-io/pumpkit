@@ -130,6 +130,20 @@ class PlanResponse(BaseModel):
     structure: Structure
 
 
+class PlaceInBriefResponse(BaseModel):
+    """
+    Where a Post comes among its Brief's Posts, in the order of their Ideas: every Post counts,
+    written, being written or not written, and an Idea not written doesn't.
+    """
+
+    # From 1.
+    position: int
+    # 1 for a Post that is its Brief's only one.
+    post_count: int
+    previous_post_id: Optional[str]
+    next_post_id: Optional[str]
+
+
 class PostResponse(BaseModel):
     id: str
     brief: str

@@ -138,10 +138,38 @@ function pause(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
+/**
+ * Where a Post comes among its Brief's Posts, in the order of their Ideas: every Post counts,
+ * written, being written or not, and an Idea not written doesn't.
+ */
+export interface PlaceInBrief {
+  /** From 1. */
+  position: number;
+  postCount: number;
+  previousPostId: string | null;
+  nextPostId: string | null;
+}
+
+interface PlaceInBriefApi {
+  position: number;
+  post_count: number;
+  previous_post_id: string | null;
+  next_post_id: string | null;
+}
+
+const toPlaceInBrief = (p: PlaceInBriefApi): PlaceInBrief => ({
+  position: p.position,
+  postCount: p.post_count,
+  previousPostId: p.previous_post_id,
+  nextPostId: p.next_post_id,
+});
+
 /** A Post with no Text yet: no Draft, no status, only its Brief, Plan and writing state. */
 export interface UnwrittenPost {
   id: string;
   brief: string;
+  briefId: string;
+  placeInBrief: PlaceInBrief;
   plan: Plan | null;
   writingState: WritingState;
 }
@@ -152,6 +180,8 @@ export function isUnwritten(post: PostDetail | UnwrittenPost): post is Unwritten
 
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
+  briefId: string;
+  placeInBrief: PlaceInBrief;
   /** Null for a Post written before Briefs were planned. */
   plan: Plan | null;
   /** Never null from `get`: a Post with no Text reads as an `UnwrittenPost`. */
@@ -193,6 +223,8 @@ export interface ScheduledPostSummary {
 export interface PostListItem {
   id: string;
   brief: string;
+  briefId: string;
+  placeInBrief: PlaceInBrief;
   status: PostStatus;
   /** The Scheduled post's text when it has one, else the latest Version's. */
   parts: string[];
@@ -227,6 +259,8 @@ interface PostsPageApi {
   data: {
     id: string;
     brief: string;
+    brief_id: string;
+    place_in_brief: PlaceInBriefApi;
     status: PostStatus;
     parts: string[];
     format: Format;
@@ -300,6 +334,8 @@ export interface PlanApi {
 }
 
 interface PostDetailApi extends PostApi {
+  brief_id: string;
+  place_in_brief: PlaceInBriefApi;
   plan: PlanApi | null;
   text: PostTextApi | null;
   writing_state: WritingState | null;
@@ -354,7 +390,10 @@ export function textOf(version: Version): PostText {
   };
 }
 
-const startedPost = (data: StartedPostApi): UnwrittenPost => ({
+/** A Post just started, which the response of starting it doesn't place in its Brief. */
+export type StartedPost = Omit<UnwrittenPost, 'briefId' | 'placeInBrief'>;
+
+const startedPost = (data: StartedPostApi): StartedPost => ({
   id: data.id,
   brief: data.brief,
   plan: data.plan ? toPlan(data.plan) : null,
@@ -376,6 +415,8 @@ export const postService = {
       posts: data.data.map((p) => ({
         id: p.id,
         brief: p.brief,
+        briefId: p.brief_id,
+        placeInBrief: toPlaceInBrief(p.place_in_brief),
         status: p.status,
         parts: p.parts,
         format: p.format,
@@ -395,16 +436,19 @@ export const postService = {
   get: async (postId: string): Promise<PostDetail | UnwrittenPost> => {
     const { data } = await apiService.get<PostDetailApi>(`/posts/${encodeURIComponent(postId)}`);
     const plan = data.plan ? toPlan(data.plan) : null;
+    const place = { briefId: data.brief_id, placeInBrief: toPlaceInBrief(data.place_in_brief) };
     if (data.status === null)
       return {
         id: data.id,
         brief: data.brief,
+        ...place,
         plan,
         writingState: data.writing_state ?? 'not_written',
       };
     return {
       id: data.id,
       brief: data.brief,
+      ...place,
       plan,
       text: data.text ? toText(data.text) : null,
       versions: data.versions.map(toVersion),
@@ -416,7 +460,7 @@ export const postService = {
     };
   },
   /** Writes the first Version of a Post Pumpkit couldn't write again, from the same Plan. */
-  retry: async (postId: string): Promise<UnwrittenPost> => {
+  retry: async (postId: string): Promise<StartedPost> => {
     const { data } = await apiService.post<StartedPostApi>(
       `/posts/${encodeURIComponent(postId)}/retry`,
     );

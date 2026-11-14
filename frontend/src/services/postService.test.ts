@@ -10,6 +10,13 @@ import {
   WRITING_POLL_MS,
 } from './postService';
 
+// The second of a Brief's three Posts.
+const PLACE_API = {
+  position: 2,
+  post_count: 3,
+  previous_post_id: 'post_00',
+  next_post_id: 'post_02',
+};
 const PLAN = {
   core_idea: 'Ship small.',
   takeaway: 'Ship this week.',
@@ -65,6 +72,8 @@ describe('postService', () => {
         data: {
           id: 'post_01',
           brief: 'ship',
+          brief_id: 'brief_01',
+          place_in_brief: PLACE_API,
           plan: PLAN,
           text: null,
           versions: [],
@@ -79,6 +88,13 @@ describe('postService', () => {
       expect(post).toEqual<UnwrittenPost>({
         id: 'post_01',
         brief: 'ship',
+        briefId: 'brief_01',
+        placeInBrief: {
+          position: 2,
+          postCount: 3,
+          previousPostId: 'post_00',
+          nextPostId: 'post_02',
+        },
         plan: SHOWN_PLAN,
         writingState,
       });
@@ -90,6 +106,8 @@ describe('postService', () => {
       data: {
         id: 'post_01',
         brief: 'ship',
+        brief_id: 'brief_01',
+        place_in_brief: PLACE_API,
         text: {
           format: 'post',
           parts: [{ text: 'the final', char_count: 9, char_limit: 280, media: [] }],
@@ -150,7 +168,15 @@ describe('postService', () => {
   });
 
   it("reads a Post's Plan, and none on a Post written before Briefs were planned", async () => {
-    const read = { id: 'post_01', brief: 'ship', text: null, versions: [], status: 'draft' };
+    const read = {
+      id: 'post_01',
+      brief: 'ship',
+      brief_id: 'brief_01',
+      place_in_brief: PLACE_API,
+      text: null,
+      versions: [],
+      status: 'draft',
+    };
     const get = vi.spyOn(apiService, 'get');
     get.mockResolvedValueOnce({
       data: {
@@ -188,6 +214,8 @@ describe('postService', () => {
       data: {
         id: 'post_01',
         brief: 'ship',
+        brief_id: 'brief_01',
+        place_in_brief: PLACE_API,
         text: {
           format: 'thread',
           parts: [
@@ -248,6 +276,8 @@ describe('postService', () => {
       data: {
         id: 'post_01',
         brief: 'ship',
+        brief_id: 'brief_01',
+        place_in_brief: PLACE_API,
         text: null,
         versions: [VERSION],
         status: 'draft',
@@ -268,6 +298,8 @@ describe('postService', () => {
           {
             id: 'post_01',
             brief: 'ship',
+            brief_id: 'brief_01',
+            place_in_brief: PLACE_API,
             status: 'published',
             parts: ['Out now.'],
             format: 'post',
@@ -301,6 +333,13 @@ describe('postService', () => {
         {
           id: 'post_01',
           brief: 'ship',
+          briefId: 'brief_01',
+          placeInBrief: {
+            position: 2,
+            postCount: 3,
+            previousPostId: 'post_00',
+            nextPostId: 'post_02',
+          },
           status: 'published',
           parts: ['Out now.'],
           format: 'post',
@@ -388,6 +427,8 @@ describe('postService', () => {
         data: {
           id: 'post_01',
           brief: 'ship',
+          brief_id: 'brief_01',
+          place_in_brief: PLACE_API,
           plan: PLAN,
           text: {
             format: 'post',

@@ -267,6 +267,13 @@ async def test_a_draft_carries_its_latest_versions_text_and_no_scheduled_post(cl
     assert item == {
         "id": post_id,
         "brief": "About First take.",
+        "brief_id": item["brief_id"],
+        "place_in_brief": {
+            "position": 1,
+            "post_count": 1,
+            "previous_post_id": None,
+            "next_post_id": None,
+        },
         "status": "draft",
         "parts": ["Hook line.\nMore.", "Second part."],
         "format": "thread",

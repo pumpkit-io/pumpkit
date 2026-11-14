@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
+import { BriefNav } from '@/features/posts/BriefNav';
 import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
@@ -358,6 +359,7 @@ function LoadedPost({
   return (
     <>
       <Page title={breadcrumb} dock={dock} pinned>
+        <BriefNav briefId={post.briefId} place={post.placeInBrief} />
         <TextEditor
           parts={parts}
           texts={post.text?.parts.map((p) => p.text) ?? []}
@@ -443,7 +445,10 @@ function PostPageFor({ id }: { id: string }) {
     const { post } = load;
     return (
       <Page title={postTitle(post.plan?.coreIdea ?? post.brief)}>
-        <UnwrittenPostCard post={post} retrying={retrying} onRetry={() => void retry()} />
+        <div>
+          <BriefNav briefId={post.briefId} place={post.placeInBrief} />
+          <UnwrittenPostCard post={post} retrying={retrying} onRetry={() => void retry()} />
+        </div>
         {error && <ErrorBanner message={error} />}
         {notice && <Notice message={notice} />}
         {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}

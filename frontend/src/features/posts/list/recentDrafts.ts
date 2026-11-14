@@ -53,6 +53,8 @@ export function draftListItem(post: PostDetail): PostListItem | null {
   return {
     id: post.id,
     brief: post.brief,
+    briefId: post.briefId,
+    placeInBrief: post.placeInBrief,
     status: post.status,
     parts: latest.parts.map((p) => p.text),
     format: latest.format,

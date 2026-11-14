@@ -21,6 +21,7 @@ POSTS = "/api/v1/posts"
 BRIEFS = "/api/v1/briefs"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
+ALONE = {"position": 1, "post_count": 1, "previous_post_id": None, "next_post_id": None}
 
 
 @pytest.fixture
@@ -53,6 +54,8 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
     assert response.json() == {
         "id": post["id"],
         "brief": "ship small things",
+        "brief_id": post["brief_id"],
+        "place_in_brief": ALONE,
         "plan": PLAN,
         "text": {
             "format": "post",
@@ -206,6 +209,8 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
     assert read == {
         "id": post["id"],
         "brief": "ship small things",
+        "brief_id": post["brief_id"],
+        "place_in_brief": ALONE,
         "plan": PLAN,
         "text": {
             "format": "post",

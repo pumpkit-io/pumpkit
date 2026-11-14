@@ -132,13 +132,20 @@ export function usePost(postId: string) {
   useReadWhileWriting(writingPost, readPost, readWhileWriting, loadFailed);
 
   const [retrying, setRetrying] = useState(false);
+  const unwritten = load.kind === 'unwritten' ? load.post : null;
   /** Writes the first Version again, after Pumpkit couldn't write it. */
   const retry = useCallback(async () => {
     clear();
     setRetrying(true);
     track('post_version_requested', { kind: 'retry' });
     try {
-      show(await postService.retry(postId));
+      const started = await postService.retry(postId);
+      // Starting a write answers without the Post's place in its Brief, so it keeps the one it had.
+      show(
+        unwritten
+          ? { ...started, briefId: unwritten.briefId, placeInBrief: unwritten.placeInBrief }
+          : await postService.get(postId),
+      );
       retried.current = true;
     } catch (e) {
       // A 409 other than the allowance's may mean the Post moved on: written late, or retried elsewhere.
@@ -152,7 +159,7 @@ export function usePost(postId: string) {
     } finally {
       setRetrying(false);
     }
-  }, [postId, show, clear, fail]);
+  }, [postId, unwritten, show, clear, fail]);
 
   useEffect(() => (controller ? () => controller.dispose() : undefined), [controller]);
 

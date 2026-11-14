@@ -28,7 +28,22 @@ function shape(post: PostListItem): string {
 function rowFacts(post: PostListItem) {
   const scheduled = post.scheduledPost;
   const versions = `${post.versionCount} ${post.versionCount === 1 ? 'version' : 'versions'}`;
-  if (!scheduled) return [shape(post), versions];
+  if (!scheduled) {
+    const { position, postCount } = post.placeInBrief;
+    if (postCount < 2) return [shape(post), versions];
+    return [
+      shape(post),
+      versions,
+      <Link
+        key="brief"
+        to={`/briefs/${post.briefId}`}
+        aria-label={`${position} of ${postCount} posts from its brief`}
+        className="whitespace-nowrap rounded-sm font-medium text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {position} of {postCount}
+      </Link>,
+    ];
+  }
   const facts = [shape(post), <DestinationName key="destination" scheduledPost={scheduled} />];
   if (post.status === 'published' && scheduled.community && scheduled.shareWithFollowers) {
     facts.push('Shared with followers');

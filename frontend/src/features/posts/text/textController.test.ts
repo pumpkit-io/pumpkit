@@ -20,6 +20,8 @@ function draft(versions: Version[]): PostDetail {
   return {
     id: 'post_01',
     brief: 'ship small things',
+    briefId: 'brief_01',
+    placeInBrief: { position: 1, postCount: 1, previousPostId: null, nextPostId: null },
     plan: null,
     versions,
     text: textOf(versions[versions.length - 1]!),

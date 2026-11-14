@@ -120,6 +120,8 @@ function postWith(final: string): PostDetail {
   return {
     id: 'post_01',
     brief: 'ship small things',
+    briefId: 'brief_01',
+    placeInBrief: { position: 1, postCount: 1, previousPostId: null, nextPostId: null },
     plan: null,
     text: {
       format: 'post',
