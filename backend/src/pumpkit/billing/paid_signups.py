@@ -384,7 +384,7 @@ async def reconcile(
             try:
                 await require_provider_ready(gateway, user=user)
             except ConflictError:
-                # A setup Checkout from the old paid signup flow may still be open; it expires within a day.
+                # Another open Checkout or unsettled payment blocks a new one; the signup waits until it clears.
                 operation.detail = "Another checkout or payment is still open. Check your signup again later; your free access is unchanged."
                 return _cancellation_response(operation, cancel=cancel)
             expiry = as_utc(datetime.fromisoformat(operation.offer["checkout_expires_at"]))
@@ -416,8 +416,13 @@ async def reconcile(
             return _cancellation_response(operation, cancel=cancel, url=checkout.url)
         operation.detail = "Your checkout is being confirmed. Your free access is unchanged."
         return _cancellation_response(operation, cancel=cancel)
-    except BillingProviderError:
-        logger.error("Paid signup %s could not reach Stripe", operation.id, exc_info=True)
+    except BillingProviderError as error:
+        logger.error(
+            "Stripe failed or refused paid signup %s: %s",
+            operation.id,
+            error.__cause__ or error,
+            exc_info=True,
+        )
         operation.detail = (
             "Your cancellation is being confirmed. Check signup again; your paid and free access stay unchanged."
             if operation.cancel_requested_at is not None
