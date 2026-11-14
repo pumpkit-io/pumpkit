@@ -21,14 +21,13 @@ from pumpkit.billing.schemas import PaidSignupPreviewResponse, PaidSignupRequest
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import BILLING_PAGE, settings
 from pumpkit.core.errors import ConflictError, NotFoundError, RefusedError
+from pumpkit.core.logging import logger
 from pumpkit.core.time import Clock, as_utc
 
 # Room for clock differences between Pumpkit and Stripe when the Checkout opens.
 _CLOCK_MARGIN = timedelta(minutes=5)
 # Room for reviewing and accepting an offer before its Checkout opens.
 _OFFER_MARGIN = timedelta(hours=1)
-# Creation states of a signup 0.11 sent to subscriptions.create, whose Subscription may still appear.
-_DISPATCHED_BEFORE_UPGRADE = {"uncertain", "acknowledged"}
 _TOO_SOON = "Your free access ends too soon to arrange payment now: Stripe needs at least two days. Subscribe once it ends; your free access is unchanged."
 
 
@@ -268,7 +267,6 @@ async def reconcile(
                     "The provider plan differs from the accepted offer. Contact support."
                 )
                 return _cancellation_response(operation, cancel=cancel)
-            operation.creation_state = "confirmed"
             if cancel or state.status in {"canceled", "incomplete_expired"}:
                 await _preserve_settled_paid_coverage(
                     db,
@@ -326,14 +324,6 @@ async def reconcile(
             operation.detail = "Another subscription needs review. Your free access is unchanged."
             return _cancellation_response(operation, cancel=cancel)
         target = as_utc(datetime.fromisoformat(operation.offer["first_payment_at"]))
-        if operation.creation_state in _DISPATCHED_BEFORE_UPGRADE:
-            # Stripe may still list the Subscription 0.11 asked for; the attributed branch settles it.
-            if cancel or target <= now:
-                operation.cancel_requested_at = operation.cancel_requested_at or now
-                operation.detail = "Your cancellation is not confirmed yet. Check its status again; billing changes and account deletion will be available when confirmation finishes."
-            else:
-                operation.detail = "Your subscription request is being confirmed. Its agreed plan and payment date stay unchanged."
-            return _cancellation_response(operation, cancel=cancel)
         checkouts = [
             c
             for c in await gateway.list_paid_signup_checkouts(customer_id=customer_id)
@@ -410,7 +400,13 @@ async def reconcile(
             return _cancellation_response(operation, cancel=cancel, url=checkout.url)
         operation.detail = "Your checkout is being confirmed. Your free access is unchanged."
         return _cancellation_response(operation, cancel=cancel)
-    except BillingProviderError:
+    except BillingProviderError as error:
+        logger.error(
+            "Stripe failed or refused paid signup %s: %s",
+            operation.id,
+            error.__cause__ or error,
+            exc_info=True,
+        )
         operation.detail = (
             "Your cancellation is being confirmed. Check signup again; your paid and free access stay unchanged."
             if operation.cancel_requested_at is not None

@@ -554,8 +554,9 @@ _TOP_UP_NUDGES = {
 
 def _is_subscription_nudge(event: WebhookEvent) -> bool:
     """Whether the event says a customer's Subscriptions may have changed."""
-    return event.type.startswith("customer.subscription.") or (
-        event.type == "checkout.session.completed"
+    return (
+        event.type.startswith("customer.subscription.")
+        or event.type == "checkout.session.completed"
     )
 
 
@@ -944,7 +945,6 @@ async def _recover_paid_signup(
     if (
         operation.status == "pending"
         and operation.cancel_requested_at is not None
-        and operation.creation_state == "confirmed"
         and operation.subscription_id is not None
     ):
         # Retain earned coverage and recoverable cancellation before a provider mutation can outlive its response.

@@ -1,3 +1,4 @@
+import logging
 from dataclasses import replace
 from datetime import datetime, timedelta
 from io import StringIO
@@ -9,7 +10,7 @@ from sqlalchemy.orm import Session
 from pumpkit.account_deletion import delete_account
 from pumpkit.billing.allowance import months_after, paid_period
 from pumpkit.billing.gateway import BillingProviderError, Plan
-from pumpkit.billing.models import FreeAccess, PaidSignup
+from pumpkit.billing.models import FreeAccess
 from pumpkit.billing.paid_signup_recovery import run_cli
 from pumpkit.core.config import settings
 from pumpkit.core.errors import ConflictError
@@ -256,6 +257,16 @@ async def test_a_checkout_lost_on_the_way_back_is_recovered_without_a_browser(
     assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"]["ends_at"] == free[
         "ends_at"
     ]
+
+
+async def test_a_refused_checkout_logs_the_provider_reason_and_stays_pending(
+    authed_client, coupons, fake_billing, caplog
+):
+    fake_billing.fail_on.add("create_paid_signup_checkout")
+    with caplog.at_level(logging.ERROR):
+        _, _, opened = await _open(authed_client, coupons)
+    assert opened["status"] == "pending" and opened["url"] is None
+    assert "set to fail create_paid_signup_checkout" in caplog.text
 
 
 async def test_open_signup_blocks_billing_coupon_and_deletion_until_cancelled_without_losing_free_access(
@@ -571,76 +582,6 @@ async def test_a_subscription_listed_late_after_the_agreed_date_stands_once_list
     # The User completed Checkout before the agreed date, so the Subscription stands.
     assert result.json()["status"] == "completed", result.text
     assert len(states) == 1 and states[0].status == "active"
-
-
-async def _dispatched_before_upgrade(
-    client, coupons, fake_billing, db_session_maker, creation_state
-):
-    """
-    A signup 0.11 dispatched with subscriptions.create from a setup Checkout, which reads no longer
-    list, before Stripe listed its Subscription.
-    """
-    free, request, opened = await _open(client, coupons)
-    fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
-    legacy = fake_billing.paid_signup_checkouts.pop(opened["session_id"])
-    async with db_session_maker() as session:
-        operation = await session.scalar(
-            select(PaidSignup).where(PaidSignup.operation_id == request["operation_id"])
-        )
-        assert operation is not None
-        operation.creation_state = creation_state
-        operation.session_id = None
-        await session.commit()
-    return free, request, legacy
-
-
-async def _list_dispatched_subscription(client, fake_billing, request, legacy):
-    fake_billing.paid_signup_checkouts[legacy.id] = legacy
-    return await _list_late_subscription(client, fake_billing, request, legacy.id)
-
-
-@pytest.mark.parametrize("creation_state", ["uncertain", "acknowledged"])
-async def test_a_signup_dispatched_before_upgrade_never_opens_a_checkout_and_completes_once_listed(
-    authed_client, coupons, fake_billing, fixed_clock, db_session_maker, user, creation_state
-):
-    _, request, legacy = await _dispatched_before_upgrade(
-        authed_client, coupons, fake_billing, db_session_maker, creation_state
-    )
-    answer = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
-    assert answer.json()["status"] == "pending", answer.text
-    assert answer.json()["url"] is None
-    await _stays_pending_past_checkout_expiry(
-        authed_client, fake_billing, fixed_clock, db_session_maker, user, request
-    )
-    assert fake_billing.paid_signup_checkouts == {}
-    result, states = await _list_dispatched_subscription(
-        authed_client, fake_billing, request, legacy
-    )
-    assert result.json()["status"] == "completed", result.text
-    assert len(states) == 1 and states[0].status == "trialing"
-
-
-@pytest.mark.parametrize("creation_state", ["uncertain", "acknowledged"])
-async def test_a_signup_dispatched_before_upgrade_and_cancelled_cancels_its_late_subscription(
-    authed_client, coupons, fake_billing, fixed_clock, db_session_maker, user, creation_state
-):
-    free, request, legacy = await _dispatched_before_upgrade(
-        authed_client, coupons, fake_billing, db_session_maker, creation_state
-    )
-    answer = await authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")
-    assert answer.json()["status"] == "pending", answer.text
-    await _stays_pending_past_checkout_expiry(
-        authed_client, fake_billing, fixed_clock, db_session_maker, user, request
-    )
-    assert fake_billing.paid_signup_checkouts == {}
-    result, states = await _list_dispatched_subscription(
-        authed_client, fake_billing, request, legacy
-    )
-    assert result.json()["status"] == "refused", result.text
-    assert len(states) == 1 and states[0].status == "canceled"
-    assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"]["ends_at"] == free[
-        "ends_at"
-    ]
 
 
 @pytest.mark.parametrize(

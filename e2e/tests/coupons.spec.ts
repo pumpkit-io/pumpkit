@@ -195,7 +195,7 @@ test('a coupon-only recipient explicitly arranges future payment without losing 
   await page.waitForURL((url) => url.origin !== appOrigin);
   expect(new URL(page.url()).hostname.endsWith('.localhost')).toBe(true);
   await expect(page.getByRole('heading', { name: /^Pay for / })).toBeVisible();
-  const freeUntil = new Date(before.free_access?.ends_at ?? '').toISOString();
+  const freeUntil = new Date(before.free_access!.ends_at).toISOString();
   await expect(page.getByText(`Free until ${freeUntil}`)).toBeVisible();
   await page.getByRole('button', { name: 'Pay', exact: true }).click();
   await expect(page).toHaveURL(/\/settings(?:\?.*)?$/);
