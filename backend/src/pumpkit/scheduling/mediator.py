@@ -51,7 +51,7 @@ from pumpkit.posts.models import Media, Post
 from pumpkit.posts.schemas import MEDIA_RATE, IdeaResponse, MediaResponse, TextResponse
 from pumpkit.posts.writing.post_writing import revise_version
 from pumpkit.posts.writing.versions import WrittenVersion
-from pumpkit.posts.writing_state import writing_state
+from pumpkit.posts.writing_state import is_writing, writing_state
 from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -63,6 +63,7 @@ from pumpkit.scheduling.models import (
 )
 from pumpkit.scheduling.post_status import (
     PostStatus,
+    check_discardable,
     check_takes_feedback,
     check_text_changes,
     is_posting,
@@ -105,6 +106,7 @@ from pumpkit.x_connection.x_publisher import X_SCOPES, XPublisher, XReconnectNee
 
 # Where the User sees their Posts; one Post's page is under it.
 POSTS_PAGE = "/posts"
+BRIEFS_PAGE = "/briefs"
 # Under the API URL; what follows it is a one-time upload link's token.
 UPLOAD_LINKS_PATH = "/media-uploads"
 X_CONNECTION_PAGE = x_connections_service.X_CONNECTION_PAGE
@@ -682,6 +684,33 @@ async def cancel_scheduled_post(
     return post_id
 
 
+async def discard_post(
+    db: AsyncSession, storage: FileStorage, user: User, post_id: str, now: datetime
+) -> str:
+    """
+    Delete the User's Draft and its Versions for good, leaving its Idea on its Brief not written;
+    its Media files go once that commits. A Post with no Version yet or one being written is
+    refused, since a write would land on it. The Generations it used stay used. Returns the
+    Brief's id.
+    """
+    # User before Post, as every path that takes both locks them.
+    await users_service.lock_user_id(db, user_id=user.id)
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_discardable(post_status(scheduled_post.state if scheduled_post else None))
+    if is_writing(post, now=now):
+        raise ConflictError("This post is still being written, so it can't be discarded yet.")
+    if post.text_version_number is None:
+        raise ConflictError(
+            "This post has no version yet, so it can't be discarded. Retry writing it instead."
+        )
+    brief_id = post.idea.brief_id
+    file_keys = await posts_service.discard(db, post=post)
+    await db.commit()
+    await media_service.delete_files(storage, file_keys)
+    return brief_id
+
+
 async def get_brief(
     db: AsyncSession, *, user: User, brief_id: str, now: datetime
 ) -> BriefDetailResponse:
@@ -1255,6 +1284,11 @@ async def _attach_received(
 def post_url(post_id: str) -> str:
     """The Post's page in the web app."""
     return f"{settings.frontend_url()}{POSTS_PAGE}/{post_id}"
+
+
+def brief_url(brief_id: str) -> str:
+    """The Brief's page in the web app."""
+    return f"{settings.frontend_url()}{BRIEFS_PAGE}/{brief_id}"
 
 
 def attached_message(part_number: int, *, on_scheduled_post: bool) -> str:

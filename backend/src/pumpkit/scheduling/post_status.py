@@ -79,3 +79,19 @@ def check_text_changes(status: PostStatus) -> None:
         raise TextIsSet(
             "This post is published, so its text is set. Start a new post to write another."
         )
+
+
+class NotDiscardable(ConflictError):
+    pass
+
+
+def check_discardable(status: PostStatus) -> None:
+    """Only a Draft is discarded: the others are going out, gone out, or failed with a Scheduled post."""
+    if status == SCHEDULED_STATUS:
+        raise NotDiscardable(
+            "This post is scheduled, so it can't be discarded. Unschedule it first."
+        )
+    if status == PUBLISHED_STATUS:
+        raise NotDiscardable("This post is published, so it can't be discarded.")
+    if status == FAILED_STATUS:
+        raise NotDiscardable("This post failed, so it can't be discarded.")

@@ -41,6 +41,7 @@ from pumpkit.scheduling.schemas import (
     WRITE_RATE,
     AttachMediaRequest,
     AttachMediaToolResponse,
+    DiscardedPostToolResponse,
     FeedbackRequest,
     PastCommunitiesResponse,
     PostDetailResponse,
@@ -250,6 +251,27 @@ async def delete_scheduled_post(
     )
     return PostMessageToolResponse(
         message="The scheduled post is deleted.", post_url=mediator.post_url(post_id)
+    )
+
+
+async def delete_post(call: ToolCall[User], post_id: str) -> DiscardedPostToolResponse:
+    """
+    Discard one of the user's drafts for good: the post, every version and its media are deleted,
+    and its idea stays on its brief as not written, so the brief's page in the web app (`brief_url`)
+    offers it again. The generations it used stay used. A scheduled, published or failed post is refused, and so is a
+    post still being written or with no version yet. It can't be undone, so ask the user first.
+    """
+    brief_id = await mediator.discard_post(
+        db=call.db,
+        storage=await call.provide(get_file_storage),
+        user=call.user,
+        post_id=post_id,
+        now=call.now,
+    )
+    return DiscardedPostToolResponse(
+        message="The post and its versions are deleted.",
+        brief_id=brief_id,
+        brief_url=mediator.brief_url(brief_id),
     )
 
 
@@ -471,6 +493,8 @@ TOOLS = [
     # The web edit and delete routes have no limit; these take the create route's.
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
+    # The web discard route has no limit; this takes the create route's.
+    McpTool(delete_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     # The web Media routes count against MEDIA_RATE; these take the other writing tools' rate.
     McpTool(attach_media, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(remove_media, rate=WRITE_RATE, annotations=DESTRUCTIVE),

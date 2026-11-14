@@ -44,6 +44,8 @@ async def scheduled_with_its_source_version(db_engine, user) -> None:
                 connection,
                 "version_attempts",
                 id=f"version_{number}",
+                # Added by 0066; the schema keeps the columns added later, built at head.
+                user_id=user.id,
                 post_id="post_a",
                 sequence=number,
                 version_number=number,

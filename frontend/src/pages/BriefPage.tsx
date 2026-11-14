@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { useBrief, type BriefFailure } from '@/features/briefs/useBrief';
 import { CharacterCount } from '@/features/posts/CharacterCount';
+import { DiscardPostButton } from '@/features/posts/DiscardPostButton';
 import { planLine } from '@/features/posts/planLine';
 import { partSubject, shapeName } from '@/features/posts/postShape';
 import { postTitle } from '@/features/posts/postStatus';
@@ -155,6 +156,7 @@ function PostCard({
   failure,
   onRetry,
   onSent,
+  onDiscarded,
 }: {
   idea: Idea;
   post: BriefPost;
@@ -165,6 +167,7 @@ function PostCard({
   onRetry: () => void;
   /** After "Post to…" scheduled it or posted it now. */
   onSent: () => void;
+  onDiscarded: () => Promise<unknown>;
 }) {
   const coreIdea = idea.plan?.coreIdea ?? 'Your post';
   const { text, status } = post;
@@ -197,7 +200,18 @@ function PostCard({
             Open
           </Link>
         </Button>
-        {text && status === 'draft' && <CardPostTo post={post} text={text} onDone={onSent} />}
+        {text && status === 'draft' && (
+          <>
+            <CardPostTo post={post} text={text} onDone={onSent} />
+            <DiscardPostButton
+              postId={post.id}
+              from="brief_page"
+              label={`Discard “${coreIdea}”`}
+              disabled={post.writingState === 'writing'}
+              onDiscarded={onDiscarded}
+            />
+          </>
+        )}
         {text && status && status !== 'draft' && (
           <StatusBadge status={status} publishing={post.publishing} />
         )}
@@ -361,6 +375,7 @@ export function BriefPage() {
               failure={failures[idea.id]}
               onRetry={() => void retry(idea.id, post.id)}
               onSent={() => void refresh()}
+              onDiscarded={refresh}
             />
           ))}
         </ol>

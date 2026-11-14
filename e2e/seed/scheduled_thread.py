@@ -30,6 +30,7 @@ async def main() -> None:
         ).scalar_one()
         post = Post(user_id=user.id, brief="E2E Thread", corpus_post_ids=[], created_at=now)
         version = VersionAttempt(
+            user_id=post.user_id,
             post=post,
             sequence=1,
             format="thread",

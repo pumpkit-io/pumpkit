@@ -29,6 +29,7 @@ async def _use_a_generation(db, user_id: str) -> None:
     await db.flush()
     db.add(
         VersionAttempt(
+            user_id=post.user_id,
             post_id=post.id,
             sequence=1,
             version_number=1,

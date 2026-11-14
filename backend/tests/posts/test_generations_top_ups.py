@@ -65,6 +65,7 @@ async def _use_allowance(db, user_id: str, count: int = 4) -> None:
     for sequence in range(1, count + 1):
         db.add(
             VersionAttempt(
+                user_id=post.user_id,
                 post_id=post.id,
                 sequence=sequence,
                 version_number=sequence,
@@ -108,6 +109,27 @@ async def test_with_the_allowance_used_up_a_version_is_charged_to_a_top_up(
     response = await _start_post(client, fake_llm)
 
     assert response.status_code == 201
+    assert await _generations_left(client) == (0, [1])
+
+
+async def test_a_discarded_draft_keeps_what_it_took_from_a_top_up(
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    await _use_allowance(db, user.id)
+    response = await _start_post(client, fake_llm)
+
+    discarded = await client.delete(f"{POSTS}/{started_post_id(response)}")
+
+    assert discarded.status_code == 204, discarded.text
     assert await _generations_left(client) == (0, [1])
 
 
