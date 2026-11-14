@@ -38,6 +38,7 @@ from pumpkit.scheduling.models import (
     ScheduledPost,
     ScheduledPostMedia,
     ScheduledPostPart,
+    ScheduledPostState,
     UnscheduledLiveParts,
 )
 from pumpkit.scheduling.post_status import (
@@ -229,6 +230,20 @@ async def get_for_post(db: AsyncSession, *, post_id: str) -> Optional[ScheduledP
         .execution_options(populate_existing=True)
     )
     return result.scalar_one_or_none()
+
+
+async def states_of_posts(
+    db: AsyncSession, *, post_ids: list[str]
+) -> dict[str, ScheduledPostState]:
+    """The state of each of these Posts' Scheduled posts, by Post id; a Draft has none."""
+    if not post_ids:
+        return {}
+    result = await db.execute(
+        select(ScheduledPost.post_id, ScheduledPost.state).where(
+            ScheduledPost.post_id.in_(post_ids)
+        )
+    )
+    return {post_id: state for post_id, state in result.tuples()}
 
 
 @dataclass(frozen=True)

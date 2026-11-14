@@ -16,7 +16,7 @@ test.afterEach(() => {
   runSeedScript('planned_brief.py', ['clean']);
 });
 
-test('a brief of several ideas is written as the ideas picked, which fill in on its page', async ({
+test('a brief of several ideas is written as the ideas picked, which fill in on its page, and one left is written later', async ({
   page,
 }) => {
   await page.route('**/api/v1/briefs', async (route) => {
@@ -55,7 +55,7 @@ test('a brief of several ideas is written as the ideas picked, which fill in on 
 
   await expect(page).toHaveURL(new RegExp(`/briefs/${briefId}$`));
   expect(picked).toHaveLength(2);
-  const cards = page.getByRole('main').getByRole('listitem');
+  const cards = page.getByRole('list', { name: 'Posts' }).getByRole('listitem');
   await expect(cards).toHaveCount(2);
   await expect(cards.nth(0)).toHaveAttribute(
     'aria-label',
@@ -66,6 +66,7 @@ test('a brief of several ideas is written as the ideas picked, which fill in on 
     "Don't make OAuth integrations your core value",
   );
   await expect(page.getByText('Writing…')).toHaveCount(2);
+  await expect(page.getByText('2 of 3 written')).toBeVisible();
 
   runSeedScript('planned_brief.py', ['written', briefId]);
 
@@ -76,6 +77,19 @@ test('a brief of several ideas is written as the ideas picked, which fill in on 
     cards.nth(1).getByText("Written: Don't make OAuth integrations your core value."),
   ).toBeVisible();
   await expect(page.getByText('Writing…')).toHaveCount(0);
+  await expect(
+    cards.nth(0).getByText('Built for trust · aims for bookmarks · short'),
+  ).toBeVisible();
+
+  const notWritten = page.getByRole('list', { name: 'Not written' });
+  await notWritten.getByRole('button', { name: /^Write “Charge at least 20 euros/ }).click();
+  await expect(cards).toHaveCount(3);
+  expect(picked).toHaveLength(1);
+  await expect(cards.nth(1).getByText('Writing…')).toBeVisible();
+  await expect(notWritten).toHaveCount(0);
+  runSeedScript('planned_brief.py', ['written', briefId]);
+  await expect(cards.nth(1).getByText(/^Written: Charge at least 20 euros/)).toBeVisible();
+
   await cards.nth(0).getByRole('link', { name: /^Open/ }).click();
   await expect(page).toHaveURL(/\/posts\/post_/);
 });

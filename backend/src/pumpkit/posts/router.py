@@ -53,17 +53,6 @@ async def plan_brief(
     )
 
 
-@router.get("/briefs/{brief_id}", response_model=BriefResponse)
-async def get_brief(
-    brief_id: str,
-    current_user: User = Depends(require_subscribed_user),
-    db: AsyncSession = Depends(get_async_db),
-    clock: Clock = Depends(get_clock),
-) -> BriefResponse:
-    """The Brief with its Ideas and their Posts, each Post's writing state included."""
-    return await mediator.get_brief(db, user=current_user, brief_id=brief_id, now=clock())
-
-
 @router.post(
     "/briefs/{brief_id}/posts",
     response_model=BriefResponse,

@@ -164,23 +164,33 @@ class BriefPostResponse(BaseModel):
     text: Optional[TextResponse]
 
 
-class IdeaResponse(BaseModel):
+class IdeaFields(BaseModel):
+    """An Idea without its Post, which `IdeaResponse` and the Brief page's answer each add."""
+
     id: str
     # Where the Idea comes among the Ideas posted with it, from 1; the single-post Idea is 1.
     posting_order: int
     # True for the single-post Idea, which covers the whole Brief.
     whole_brief: bool
     plan: Optional[PlanResponse]
+
+
+class IdeaResponse(IdeaFields):
     # None until the User writes the Idea.
     post: Optional[BriefPostResponse]
 
 
-class BriefResponse(BaseModel):
+class BriefFields(BaseModel):
+    """A Brief without its Ideas, which `BriefResponse` and the Brief page's answer each add."""
+
     id: str
     text: str
     created_at: datetime
-    # The single-post Idea first, then the split Ideas in posting order.
-    ideas: list[IdeaResponse]
     # The Posts the User can still have written, Top-ups included and writes in progress taken
     # out, as writing the Ideas checks it; None with no cap on Generations.
     generations_left: Optional[int]
+
+
+class BriefResponse(BriefFields):
+    # The single-post Idea first, then the split Ideas in posting order.
+    ideas: list[IdeaResponse]
