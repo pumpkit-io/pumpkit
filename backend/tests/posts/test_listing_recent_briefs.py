@@ -207,6 +207,22 @@ async def test_once_the_whole_brief_is_written_no_split_idea_is_offered(client, 
     assert brief["ideas_offered"] == 0
 
 
+async def test_a_discarded_post_leaves_the_counts_and_its_idea_is_offered_again(
+    client, ready, split
+):
+    planned = await _plan(client)
+    first, second, _ = _split(planned)
+    kept, discarded = await _write(client, planned, [first, second])
+
+    response = await client.delete(f"/api/v1/posts/{discarded}")
+    assert response.status_code == 204, response.text
+
+    [brief] = await _recent(client)
+    assert brief["post_ids"] == [kept]
+    assert brief["posts_written"] == 1
+    assert brief["ideas_offered"] == 2
+
+
 async def test_a_brief_stored_unwritten_for_want_of_generations_offers_its_idea(
     client, db, user, ready, one_idea, monkeypatch
 ):
