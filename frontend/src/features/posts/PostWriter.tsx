@@ -187,7 +187,7 @@ export function PostWriter() {
         onChange={setBrief}
         maxLength={BRIEF_MAX_CHARS}
         sendLabel="Plan posts"
-        busyLabel="Planning…"
+        busyLabel="Reading your brief…"
         onSend={send}
         isWriting={isPlanning}
         sendDisabled={hasPositioning === null}

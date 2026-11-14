@@ -408,7 +408,7 @@ describe('New post', () => {
 
       expect(area.getByLabelText('Brief')).toBeDisabled();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
-      expect(area.getByRole('button', { name: 'Planning…' })).toBeDisabled();
+      expect(area.getByRole('button', { name: 'Reading your brief…' })).toBeDisabled();
       expect(area.getByRole('status')).toHaveTextContent('Reading your brief…');
       expect(briefService.plan).toHaveBeenCalledWith('ship small things');
       expect(track).not.toHaveBeenCalledWith('post_version_requested', expect.anything());
