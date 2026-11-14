@@ -287,6 +287,7 @@ async def prepare_next_version(
         positioning=post.idea.brief.positioning,
         plan=post.idea.plan,
         format=format or text.format,
+        previous=text.format,
         char_limit=char_limit,
     )
     if inputs is None:

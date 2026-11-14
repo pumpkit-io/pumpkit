@@ -452,7 +452,7 @@ def effective_length(plan: Plan) -> Length:
 
 
 def plan_structure(plan: Plan) -> Optional[Structure]:
-    """The Plan's structure, or None when its Format has none such: a short post's, switched to a Thread."""
+    """The Plan's structure, or None for a short post's structure on a Plan switched to a Thread."""
     if plan.format == FORMAT_THREAD and plan.structure not in THREAD_STRUCTURES:
         return None
     return plan.structure

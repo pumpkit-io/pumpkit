@@ -8,7 +8,7 @@ Pumpkit's (`feedback.py`, `revision_humanizer.py`).
 
 from typing import Optional
 
-from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format, format_noun
+from pumpkit.posts.formats import FORMAT_THREAD, Format, format_noun
 from pumpkit.posts.writing.constants import THREAD_MAX_PARTS, THREAD_MIN_PARTS
 from pumpkit.posts.writing.prompts.guide import writing_guide
 from pumpkit.posts.writing.prompts.post import GIVEN, PostInputs
@@ -66,13 +66,13 @@ You revise one thread on X written on my behalf, from my feedback. A thread is a
 
 - Do what my latest feedback asks, and only that. Every part and every line it doesn't ask about stays word for word, in its place. Return the whole thread, every part, not only the part that changed.
 - Keep the hook in part 1 as it is unless my feedback asks to change it. One exception: when the change leaves the hook promising something the thread no longer delivers, fix the hook so it stays honest, and change as little of it as you can.
-- The feedback is mine, so it wins. Where it goes against the choices or the guide below (another number of parts, another CTA or none, another structure, a word or a line I want), do what it asks.
+- The feedback is mine, so it wins. Where it goes against the choices or the guide below (another number of parts from {THREAD_MIN_PARTS} to {THREAD_MAX_PARTS}, another CTA or none, another structure, a word or a line I want), do what it asks.
 - Everything you write new follows the guide. For a new hook, choose the levers, then the hook types, then write it, as the hook section says. A new closer or CTA follows the closer and CTA section. New lines follow "How the lines read" and "Never add".
 - A fact, number, name or link I give in the feedback counts as if it were in the raw input. Invent no others.
 - My earlier feedback still holds. Don't undo what it asked for unless my latest feedback asks to.
 - When the feedback is vague ("make it punchier", "I don't like the ending"), change the smallest part of the thread that answers it.
 - Keep between {THREAD_MIN_PARTS} and {THREAD_MAX_PARTS} parts and each part within the limit, whatever my feedback asks.
-- When my feedback turns a single post into a thread, a first reply under the post has no place of its own: what it says goes in the last part, with its link or [link] as it is.
+- When my feedback turns a single post into a thread, a first reply under the post has no place of its own: what it says goes in the last part, with its link or [link] as it is, unless my feedback says otherwise.
 - The revised thread still reads as if one person typed it in one go. Where a new line meets an old one, reword the join only as much as it needs.
 
 # The guide the thread follows
@@ -106,9 +106,7 @@ def previous_post_message(post: str, first_reply: Optional[str]) -> str:
     )
 
 
-def revised_post_message(
-    post: str, first_reply: Optional[str], previous: Format = FORMAT_POST
-) -> str:
+def revised_post_message(post: str, first_reply: Optional[str], previous: Format) -> str:
     reply = f"\n\n<first_reply>\n{first_reply}\n</first_reply>" if first_reply else ""
     return (
         "This is the post to rewrite. Return every sentence that is also in the previous "

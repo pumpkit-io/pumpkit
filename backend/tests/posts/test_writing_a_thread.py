@@ -660,11 +660,13 @@ async def test_the_thread_revise_prompt_is_the_revise_rules_around_the_thread_gu
     )
     assert "- the versions of the thread: after these inputs" in prompt
     assert "- Keep the hook in part 1 as it is unless my feedback asks to change it." in prompt
+    assert "(another number of parts from 2 to 10, another CTA or none," in prompt
     assert "- Keep between 2 and 10 parts and each part within the limit" in prompt
     assert "- Each part is at most 280 characters as X counts them" in prompt
     assert (
         "- When my feedback turns a single post into a thread, a first reply under the post has "
-        "no place of its own: what it says goes in the last part, with its link or [link] as it is."
+        "no place of its own: what it says goes in the last part, with its link or [link] as it "
+        "is, unless my feedback says otherwise."
     ) in prompt
     assert "- The link goes in the last part, and the closer says what it leads to." in prompt
     assert "- parts: the thread's parts, in order, one string per part." in prompt

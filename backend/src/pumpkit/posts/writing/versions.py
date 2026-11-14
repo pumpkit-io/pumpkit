@@ -33,7 +33,7 @@ class EarlierVersion:
 @dataclass(frozen=True)
 class Hook:
     reasoning: str
-    # The library Hook's name, which only the inactive Inspiration author writing set.
+    # Always None now: only the removed v6 writing set a library Hook's name; old Versions keep theirs.
     name: Optional[str]
 
 

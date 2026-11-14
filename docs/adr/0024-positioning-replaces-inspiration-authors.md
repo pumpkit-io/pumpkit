@@ -29,6 +29,7 @@ This follows ADR 0023's mechanism for Google and Magic link. The code listed her
 - The Author directory, the corpus module, the old sketch and thread prompts and the hook library stay in the backend with no caller the application mounts.
 - There is no configuration switch. Someone who wants Inspiration authors back changes the code.
 - All of it keeps its tests, which mount their own assembly. One test asserts that the application mounts none of those routes or tools.
+- Loading a corpus and the pumpkit-v6 revision engine were removed, with their tests, once no path that writes a Version read them (#477). The corpus module, the v6 prompts and the hook library stay.
 
 The X reader is not on that list. It stays in use: the Positioning draft reads the User's posts through it, by way of the `authors` area's service, and Community lookups call it as before.
 

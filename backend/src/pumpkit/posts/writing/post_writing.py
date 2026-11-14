@@ -9,7 +9,6 @@ text, scrubbed, is the Sketch.
 
 import asyncio
 import logging
-import re
 from dataclasses import replace
 from typing import Any, Callable, Optional, Sequence, TypeVar, Union
 
@@ -21,7 +20,7 @@ from pumpkit.core.llm_schemas import StructuredResult
 from pumpkit.core.text import drop_unstorable
 from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
 from pumpkit.posts.plans import Plan
-from pumpkit.posts.writing.constants import MAX_TOKENS, SKETCHES_PER_POST, THREAD_MAX_PARTS
+from pumpkit.posts.writing.constants import MAX_TOKENS, SKETCHES_PER_POST
 from pumpkit.posts.writing.post_replies import (
     HookType,
     HumanizedPost,
@@ -79,7 +78,6 @@ from pumpkit.posts.writing.versions import (
     thread_parts,
     user_message,
 )
-from pumpkit.x_connection.x_length import has_link, x_weighted_length
 
 logger = logging.getLogger(__name__)
 
@@ -341,16 +339,21 @@ async def write_planned_version(
     return await write_post(llm, inputs, user_id=user_id)
 
 
-def plan_in(plan: Plan, format: Format, char_limit: int) -> Plan:
+def plan_in(plan: Plan, format: Format, char_limit: int, *, previous: Format) -> Plan:
     """
-    The Plan as Feedback in `format` writes from it. A Thread turned into a post takes the Length
-    the account's limit allows; a post turned into a Thread keeps its structure, which the Thread's
-    guide leaves out when a Thread can't take it.
+    The Plan as Feedback in `format`, given on a text in `previous`, writes from it. A Thread
+    turned into a post takes the Length the account's limit allows, whatever the Plan's; a post
+    turned into a Thread keeps its structure, which the Thread's guide leaves out when a Thread
+    can't take it.
     """
-    if plan.format == format:
-        return plan
     if format == FORMAT_THREAD:
-        return replace(plan, format=FORMAT_THREAD, length=None)
+        return (
+            plan
+            if plan.format == FORMAT_THREAD
+            else replace(plan, format=FORMAT_THREAD, length=None)
+        )
+    if plan.format == FORMAT_POST and previous == FORMAT_POST:
+        return plan
     return replace(plan, format=FORMAT_POST, length=length_for_limit(char_limit))
 
 
@@ -360,15 +363,19 @@ def revision_inputs(
     positioning: Optional[str],
     plan: Optional[Plan],
     format: Format,
+    previous: Format,
     char_limit: int,
 ) -> Optional[PostInputs]:
-    """What Feedback in `format` is written from, or None for a Post written before Plans."""
+    """
+    What Feedback in `format` on a text in `previous` is written from, or None for a Post written
+    before Plans.
+    """
     if positioning is None or plan is None:
         return None
     return PostInputs(
         brief=brief,
         positioning=positioning,
-        plan=plan_in(plan, format, char_limit),
+        plan=plan_in(plan, format, char_limit, previous=previous),
         char_limit=char_limit,
     )
 
@@ -392,20 +399,27 @@ def revise_messages(
     ]
 
 
+def _feedback_given_on(
+    earlier: Sequence[EarlierVersion], starting: Optional[StartingText]
+) -> Union[EarlierVersion, StartingText]:
+    """The text the Feedback was given on: the Starting text, or else the latest Version."""
+    return earlier[-1] if starting is None else starting
+
+
 def revision_humanizer_messages(
     inputs: PostInputs,
     earlier: Sequence[EarlierVersion],
     starting: Optional[StartingText],
     feedback: str,
-    revised: str,
+    to_rewrite: str,
 ) -> list[dict]:
     """
     v5's revision humanizer in the Format `inputs` plans, plus Pumpkit's message of the sentences
-    the User wrote by hand. The text the Feedback was given on, the Starting text or else the
-    latest Version, keeps its own Format; `revised` is the message of the text to rewrite.
+    the User wrote by hand. The text the Feedback was given on keeps its own Format; `to_rewrite`
+    is the message of the text to rewrite.
     """
     format = inputs.plan.format
-    shown = earlier[-1] if starting is None else starting
+    shown = _feedback_given_on(earlier, starting)
     if format == FORMAT_THREAD:
         prompt, brief = thread_humanizer_prompt(inputs), thread_brief_message(inputs)
     else:
@@ -421,7 +435,7 @@ def revision_humanizer_messages(
     written_by_hand = hand_written(earlier, starting)
     if written_by_hand:
         messages.append(user_message(hand_written_message(written_by_hand, format)))
-    messages.append(user_message(revised))
+    messages.append(user_message(to_rewrite))
     return messages
 
 
@@ -436,7 +450,7 @@ async def revise_post(
     Write a single post's next Version from Feedback on `starting`, or else the latest Version.
     Raises an `LLMError` when either call fails or writes a blank post; stores nothing.
     """
-    shown = earlier[-1] if starting is None else starting
+    shown = _feedback_given_on(earlier, starting)
     revised = await _call(
         llm,
         settings.LLM_REVISING_MODEL,
@@ -487,11 +501,11 @@ async def revise_thread(
     feedback: str,
 ) -> WrittenVersion:
     """
-    Write a Thread's next Version from Feedback on `starting`, or else the latest Version. A
-    post's first reply moves into the last Part (ADR 0027). Raises an `LLMError` when either call
-    fails or writes Parts outside the bounds; stores nothing.
+    Write a Thread's next Version from Feedback on `starting`, or else the latest Version. The
+    thread revise prompt moves a post's first reply into the last Part (ADR 0027). Raises an
+    `LLMError` when either call fails or writes Parts outside the bounds; stores nothing.
     """
-    shown = earlier[-1] if starting is None else starting
+    shown = _feedback_given_on(earlier, starting)
     revised = await _call(
         llm,
         settings.LLM_REVISING_MODEL,
@@ -513,8 +527,6 @@ async def revise_thread(
         HumanizedThread,
     )
     parts = _clean_parts("revision humanizer", humanized.parsed.parts)
-    if shown.format == FORMAT_POST and shown.first_reply:
-        parts = _keeping_the_link(parts, _clean(shown.parts[-1]), inputs.char_limit)
 
     return WrittenVersion(
         format=FORMAT_THREAD,
@@ -527,31 +539,6 @@ async def revise_thread(
         hook=Hook(reasoning=drop_unstorable(revised.parsed.reasoning), name=None),
         cta_type=revised.parsed.cta_type,
     )
-
-
-_LINK_PLACEHOLDER = re.compile(r"\[\s*link\s*\]", re.IGNORECASE)
-
-
-def _keeping_the_link(parts: list[str], first_reply: str, char_limit: int) -> list[str]:
-    """
-    A Thread switched from a post, ending with the post's first reply when the writing lost its
-    link or its `[link]` placeholder, which the User still has to replace before posting.
-    """
-    for carries in (_LINK_PLACEHOLDER.search, has_link):
-        if carries(first_reply) and not any(carries(part) for part in parts):
-            return _ending_with(parts, first_reply, char_limit)
-    return parts
-
-
-def _ending_with(parts: list[str], text: str, char_limit: int) -> list[str]:
-    """
-    A Thread's Parts with `text` after its last Part, or as a Part of its own when the last has no
-    room for it. A Thread with no Part to spare takes it over the limit, which is flagged, not refused.
-    """
-    joined = f"{parts[-1]}\n\n{text}"
-    if x_weighted_length(joined) > char_limit and len(parts) < THREAD_MAX_PARTS:
-        return [*parts, text]
-    return [*parts[:-1], joined]
 
 
 def _without_blank_first_reply[V: (EarlierVersion, StartingText)](text: V) -> V:

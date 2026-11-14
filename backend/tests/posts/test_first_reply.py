@@ -268,9 +268,10 @@ async def test_a_switch_to_a_thread_shows_the_revise_call_the_post_and_its_first
         "content": "<post>\nThe post.\n</post>\n\n<first_reply>\nTry it: [link]\n</first_reply>",
     }
     assert (
-        "what it says goes in the last part, with its link or [link] as it is."
-        in (revise.messages[0]["content"][0]["text"])
-    )
+        "- When my feedback turns a single post into a thread, a first reply under the post has "
+        "no place of its own: what it says goes in the last part, with its link or [link] as it "
+        "is, unless my feedback says otherwise.\n"
+    ) in revise.messages[0]["content"][0]["text"]
     [humanizer] = [c for c in fake_llm.calls if c.response_model is HUMANIZED_THREAD]
     assert humanizer.messages[2]["content"] == (
         "This is the post as I last saw it, before my latest feedback.\n\n"
@@ -291,43 +292,13 @@ async def test_a_switch_to_a_thread_keeps_the_last_part_the_writing_moved_the_fi
     assert _texts(version["parts"]) == ["One.", "Two. Try it: [link]"]
 
 
-async def test_a_switch_to_a_thread_that_lost_the_link_ends_its_last_part_with_the_first_reply(
-    client, ready, fake_llm
+@pytest.mark.parametrize("reply", ["Try it: [link]", "Get it: pumpkit.io/calc"])
+async def test_a_switch_to_a_thread_adds_back_no_first_reply_the_writing_left_out(
+    client, ready, fake_llm, reply
 ):
-    version = await _switched_to_a_thread(client, fake_llm, "Try it → [link]", ["One.", "Two."])
+    version = await _switched_to_a_thread(client, fake_llm, reply, ["One.", "Two."])
 
-    assert _texts(version["parts"]) == ["One.", "Two.\n\nTry it -> [link]"]
-
-
-async def test_a_switch_to_a_thread_that_lost_a_real_link_ends_with_the_first_reply_too(
-    client, ready, fake_llm
-):
-    version = await _switched_to_a_thread(
-        client, fake_llm, "Get it: pumpkit.io/calc", ["One.", "Two."]
-    )
-
-    assert _texts(version["parts"]) == ["One.", "Two.\n\nGet it: pumpkit.io/calc"]
-
-
-async def test_a_first_reply_that_would_overfill_the_last_part_becomes_a_part_of_its_own(
-    client, ready, fake_llm
-):
-    full = "x" * 270
-
-    version = await _switched_to_a_thread(client, fake_llm, "Try it: [link]", ["One.", full])
-
-    assert _texts(version["parts"]) == ["One.", full, "Try it: [link]"]
-
-
-async def test_a_thread_of_ten_parts_takes_the_first_reply_into_its_last_part_anyway(
-    client, ready, fake_llm
-):
-    parts = [f"Part {n}." for n in range(1, 10)] + ["x" * 270]
-
-    version = await _switched_to_a_thread(client, fake_llm, "Try it: [link]", parts)
-
-    assert len(version["parts"]) == 10
-    assert version["parts"][-1]["text"] == "x" * 270 + "\n\nTry it: [link]"
+    assert _texts(version["parts"]) == ["One.", "Two."]
 
 
 async def test_a_thread_switched_back_to_a_post_is_revised_from_the_thread(client, ready, fake_llm):
@@ -345,6 +316,28 @@ async def test_a_thread_switched_back_to_a_post_is_revised_from_the_thread(clien
     [revise] = [c for c in fake_llm.calls if c.response_model is REVISED_POST]
     assert revise.messages[-2]["content"] == (
         '<part number="1">\nOne.\n</part>\n\n<part number="2">\nTwo. Try it: [link]\n</part>'
+    )
+
+
+async def test_a_thread_switched_to_a_post_is_told_an_external_link_goes_in_the_first_reply(
+    client, ready, fake_llm
+):
+    post = await _written(client, fake_llm, "Try it: [link]", "Try it: [link]")
+    fake_llm.replies = [{"parts": ["One.", "Two. Get it: pumpkit.io/calc"]}]
+    await _feedback(client, post["id"], "expand it", format="thread")
+    fake_llm.calls.clear()
+    fake_llm.replies = [{"post": "Back to one.", "first_reply": "Get it: pumpkit.io/calc"}]
+
+    await _feedback(client, post["id"], "condense it", format="post")
+
+    [revise] = [c for c in fake_llm.calls if c.response_model is REVISED_POST]
+    assert revise.messages[-1]["content"] == (
+        "That was Version 2.\n\n"
+        "Rewrite the thread you just wrote as a single post, according to this feedback. "
+        "Keep what it says and how it says it wherever the feedback does not ask for a "
+        "change and one post has room for it, and return the whole post. An external link "
+        "in the thread, or its [link], goes in the first reply, not in the post.\n\n"
+        "The feedback:\ncondense it"
     )
 
 

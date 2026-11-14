@@ -751,7 +751,8 @@ async def test_feedback_after_switching_to_a_thread_and_back_reads_both_switches
             "That was Version 2.\n\n"
             "Rewrite the thread you just wrote as a single post, according to this feedback. "
             "Keep what it says and how it says it wherever the feedback does not ask for a "
-            "change and one post has room for it, and return the whole post.\n\n"
+            "change and one post has room for it, and return the whole post. An external "
+            "link in the thread, or its [link], goes in the first reply, not in the post.\n\n"
             "The feedback:\ncondense it"
         ),
         _assistant("final 3"),
@@ -779,9 +780,8 @@ async def test_feedback_on_a_post_written_before_plans_existed_is_refused(
     )
     assert fake_llm.calls == []
     assert await _generations_used(client) == used
-    stored = await _stored_post(db, post_id)
-    assert [a.status for a in stored.attempts] == ["succeeded"]
-    assert stored.writing_since is None
+    read = (await client.get(f"{POSTS}/{post_id}")).json()
+    assert [version["number"] for version in read["versions"]] == [1]
 
 
 async def test_feedback_makes_no_plan_call(client, post_id, fake_llm):

@@ -16,8 +16,11 @@ from tests.positioning.positioning import TEXT, save_positioning
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     HUMANIZED_THREAD,
+    POST_IDEAS,
     REVISED_POST,
     REVISED_THREAD,
+    ideas,
+    planned_post,
     revised,
     revised_thread,
     start_thread,
@@ -102,7 +105,8 @@ def _to_a_post(version: int) -> str:
         f"That was Version {version}.\n\n"
         "Rewrite the thread you just wrote as a single post, according to this feedback. "
         "Keep what it says and how it says it wherever the feedback does not ask for a "
-        "change and one post has room for it, and return the whole post.\n\n"
+        "change and one post has room for it, and return the whole post. An external link "
+        "in the thread, or its [link], goes in the first reply, not in the post.\n\n"
         "The feedback:\ncondense it"
     )
 
@@ -121,10 +125,6 @@ async def test_feedback_with_the_thread_format_turns_a_single_post_into_a_thread
     assert [part["text"] for part in version["parts"]] == ["final one", "final two"]
     assert [part["char_limit"] for part in version["parts"]] == [280, 280]
     assert [call.response_model for call in fake_llm.calls] == [REVISED_THREAD, HUMANIZED_THREAD]
-    assert [call.response_model.__name__ for call in fake_llm.calls] == [
-        "revised_thread",
-        "refined_thread",
-    ]
 
 
 async def test_feedback_with_the_post_format_turns_a_thread_into_a_single_post(
@@ -270,6 +270,26 @@ async def test_a_thread_switched_to_a_post_on_a_premium_account_is_a_long_post(
     assert "format: long\nstructure: hook_list_closer\n" in revise.messages[1]["content"]
     [humanizer] = _calls(fake_llm, HUMANIZED_POST)
     assert "at most 25,000 characters" in _system_text(humanizer)
+
+
+@pytest.mark.parametrize("planned", ["short", "medium"])
+async def test_a_post_switched_to_a_thread_and_back_takes_the_accounts_length_not_its_plans(
+    client, ready, fake_llm, fake_x_publisher, connect_x, planned
+):
+    fake_x_publisher.account = XAccount(user_id="1001", handle="ada", subscription_type="Premium")
+    await connect_x()
+    fake_llm.standing[POST_IDEAS] = ideas(
+        planned_post(format=planned, structure="hook_list_closer")
+    )
+    post_id = await _start(client, fake_llm, "post")
+    fake_llm.replies = [{"parts": ["final a", "final b"]}, {"post": "final post"}]
+    await _feedback(client, post_id, "expand it", "thread")
+
+    await _feedback(client, post_id, "condense it", "post")
+
+    [revise] = _calls(fake_llm, REVISED_POST)
+    assert "# Format: long post" in _system_text(revise)
+    assert "format: long\n" in revise.messages[1]["content"]
 
 
 async def _mixed_history(client, fake_llm) -> str:
