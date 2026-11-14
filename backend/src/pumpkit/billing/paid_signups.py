@@ -28,8 +28,6 @@ from pumpkit.core.time import Clock, as_utc
 _CLOCK_MARGIN = timedelta(minutes=5)
 # Room for reviewing and accepting an offer before its Checkout opens.
 _OFFER_MARGIN = timedelta(hours=1)
-# Creation states of a signup the old setup flow sent to subscriptions.create; its Subscription may still appear.
-_DISPATCHED_BEFORE_UPGRADE = {"uncertain", "acknowledged"}
 _TOO_SOON = "Your free access ends too soon to arrange payment now: Stripe needs at least two days. Subscribe once it ends; your free access is unchanged."
 
 
@@ -269,7 +267,6 @@ async def reconcile(
                     "The provider plan differs from the accepted offer. Contact support."
                 )
                 return _cancellation_response(operation, cancel=cancel)
-            operation.creation_state = "confirmed"
             if cancel or state.status in {"canceled", "incomplete_expired"}:
                 await _preserve_settled_paid_coverage(
                     db,
@@ -327,14 +324,6 @@ async def reconcile(
             operation.detail = "Another subscription needs review. Your free access is unchanged."
             return _cancellation_response(operation, cancel=cancel)
         target = as_utc(datetime.fromisoformat(operation.offer["first_payment_at"]))
-        if operation.creation_state in _DISPATCHED_BEFORE_UPGRADE:
-            # Stripe may still list the Subscription the old setup flow asked for; the attributed branch settles it.
-            if cancel or target <= now:
-                operation.cancel_requested_at = operation.cancel_requested_at or now
-                operation.detail = "Your cancellation is not confirmed yet. Check its status again; billing changes and account deletion will be available when confirmation finishes."
-            else:
-                operation.detail = "Your subscription request is being confirmed. Its agreed plan and payment date stay unchanged."
-            return _cancellation_response(operation, cancel=cancel)
         checkouts = [
             c
             for c in await gateway.list_paid_signup_checkouts(customer_id=customer_id)
@@ -381,12 +370,7 @@ async def reconcile(
         if not mutate:
             return _cancellation_response(operation, cancel=cancel)
         if checkout is None:
-            try:
-                await require_provider_ready(gateway, user=user)
-            except ConflictError:
-                # Another open Checkout or unsettled payment blocks a new one; the signup waits until it clears.
-                operation.detail = "Another checkout or payment is still open. Check your signup again later; your free access is unchanged."
-                return _cancellation_response(operation, cancel=cancel)
+            await require_provider_ready(gateway, user=user)
             expiry = as_utc(datetime.fromisoformat(operation.offer["checkout_expires_at"]))
             if expiry < now + timedelta(minutes=30):
                 return refuse(

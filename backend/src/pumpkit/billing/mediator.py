@@ -945,7 +945,6 @@ async def _recover_paid_signup(
     if (
         operation.status == "pending"
         and operation.cancel_requested_at is not None
-        and operation.creation_state == "confirmed"
         and operation.subscription_id is not None
     ):
         # Retain earned coverage and recoverable cancellation before a provider mutation can outlive its response.

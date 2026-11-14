@@ -641,7 +641,7 @@ class StripeBillingGateway:
             sessions = self._client.v1.checkout.sessions.list(
                 {
                     "customer": customer_id,
-                    "expand": ["data.payment_intent", "data.setup_intent"],
+                    "expand": ["data.payment_intent"],
                     "limit": 100,
                 }
             )
@@ -649,11 +649,6 @@ class StripeBillingGateway:
                 state = session.to_dict()
                 if state.get("status") == "expired":
                     continue
-                # The old paid signup flow left setup Checkouts, finished by their SetupIntent.
-                if state.get("mode") == "setup" and state.get("status") == "complete":
-                    setup = state.get("setup_intent")
-                    if isinstance(setup, dict) and setup.get("status") in {"succeeded", "canceled"}:
-                        continue
                 intent = state.get("payment_intent")
                 if (
                     state.get("status") == "complete"

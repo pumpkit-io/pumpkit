@@ -695,14 +695,6 @@ async def test_pending_subscription_checkout_read_is_customer_scoped_and_does_no
     assert parse_qs(urlsplit(http.urls[0]).query)["status"] == ["open"]
 
 
-def _setup_checkout(intent_status: str) -> dict:
-    return {
-        "mode": "setup",
-        "status": "complete",
-        "setup_intent": {"id": "seti_check", "object": "setup_intent", "status": intent_status},
-    }
-
-
 @pytest.mark.parametrize(
     "state,pending",
     [
@@ -753,10 +745,6 @@ def _setup_checkout(intent_status: str) -> dict:
             False,
         ),
         ({"mode": "payment", "status": "expired", "payment_status": "unpaid"}, False),
-        # The old paid signup flow left setup Checkouts, finished by their SetupIntent.
-        (_setup_checkout("succeeded"), False),
-        (_setup_checkout("canceled"), False),
-        (_setup_checkout("requires_action"), True),
         ({"mode": "setup", "status": "open"}, True),
         ({"mode": "payment", "status": "complete"}, True),
         ({"mode": "payment", "payment_status": "paid"}, True),
@@ -795,7 +783,7 @@ async def test_pending_checkout_read_includes_async_payment_and_fails_closed(sta
     expanded = {
         value for key, values in query.items() if key.startswith("expand") for value in values
     }
-    assert expanded == {"data.payment_intent", "data.setup_intent"}
+    assert expanded == {"data.payment_intent"}
 
 
 async def test_coupon_deferral_sends_absolute_target_without_proration_and_stable_identity():
