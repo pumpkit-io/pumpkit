@@ -235,6 +235,8 @@ async def retry_post(
     Positioning its Brief was planned with, in the background. Counts as a new attempt.
     """
     now = clock()
+    # User then Post, as every write does, so two writes can't both take the last Generation.
+    await users_service.lock_user_id(db, user_id=user.id)
     post = await user_post(db, user=user, post_id=post_id, for_update=True)
     state = writing_state(post, now=now)
     if state == WRITING:
