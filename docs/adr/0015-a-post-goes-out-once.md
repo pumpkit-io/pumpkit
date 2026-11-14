@@ -2,6 +2,8 @@
 
 Every Scheduled post is copied from a Version of a Post, and a Post has at most one Scheduled post. The web app's redesign files everything under Posts, sorted by status: Draft, Scheduled, Published or Failed. A Post takes its status from its one Scheduled post, so each Post sits in exactly one tab and its page shows one scheduled or published panel. A Scheduled post with no Post would have no place in that view. The User can still edit a Scheduled post's text after scheduling it, and to post the same text in a second place they start a new Post. The rule holds for the MCP tools too: `schedule_post` and `post_now` take a Version, not typed Parts. ADR 0016 amends this: a Scheduled post is copied from its Post's Text, so they take the Post. A Scheduled post that is Posting (see `GLOSSARY.md`) leaves its Post Scheduled, so posting adds no fifth status or tab.
 
+ADR 0027 amends this: a Scheduled post may also be a single X post with its First reply, published at one time. ADR 0026 adds a state that comes before these statuses: a Post waiting for its first Version is being written, or couldn't be written, and is not yet a Draft.
+
 ## Considered Options
 
 - **Keep typed Scheduled posts.** The old Scheduled page had a composer for them, but in the redesign they have no Post to appear under, and every Scheduled post the User wants can start as a Brief.
