@@ -1,9 +1,11 @@
+import { PersonaLink } from '@/features/positioning/PersonaLink';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
-import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
+import { BriefNav } from '@/features/posts/BriefNav';
 import { CopyTextButton } from '@/features/posts/CopyTextButton';
+import { DiscardPostButton } from '@/features/posts/DiscardPostButton';
 import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
@@ -29,13 +31,17 @@ import { useCreateFromText } from '@/features/posts/postTo/senders';
 import { cardParts, copiedText, type ShownPart } from '@/features/posts/shownText';
 import type { TextController, TextSnapshot } from '@/features/posts/text/textController';
 import { TextEditor } from '@/features/posts/TextEditor';
+import { UnwrittenPostCard } from '@/features/posts/UnwrittenPostCard';
+import { Notice } from '@/components/Notice';
+import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { X_POST_MAX_CHARS } from '@/lib/xLength';
 import { usePost } from '@/features/posts/usePost';
 import { Topbar } from '@/features/topbar/Topbar';
 import { ReconnectXForMediaDialog } from '@/features/xConnection/ReconnectXForMediaDialog';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { useXConnectionNotice } from '@/features/xConnection/xConnectionReturn';
-import type { Format, PostDetail } from '@/services/postService';
+import { briefPosts, briefService, notWrittenIdeas } from '@/services/briefService';
+import { FORMAT_POST, type Format, type PostDetail } from '@/services/postService';
 import { usePosting } from '@/features/scheduledPosts/usePosting';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
@@ -64,7 +70,7 @@ function Page({
 }) {
   return (
     <>
-      <Topbar title={title} actions={<PersonaChip />} />
+      <Topbar title={title} actions={<PersonaLink />} />
       {dock}
       {pinned ? (
         <div className="flex min-h-0 flex-1 flex-col bg-background">
@@ -130,6 +136,18 @@ function DraftPostTo({
   );
 }
 
+/** Where a discarded Post's page goes: its Brief's page while that has Posts or Ideas to show. */
+async function afterDiscard(briefId: string): Promise<string> {
+  try {
+    const brief = await briefService.get(briefId);
+    if (briefPosts(brief).length > 0 || notWrittenIdeas(brief).length > 0)
+      return `/briefs/${briefId}`;
+  } catch {
+    // The Drafts tab, where the Post was listed, is always there to go to.
+  }
+  return '/posts/drafts';
+}
+
 /** The Text's Parts with the Media now on them, for "Post to…" to check and show. */
 function withTextMedia(parts: ShownPart[], media: TextMedia): ShownPart[] {
   return parts.map((part, index) =>
@@ -193,7 +211,12 @@ function LoadedPost({
     askToReconnect();
     void reloadXConnection();
   }, [askToReconnect, reloadXConnection]);
-  const media = useTextMedia(loaded.id, loaded.textMedia, text.storedPartCount, onReconnectNeeded);
+  const media = useTextMedia(
+    loaded.id,
+    loaded.textMedia,
+    text.storedMediaPartCount,
+    onReconnectNeeded,
+  );
   useXConnectionNotice();
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
@@ -260,6 +283,7 @@ function LoadedPost({
   const origin = (
     <OriginLine
       brief={post.brief}
+      plan={post.plan}
       version={textVersion}
       edited={post.text?.edited ?? false}
       writing={text.writing ? latest.number + 1 : null}
@@ -286,6 +310,15 @@ function LoadedPost({
           onRestore={can.restore ? (n) => controller.restore(n) : undefined}
         />
         <CopyTextButton text={copiedText(parts)} disabled={text.writing} />
+        {post.status === 'draft' && (
+          <DiscardPostButton
+            icon
+            postId={post.id}
+            from="post_page"
+            disabled={text.writing}
+            onDiscarded={async () => navigate(await afterDiscard(post.briefId), { replace: true })}
+          />
+        )}
       </div>
     </HoverLabels>
   );
@@ -349,6 +382,7 @@ function LoadedPost({
   return (
     <>
       <Page title={breadcrumb} dock={dock} pinned>
+        <BriefNav briefId={post.briefId} place={post.placeInBrief} />
         <TextEditor
           parts={parts}
           texts={post.text?.parts.map((p) => p.text) ?? []}
@@ -356,6 +390,10 @@ function LoadedPost({
           onEdit={(texts, change) => controller.edit(texts, change.cause)}
           onUndo={onUndo}
           onRedo={onRedo}
+          onAddFirstReply={
+            post.text?.format === FORMAT_POST ? () => controller.addFirstReply() : undefined
+          }
+          onRemoveFirstReply={() => controller.removeFirstReply()}
           trace={text.trace}
           busy={text.writing}
           media={
@@ -382,13 +420,22 @@ function LoadedPost({
 /** One Post at /posts/:id, read from the server, so a reload shows the same Post. */
 export function PostPage() {
   const { id = '' } = useParams();
+  // Moving to another Post keeps this route mounted; the key starts its reads and retry afresh.
+  return <PostPageFor key={id} id={id} />;
+}
+
+function PostPageFor({ id }: { id: string }) {
   const {
     load,
     reload,
+    retry,
+    retrying,
     setScheduledPost,
     gone,
     text,
     sendFeedback,
+    failedFeedback,
+    dismissFailedFeedback,
     rewritesDropped,
     error,
     notice,
@@ -402,11 +449,33 @@ export function PostPage() {
         post={load.post}
         text={text}
         controller={load.controller}
-        feedback={{ isWriting: text.writing, error, notice, allowanceUsedUp, onSend: sendFeedback }}
+        feedback={{
+          isWriting: text.writing,
+          error,
+          notice,
+          allowanceUsedUp,
+          failed: failedFeedback,
+          onSend: sendFeedback,
+          onDismiss: dismissFailedFeedback,
+        }}
         rewritesDropped={rewritesDropped}
         onScheduledPost={setScheduledPost}
         onGone={gone}
       />
+    );
+  }
+  if (load.kind === 'unwritten') {
+    const { post } = load;
+    return (
+      <Page title={postTitle(post.plan?.coreIdea ?? post.brief)}>
+        <div>
+          <BriefNav briefId={post.briefId} place={post.placeInBrief} />
+          <UnwrittenPostCard post={post} retrying={retrying} onRetry={() => void retry()} />
+        </div>
+        {error && <ErrorBanner message={error} />}
+        {notice && <Notice message={notice} />}
+        {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
+      </Page>
     );
   }
   if (load.kind === 'notFound') {

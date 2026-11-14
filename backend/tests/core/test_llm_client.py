@@ -8,8 +8,8 @@ from openai import APIStatusError
 from pydantic import BaseModel
 
 from pumpkit.core.config import settings
-from pumpkit.posts.llm_client import LLMClient, LLMNotConfiguredError, llm_client
-from pumpkit.posts.llm_schemas import ModelUsage, StreamDelta
+from pumpkit.core.llm_client import LLMClient, LLMNotConfiguredError, llm_client
+from pumpkit.core.llm_schemas import ModelUsage, StreamDelta
 
 BASE_URL = "https://openrouter.ai/api/v1"
 

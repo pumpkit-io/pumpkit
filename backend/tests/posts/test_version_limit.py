@@ -6,16 +6,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.dependencies import get_current_user
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.llm import LLMError
 from pumpkit.main import app
-from pumpkit.posts.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import started_post_id
 
-AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 
 
 def _iso(moment: datetime) -> str:
@@ -23,15 +23,8 @@ def _iso(moment: datetime) -> str:
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader):
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
+async def with_positioning(client, subscribed):
+    await save_positioning(client)
 
 
 async def _store_attempts(db, user_id: str, times: list[datetime], status: str = "succeeded"):
@@ -42,6 +35,7 @@ async def _store_attempts(db, user_id: str, times: list[datetime], status: str =
     for sequence, moment in enumerate(times, start=1):
         db.add(
             VersionAttempt(
+                user_id=post.user_id,
                 post_id=post.id,
                 sequence=sequence,
                 format="post",
@@ -54,13 +48,13 @@ async def _store_attempts(db, user_id: str, times: list[datetime], status: str =
 
 
 async def test_the_31st_post_within_an_hour_returns_429_with_when_to_retry_and_no_model_call(
-    client, db, user, with_author, fake_llm, clock
+    client, db, user, with_positioning, fake_llm, clock
 ):
     first = clock()
     await _store_attempts(db, user.id, [first + timedelta(minutes=n) for n in range(30)])
     clock.advance(timedelta(minutes=40))
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert response.status_code == 429
     assert response.json() == {
@@ -72,26 +66,26 @@ async def test_the_31st_post_within_an_hour_returns_429_with_when_to_retry_and_n
 
 
 async def test_an_attempt_stops_counting_exactly_an_hour_after_it_was_made(
-    client, db, user, with_author, fake_llm, clock
+    client, db, user, with_positioning, fake_llm, clock
 ):
     first = clock()
     await _store_attempts(db, user.id, [first + timedelta(minutes=n) for n in range(30)])
     clock.advance(timedelta(hours=1))
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert response.status_code == 201
 
 
 async def test_a_second_before_the_oldest_attempt_ages_out_the_limit_still_holds(
-    client, db, user, with_author, fake_llm, clock
+    client, db, user, with_positioning, fake_llm, clock
 ):
     first = clock()
     await _store_attempts(db, user.id, [first + timedelta(minutes=n) for n in range(30)])
     clock.advance(timedelta(minutes=59, seconds=59))
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert response.status_code == 429
     assert response.headers["Retry-After"] == "1"
@@ -99,25 +93,25 @@ async def test_a_second_before_the_oldest_attempt_ages_out_the_limit_still_holds
 
 
 async def test_failed_attempts_count_toward_the_limit(
-    client, db, user, with_author, fake_llm, clock
+    client, db, user, with_positioning, fake_llm, clock
 ):
     first = clock()
     await _store_attempts(db, user.id, [first + timedelta(minutes=n) for n in range(29)])
     fake_llm.replies = [LLMError("provider down")]
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 502
+    assert (await client.post(BRIEFS, json={"brief": "ship"})).status_code == 201
     fake_llm.calls.clear()
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert response.status_code == 429
     assert fake_llm.calls == []
 
 
 async def test_the_31st_attempt_giving_feedback_returns_429_with_no_model_call(
-    client, db, user, with_author, fake_llm, clock
+    client, db, user, with_positioning, fake_llm, clock
 ):
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
-    post_id = (await client.post(POSTS, json={"brief": "ship"})).json()["id"]
+    fake_llm.replies = [{"post": "final"}]
+    post_id = started_post_id(await client.post(BRIEFS, json={"brief": "ship"}))
     first = clock()
     await _store_attempts(
         db, user.id, [first + timedelta(minutes=n) for n in range(29)], status="failed"
@@ -133,13 +127,13 @@ async def test_the_31st_attempt_giving_feedback_returns_429_with_no_model_call(
 
 
 async def test_attempts_past_the_limit_from_concurrent_requests_push_the_retry_time_back(
-    client, db, user, with_author, fake_llm, clock
+    client, db, user, with_positioning, fake_llm, clock
 ):
     first = clock()
     await _store_attempts(db, user.id, [first + timedelta(minutes=n) for n in range(32)])
     clock.advance(timedelta(minutes=40))
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert response.json()["retry_at"] == _iso(first + timedelta(hours=1, minutes=2))
 
@@ -169,13 +163,13 @@ async def _sign_in_as_another_subscribed_user(db) -> None:
 
 
 async def test_the_limit_is_per_user_so_another_users_attempts_dont_count(
-    client, db, user, with_author, fake_llm, clock
+    client, db, user, with_positioning, fake_llm, clock
 ):
     await _store_attempts(db, user.id, [clock() + timedelta(minutes=n) for n in range(30)])
     await _sign_in_as_another_subscribed_user(db)
-    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    await save_positioning(client)
+    fake_llm.replies = [{"post": "final"}]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert response.status_code == 201

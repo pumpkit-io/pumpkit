@@ -28,6 +28,14 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
     refresh: vi.fn(),
   },
 }));
+vi.mock('@/services/positioningService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/positioningService')>()),
+  positioningService: {
+    get: vi.fn().mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true }),
+    save: vi.fn(),
+    draft: vi.fn(),
+  },
+}));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
@@ -37,8 +45,16 @@ vi.mock('@/services/postService', async (importOriginal) => ({
       nextOffset: null,
     }),
     get: vi.fn(),
-    start: vi.fn(),
     addVersion: vi.fn(),
+  },
+}));
+vi.mock('@/services/briefService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/briefService')>()),
+  briefService: {
+    plan: vi.fn(),
+    get: vi.fn(),
+    write: vi.fn(),
+    recent: vi.fn().mockResolvedValue([]),
   },
 }));
 vi.mock('@/services/xConnectionService', () => ({
@@ -69,6 +85,7 @@ import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
+import { briefService } from '@/services/briefService';
 import { postService, type PostDetail } from '@/services/postService';
 import { xConnectionService } from '@/services/xConnectionService';
 import {
@@ -83,8 +100,12 @@ import {
 const POST: PostDetail = {
   id: 'post_01',
   brief: 'ship small things',
+  briefId: 'brief_01',
+  placeInBrief: { position: 1, postCount: 1, previousPostId: null, nextPostId: null },
+  plan: null,
   text: {
     format: 'post',
+    firstReply: false,
     parts: [{ text: 'the final text', charCount: 14, charLimit: 280 }],
     versionNumber: 1,
     edited: false,
@@ -95,11 +116,14 @@ const POST: PostDetail = {
       number: 1,
       feedback: null,
       format: 'post',
+      firstReply: false,
       parts: [{ text: 'the final text', charCount: 14, charLimit: 280 }],
       createdAt: '2026-10-10T12:00:30Z',
     },
   ],
   status: 'draft',
+  writing: false,
+  failedFeedback: null,
   scheduledPost: null,
   textMedia: [],
 };
@@ -116,10 +140,9 @@ function newPostShortcut(target: Element | Window = window) {
   fireEvent.keyDown(target, { key: 'O', ctrlKey: true, shiftKey: true });
 }
 
-/** A Subscribed User with one Inspiration author, on a written Post's page. */
+/** A Subscribed User, on a written Post's page. */
 async function withPostOnScreen() {
   vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-  vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
   vi.mocked(postService.get).mockResolvedValue(POST);
   renderSignedIn('/posts/post_01');
   await screen.findByRole('article', { name: 'Text' });
@@ -143,8 +166,7 @@ describe('The signed-in shell', () => {
         termsVersion: '2026-10-11',
         ...NO_CAPS,
       });
-    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
-    vi.mocked(postService.start).mockReset();
+    vi.mocked(briefService.plan).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(track).mockClear();
@@ -171,12 +193,13 @@ describe('The signed-in shell', () => {
       expect(nav.getByRole('link', { name: 'Posts' })).toHaveAttribute('aria-current', 'page');
     });
 
-    it('shows Persona as a plain link, without counting its Inspiration authors', async () => {
+    it('shows Persona as a plain link, reading no Inspiration authors', async () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
       renderSignedIn('/new');
 
       const nav = await sidebar();
-      await waitFor(() => expect(inspirationAuthorService.list).toHaveBeenCalled());
+      await screen.findByRole('heading', { level: 1, name: 'New post' });
+      expect(inspirationAuthorService.list).not.toHaveBeenCalled();
       expect(nav.getByRole('link', { name: 'Persona' })).toHaveTextContent(/^Persona$/);
     });
 
@@ -439,7 +462,6 @@ describe('The signed-in shell', () => {
     });
 
     it('leaves the Brief alone when the shortcut is pressed over a dialog', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       renderSignedIn('/new');
       const brief = await screen.findByLabelText('Brief');
       fireEvent.change(brief, { target: { value: 'half a thought' } });
@@ -451,21 +473,20 @@ describe('The signed-in shell', () => {
       expect(brief).toHaveValue('half a thought');
     });
 
-    it('keeps the Brief while a Version is being written', async () => {
+    it('keeps the Brief while it is being planned', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
-      vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
+      vi.mocked(briefService.plan).mockReturnValue(new Promise(() => {}));
       renderSignedIn('/new');
       fireEvent.change(await screen.findByLabelText('Brief'), {
         target: { value: 'ship small things' },
       });
-      fireEvent.click(await screen.findByRole('button', { name: 'Write the post' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Plan posts' }));
 
       newPostShortcut();
       fireEvent.click((await sidebar()).getByRole('link', { name: 'New post' }));
 
       expect(screen.getByLabelText('Brief')).toHaveValue('ship small things');
-      expect(screen.getByText(/writing your post/i)).toBeInTheDocument();
+      expect(screen.getByText('Reading your brief…')).toBeInTheDocument();
     });
   });
 

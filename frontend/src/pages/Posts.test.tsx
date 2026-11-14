@@ -24,15 +24,6 @@ vi.mock('@/services/billingService', () => ({
     }),
   },
 }));
-vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
-  inspirationAuthorService: {
-    list: vi.fn().mockResolvedValue([]),
-    add: vi.fn(),
-    remove: vi.fn(),
-    refresh: vi.fn(),
-  },
-}));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: { list: vi.fn(), get: vi.fn(), start: vi.fn(), addVersion: vi.fn() },
@@ -66,6 +57,7 @@ import {
   postService,
   type PostDetail,
   type PostCounts,
+  type PlaceInBrief,
   type PostListItem,
   type PostsPage,
   type ScheduledPostSummary,
@@ -98,6 +90,8 @@ function summary(extra: Partial<ScheduledPostSummary> = {}): ScheduledPostSummar
   };
 }
 
+const ALONE: PlaceInBrief = { position: 1, postCount: 1, previousPostId: null, nextPostId: null };
+
 function item(id: string, parts: string[], extra: Partial<PostListItem> = {}): PostListItem {
   return {
     id,
@@ -105,9 +99,12 @@ function item(id: string, parts: string[], extra: Partial<PostListItem> = {}): P
     status: 'scheduled',
     parts,
     format: parts.length > 1 ? 'thread' : 'post',
+    firstReply: false,
     versionCount: 1,
     latestVersionAt: at(-1, 15),
     scheduledPost: summary(),
+    briefId: `brief_of_${id}`,
+    placeInBrief: ALONE,
     ...extra,
   };
 }
@@ -265,6 +262,26 @@ describe('Posts page', () => {
       expect(screen.getByText('Next to go out first.')).toBeInTheDocument();
     });
 
+    it('reads a single post with a first reply as one, and names its first reply', async () => {
+      vi.mocked(postService.list).mockResolvedValue(
+        page([
+          item('post_01', ['Try the calculator.', 'Sign up: pumpkit.io/calc'], {
+            format: 'post',
+            firstReply: true,
+          }),
+        ]),
+      );
+      renderSignedIn('/posts/scheduled');
+
+      const reply = await row('Try the calculator.');
+      expect(reply.getByText(/Single post · first reply · Your profile/)).toBeInTheDocument();
+      fireEvent.click(reply.getByRole('button', { name: /Show/ }));
+      expect(await reply.findByRole('listitem', { name: 'First reply' })).toHaveTextContent(
+        'Sign up: pumpkit.io/calc',
+      );
+      expect(reply.getByRole('listitem', { name: 'Post' })).toBeInTheDocument();
+    });
+
     it('says when a Post is being published', async () => {
       vi.mocked(postService.list).mockResolvedValue(
         page([
@@ -307,10 +324,16 @@ describe('Posts page', () => {
       vi.mocked(postService.get).mockResolvedValue({
         id: 'post_01',
         brief: 'ship small things',
+        briefId: 'brief_01',
+        placeInBrief: ALONE,
+        plan: null,
         status: 'scheduled',
+        writing: false,
+        failedFeedback: null,
         textMedia: [],
         text: {
           format: 'post',
+          firstReply: false,
           parts: [{ text: 'Ship small.', charCount: 11, charLimit: 280 }],
           versionNumber: 1,
           edited: false,
@@ -321,6 +344,7 @@ describe('Posts page', () => {
             number: 1,
             feedback: null,
             format: 'post',
+            firstReply: false,
             parts: [{ text: 'Ship small.', charCount: 11, charLimit: 280 }],
             createdAt: '2026-10-10T12:00:30Z',
           },
@@ -328,6 +352,7 @@ describe('Posts page', () => {
         scheduledPost: {
           id: 'scheduled_post_01',
           parts: [{ text: 'Ship small.', live: false, xPostUrl: null, media: [] }],
+          firstReply: false,
           state: 'scheduled',
           publishAt: at(1, 9),
           publishedAt: null,
@@ -463,6 +488,35 @@ describe('Posts page', () => {
     expect(draft.getByText('Single post · 3 versions')).toBeInTheDocument();
   });
 
+  it('shows a Draft from a brief with several posts as "2 of 4", linking to the brief', async () => {
+    vi.mocked(postService.list).mockResolvedValue(
+      page([
+        item('post_02', ['The second of four.'], {
+          status: 'draft',
+          scheduledPost: null,
+          briefId: 'brief_01',
+          placeInBrief: {
+            position: 2,
+            postCount: 4,
+            previousPostId: 'post_01',
+            nextPostId: 'post_03',
+          },
+        }),
+        item('post_09', ['Alone in its brief.'], { status: 'draft', scheduledPost: null }),
+      ]),
+    );
+    renderSignedIn('/posts/drafts');
+
+    const sibling = await row('The second of four.');
+    expect(sibling.getByText(/^Single post · 1 version ·/)).toBeInTheDocument();
+    const place = sibling.getByRole('link', { name: '2 of 4 posts from its brief' });
+    expect(place).toHaveTextContent('2 of 4');
+    expect(place).toHaveAttribute('href', '/briefs/brief_01');
+    const alone = await row('Alone in its brief.');
+    expect(alone.getByText('Single post · 1 version')).toBeInTheDocument();
+    expect(alone.queryByRole('link', { name: /posts from its brief/ })).not.toBeInTheDocument();
+  });
+
   it('lists Published Posts with when they went out, where, and a link to X', async () => {
     vi.mocked(postService.list).mockResolvedValue(
       page([
@@ -572,16 +626,22 @@ describe('Posts page', () => {
       return {
         id,
         brief: 'ship small things',
-        text: { format: 'post', parts: [], versionNumber: 2, edited: false },
+        briefId: 'brief_01',
+        placeInBrief: ALONE,
+        plan: null,
+        text: { format: 'post', firstReply: false, parts: [], versionNumber: 2, edited: false },
         versions: [1, 2].map((number) => ({
           id: `${id}_v${number}`,
           number,
           feedback: number === 1 ? null : 'punchier',
           format: 'post' as const,
+          firstReply: false,
           parts: [{ text: `${text} v${number}`, charCount: 10, charLimit: 280 }],
           createdAt: at(0, 7 + number),
         })),
         status: 'draft',
+        writing: false,
+        failedFeedback: null,
         scheduledPost: null,
         textMedia: [],
         ...extra,

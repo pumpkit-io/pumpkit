@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { textOf, type PostDetail, type Version } from '@/services/postService';
+import { textOf, VersionNotWritten, type PostDetail, type Version } from '@/services/postService';
 import { TextController } from './textController';
 import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from './textSaver';
 import { httpError, ManualClock, MemoryBackend, settled } from './testing';
@@ -10,6 +10,7 @@ function version(number: number, texts: string[], feedback: string | null = null
     number,
     feedback: number === 1 ? null : (feedback ?? 'punchier'),
     format: texts.length > 1 ? 'thread' : 'post',
+    firstReply: false,
     parts: texts.map((text) => ({ text, charCount: text.length, charLimit: 280 })),
     createdAt: `2026-10-10T0${number}:00:00Z`,
   };
@@ -19,9 +20,14 @@ function draft(versions: Version[]): PostDetail {
   return {
     id: 'post_01',
     brief: 'ship small things',
+    briefId: 'brief_01',
+    placeInBrief: { position: 1, postCount: 1, previousPostId: null, nextPostId: null },
+    plan: null,
     versions,
     text: textOf(versions[versions.length - 1]!),
     status: 'draft',
+    writing: false,
+    failedFeedback: null,
     scheduledPost: null,
     textMedia: [],
   };
@@ -59,7 +65,7 @@ describe('TextController', () => {
       expect(controller.snapshot().save).toEqual({ kind: 'pending' });
       expect(server.callsOf('saveText')).toEqual([]);
       await clock.advance(TEXT_SAVE_PAUSE_MS);
-      expect(server.callsOf('saveText')).toEqual([[['the first text, edited']]]);
+      expect(server.callsOf('saveText')).toEqual([[['the first text, edited'], false]]);
       expect(server.textParts).toEqual(['the first text, edited']);
       expect(controller.snapshot().save).toEqual({ kind: 'saved' });
     });
@@ -72,7 +78,7 @@ describe('TextController', () => {
       controller.edit(['the first text, again'], 'typing');
       await clock.advance(TEXT_SAVE_PAUSE_MS);
 
-      expect(server.callsOf('saveText')).toEqual([[['the first text, again']]]);
+      expect(server.callsOf('saveText')).toEqual([[['the first text, again'], false]]);
       expect(track.mock.calls.filter(([event]) => event === 'post_text_edited')).toEqual([
         ['post_text_edited', { format: 'post', part_count: 1 }],
       ]);
@@ -91,6 +97,7 @@ describe('TextController', () => {
       const { server, controller } = open(draft(ONE));
       server.port.saveText = async (parts) => ({
         format: 'post',
+        firstReply: false,
         parts: parts.map((text) => ({ text, charCount: 99, charLimit: 280 })),
         versionNumber: 1,
         edited: true,
@@ -121,8 +128,8 @@ describe('TextController', () => {
       const { server, controller, texts } = open(draft(TWO));
       const save = server.hold('saveText');
       const counted = server.port.saveText;
-      server.port.saveText = async (parts) => ({
-        ...(await counted(parts)),
+      server.port.saveText = async (parts, firstReply) => ({
+        ...(await counted(parts, firstReply)),
         parts: parts.map((text) => ({ text, charCount: 99, charLimit: 280 })),
       });
       controller.edit(['edited'], 'paste');
@@ -211,7 +218,10 @@ describe('TextController', () => {
       controller.dispose();
       await save.release();
 
-      expect(server.callsOf('saveText')).toEqual([[['first']], [['first, then more']]]);
+      expect(server.callsOf('saveText')).toEqual([
+        [['first'], false],
+        [['first, then more'], false],
+      ]);
     });
   });
 
@@ -381,7 +391,7 @@ describe('TextController', () => {
       expect(texts()).toEqual(['the first text, mine']);
       await clock.advance(TEXT_SAVE_PAUSE_MS);
 
-      expect(server.callsOf('saveText')).toEqual([[['the first text, mine']]]);
+      expect(server.callsOf('saveText')).toEqual([[['the first text, mine'], false]]);
       expect(server.text).toMatchObject({ versionNumber: 1, edited: true });
     });
 
@@ -522,6 +532,74 @@ describe('TextController', () => {
       });
       expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
       expect(texts()).toEqual(['the first text']);
+    });
+
+    it('holds the Text while a Version read as being written lands, then shows it', async () => {
+      const { server, controller, texts } = open(draft(ONE));
+      server.versions = TWO;
+      const landing = server.hold('awaitVersion');
+
+      const resuming = controller.resumeWriting();
+      expect(controller.snapshot()).toMatchObject({
+        writing: true,
+        can: { edit: false, sendFeedback: false, restore: false, postTo: false },
+      });
+      await landing.release();
+
+      expect(await resuming).toBe('sent');
+      expect(server.callsOf('awaitVersion')).toEqual([[1]]);
+      expect(texts()).toEqual(['the second text']);
+      expect(controller.snapshot()).toMatchObject({ writing: false, textVersion: { number: 2 } });
+    });
+
+    it('keeps the Text when the Version being written never lands', async () => {
+      const { controller, texts } = open(draft(ONE));
+
+      const outcome = await controller.resumeWriting();
+
+      expect(outcome).toEqual({ failed: expect.any(VersionNotWritten) });
+      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'feedback' });
+      expect(texts()).toEqual(['the first text']);
+      expect(controller.snapshot().writing).toBe(false);
+    });
+
+    it('stops waiting quietly when the page goes away', async () => {
+      const { server, controller } = open(draft(ONE));
+      server.hold('awaitVersion');
+
+      const resuming = controller.resumeWriting();
+      controller.dispose();
+
+      expect(await resuming).toBe('stopped');
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+    });
+
+    it('takes over from a wait that was stopped, and shows the Version once it lands', async () => {
+      const { server, controller, texts } = open(draft(ONE));
+      server.versions = TWO;
+      server.hold('awaitVersion');
+      const first = controller.resumeWriting();
+      controller.stopWaiting();
+
+      const second = controller.resumeWriting();
+
+      expect(await first).toBe('stopped');
+      expect(controller.snapshot().writing).toBe(true);
+      expect(await second).toBe('sent');
+      expect(texts()).toEqual(['the second text']);
+      expect(controller.snapshot()).toMatchObject({ writing: false, textVersion: { number: 2 } });
+    });
+
+    it('waits once when asked to resume while already waiting', async () => {
+      const { server, controller } = open(draft(ONE));
+      server.versions = TWO;
+      const landing = server.hold('awaitVersion');
+      const first = controller.resumeWriting();
+
+      expect(await controller.resumeWriting()).toBe('alreadyWriting');
+      await landing.release();
+      expect(await first).toBe('sent');
+      expect(server.callsOf('awaitVersion')).toEqual([[1]]);
     });
 
     it('clears the last restore error', async () => {

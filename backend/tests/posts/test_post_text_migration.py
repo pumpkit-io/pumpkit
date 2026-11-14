@@ -9,10 +9,12 @@ from sqlalchemy import Connection
 
 from alembic import command
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
-from tests.migrations import insert, migrate
+from tests.migrations import insert, insert_idea, migrate
 
 POSTS = "/api/v1/posts"
 WRITTEN_AT = "2026-10-01 12:00:00"
+# What 0020 adds; the schema keeps the later ones, built at head.
+TEXT_COLUMNS = {"text_format", "text_parts", "text_version_number", "text_edited"}
 
 
 async def _to_0019(db_engine) -> None:
@@ -27,7 +29,7 @@ def _post(connection: Connection, *, user_id: str, post_id: str) -> None:
         "posts",
         id=post_id,
         user_id=user_id,
-        brief="ship",
+        idea_id=insert_idea(connection, user_id=user_id, brief="ship", created_at=WRITTEN_AT),
         corpus_post_ids="[]",
         created_at=WRITTEN_AT,
     )
@@ -43,10 +45,13 @@ def _attempt(
     parts,
     status="succeeded",
 ) -> None:
+    # The schema keeps the columns added later, built at head, such as 0066's attempt User.
+    owner = sa.text("SELECT user_id FROM posts WHERE id = :post_id")
     insert(
         connection,
         "version_attempts",
         id=f"{post_id}-attempt-{sequence}",
+        user_id=connection.execute(owner, {"post_id": post_id}).scalar_one(),
         post_id=post_id,
         sequence=sequence,
         version_number=number,
@@ -117,6 +122,7 @@ async def test_the_migration_sets_each_posts_text_to_its_latest_version(
             {"text": "Two a.", "char_count": 6, "char_limit": X_POST_MAX_CHARS, "media": []},
             {"text": "Two b.", "char_count": 6, "char_limit": X_POST_MAX_CHARS, "media": []},
         ],
+        "first_reply": False,
         "version_number": 2,
         "edited": False,
     }
@@ -145,7 +151,7 @@ async def test_the_migration_runs_down_and_up_again(
         return {column["name"] for column in sa.inspect(connection).get_columns("posts")}
 
     async with db_engine.connect() as connection:
-        assert not {c for c in await connection.run_sync(post_columns) if c.startswith("text_")}
+        assert not TEXT_COLUMNS & await connection.run_sync(post_columns)
 
     await migrate(db_engine, lambda config: command.upgrade(config, "0020"))
     read = (await client.get(f"{POSTS}/post_a")).json()

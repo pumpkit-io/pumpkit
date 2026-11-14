@@ -4,8 +4,11 @@ from typing import Optional
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import get_x_reader
+from pumpkit.core.background import get_background_tasks
 from pumpkit.core.config import settings
+from pumpkit.core.db.session import get_session_maker
 from pumpkit.core.errors import RefusedError
+from pumpkit.core.llm import get_llm
 from pumpkit.core.mcp_tools import (
     ADDITIVE,
     DESTRUCTIVE,
@@ -18,11 +21,10 @@ from pumpkit.core.schemas import LinkToolResponse
 from pumpkit.core.storage import get_file_storage
 from pumpkit.core.time import get_clock
 from pumpkit.posts.formats import Format
-from pumpkit.posts.llm import get_llm
 from pumpkit.posts.media_fetcher import get_media_url_fetcher
 from pumpkit.posts.media_upload_links import LIFETIME as UPLOAD_LINK_LIFETIME
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import TextResponse, VersionResponse
+from pumpkit.posts.schemas import TextResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.models import FAILED, PUBLISHED
 from pumpkit.scheduling.post_status import PostStatus
@@ -39,6 +41,7 @@ from pumpkit.scheduling.schemas import (
     WRITE_RATE,
     AttachMediaRequest,
     AttachMediaToolResponse,
+    DiscardedPostToolResponse,
     FeedbackRequest,
     PastCommunitiesResponse,
     PostDetailResponse,
@@ -111,7 +114,8 @@ async def schedule_post(
     """
     Schedule the post's text on the user's connected X account for `publish_at`, an ISO 8601
     time with its UTC offset, on a whole minute and at least a minute from now. A thread keeps
-    every part in order. A post goes out once: it has at most one scheduled post, so to change
+    every part in order, and a first reply goes out as a reply to its post. A text that still
+    holds the `[link]` placeholder is refused. A post goes out once: it has at most one scheduled post, so to change
     one already scheduled, edit it, or delete it first. The post goes to the user's profile, or
     to the community whose URL or ID is in `community`. In a community, `share_with_followers`
     also shows it to the user's followers.
@@ -150,7 +154,8 @@ async def post_now(
     """
     Publish the post's text on the user's connected X account right away. Show the user the
     exact text of every part and get their yes first. A thread keeps every part in order, each
-    replying to the one before. A post goes out once: one that already has a scheduled post is
+    replying to the one before, and a first reply replies to its post. A text that still holds
+    the `[link]` placeholder is refused. A post goes out once: one that already has a scheduled post is
     refused. The post goes to the user's profile, or to the community whose URL or ID is in
     `community`. In a community, `share_with_followers` also shows it to the user's followers.
     A post with a GIF or a video comes back scheduled before its media is uploaded: Pumpkit then
@@ -249,6 +254,28 @@ async def delete_scheduled_post(
     )
 
 
+async def delete_post(call: ToolCall[User], post_id: str) -> DiscardedPostToolResponse:
+    """
+    Discard one of the user's drafts for good: the post, every version and its media are deleted,
+    and its idea stays on its brief as not written, so the brief's page in the web app (`brief_url`)
+    offers it again. The generations it used stay used. A scheduled, published or failed post is
+    refused, and so is a post still being written or with no version yet. It can't be undone, so
+    ask the user first.
+    """
+    brief_id = await mediator.discard_post(
+        db=call.db,
+        storage=await call.provide(get_file_storage),
+        user=call.user,
+        post_id=post_id,
+        now=call.now,
+    )
+    return DiscardedPostToolResponse(
+        message="The post and its versions are deleted.",
+        brief_id=brief_id,
+        brief_url=mediator.brief_url(brief_id),
+    )
+
+
 async def list_posts(
     call: ToolCall[User], status: Optional[PostStatus] = None, limit: int = 20, offset: int = 0
 ) -> PostsPageResponse:
@@ -278,8 +305,13 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     Read one of the user's posts: its brief, its text (the text meant for X, with `version_number`,
     the version it came from, and `edited`, whether the user changed it by hand since) and every
     version in order, each with the feedback that made it, its text, each part's character count,
+    `first_reply` (whether its last part is the single post's first reply),
     when it was written and its `starting_text`: the text that feedback was given on, with the
-    version it came from, when it wasn't the version before as written. `status` is "draft" with no
+    version it came from, when it wasn't the version before as written. `writing_state` is
+    "writing" while Pumpkit writes a version, about a minute, so read the post again until it is
+    null; "not_written" means Pumpkit couldn't write the first version, which the user can retry
+    from the post's page in the web app. Until its first version is written a post has no text
+    and `status` is null. `status` is "draft" with no
     scheduled post, else "scheduled", "published" or "failed" from its one scheduled post, returned
     in `scheduled_post` with its own copy of the text, which the user may have edited since, and
     `posting`, true while it is being published or due. A draft has no scheduled post, so its text
@@ -290,26 +322,33 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
 
 async def give_feedback(
     call: ToolCall[User], post_id: str, feedback: str, format: Optional[Format] = None
-) -> VersionResponse:
+) -> PostDetailResponse:
     """
     Give feedback in plain words on one of the user's posts, such as "shorter", "end with a
     question", "make part 3 punchier" or "like version 2, with a different hook". It rewrites
     the post's text as it is now, hand edits and a restored version included, into the next
     version, which becomes the text, keeping the earlier ones. `format` switches the new version
-    to "post" (a single X post) or "thread"; leave it out to keep the text's format. Only a draft
-    or a failed post takes feedback: a scheduled one is edited or deleted first, and a published
-    one is done. Show the user the new version's text, with every part and its character count.
-    Takes up to a minute.
+    to "post" (a single X post) or "thread"; leave it out to keep the text's format. A post's
+    first reply moves into a thread's last part. A post written before plans existed is refused.
+    Only a draft or a failed post takes feedback: a scheduled one is edited or deleted first, and
+    a published one is done. It answers at once with the post and `writing_state` "writing":
+    Pumpkit writes the new version in the background, which takes about a minute, and the text
+    can't change meanwhile. Read the post with `get_post` until `writing_state` is null. If it
+    has a new version, show the user its text, with every part and its character count; if not,
+    Pumpkit couldn't write it, the text is as it was, and `failed_feedback` holds the feedback to
+    give again.
     """
     feedback_request = FeedbackRequest(feedback=feedback, format=format)
     return await mediator.give_feedback(
         db=call.db,
         llm=await call.provide(get_llm),
+        tasks=await call.provide(get_background_tasks),
+        sessions=await call.provide(get_session_maker),
         user=call.user,
         post_id=post_id,
         feedback=feedback_request.feedback,
         format=feedback_request.format,
-        now=call.now,
+        clock=await call.provide(get_clock),
     )
 
 
@@ -455,6 +494,8 @@ TOOLS = [
     # The web edit and delete routes have no limit; these take the create route's.
     McpTool(edit_scheduled_post, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(delete_scheduled_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
+    # The web discard route has no limit; this takes the create route's.
+    McpTool(delete_post, rate=WRITE_RATE, annotations=DESTRUCTIVE),
     # The web Media routes count against MEDIA_RATE; these take the other writing tools' rate.
     McpTool(attach_media, rate=WRITE_RATE, annotations=ADDITIVE),
     McpTool(remove_media, rate=WRITE_RATE, annotations=DESTRUCTIVE),

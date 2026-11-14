@@ -4,19 +4,18 @@ Restoring a Version as the Post's Text (ADR 0016), through
 Failed Post's Text changes.
 """
 
-from datetime import datetime, timezone
-
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.mcp_server import INSTRUCTIONS
 from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written, written_thread
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import started_post_id
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
 SCHEDULED_TEXT_IS_SET = (
@@ -32,25 +31,17 @@ ONE = {"text": "Version one.", "char_count": 12, "char_limit": X_POST_MAX_CHARS}
 async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect_x) -> dict:
     """A Post with two Versions, a single post then a Thread, so its Text is Version 2."""
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
-    fake_llm.replies = [written("sketch one"), {"post": "Version one."}]
-    started = await client.post(POSTS, json={"brief": "ship small things"})
+    await save_positioning(client)
+    fake_llm.replies = [{"post": "Version one."}]
+    started = await client.post(BRIEFS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["Part one.", "Part two."]}]
+    fake_llm.replies = [{"parts": ["Part one.", "Part two."]}]
     given = await client.post(
-        f"{POSTS}/{started.json()['id']}/versions",
+        f"{POSTS}/{started_post_id(started)}/versions",
         json={"feedback": "expand it", "format": "thread"},
     )
-    assert given.status_code == 201, given.text
-    return (await client.get(f"{POSTS}/{started.json()['id']}")).json()
+    assert given.status_code == 202, given.text
+    return (await client.get(f"{POSTS}/{started_post_id(started)}")).json()
 
 
 async def _restore(client, post_id: str, number: int):
@@ -70,6 +61,7 @@ async def test_restoring_a_version_makes_it_the_text(client, post):
     restored = {
         "format": "post",
         "parts": [{**ONE, "media": []}],
+        "first_reply": False,
         "version_number": 1,
         "edited": False,
     }
@@ -153,6 +145,7 @@ async def test_the_restore_version_tool_answers_with_the_text(client, post, mcp)
     assert result["structuredContent"] == {
         "format": "post",
         "parts": [{**ONE, "media": []}],
+        "first_reply": False,
         "version_number": 1,
         "edited": False,
     }
