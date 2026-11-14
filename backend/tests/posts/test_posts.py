@@ -4,7 +4,6 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from pumpkit.authors.models import InspirationAuthor
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import LLMError
 from pumpkit.core.llm_client import LLMNotConfiguredError
@@ -12,7 +11,7 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import writing_calls, written_thread
+from tests.posts.writing_replies import start_thread, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -93,6 +92,16 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
         assert "sketch" not in str(version)
 
 
+async def _thread_corpus(client, fake_llm) -> str:
+    """The corpus a Thread's Feedback is written from: the one the Post started with."""
+    post_id = (await start_thread(client, fake_llm, ["a", "b"], brief="ship")).json()["id"]
+    fake_llm.calls.clear()
+    fake_llm.replies = [written_thread(["c", "d"]), {"parts": ["c", "d"]}]
+    response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "shorter"})
+    assert response.status_code == 201, response.text
+    return fake_llm.calls[0].messages[1]["content"]
+
+
 async def test_a_threads_corpus_is_the_newest_20_posts_of_each_author_in_list_order(
     client, subscribed, fake_x_reader, fake_llm
 ):
@@ -101,11 +110,8 @@ async def test_a_threads_corpus_is_the_newest_20_posts_of_each_author_in_list_or
     await client.post(AUTHORS, json={"handle": "paulg"})
     await save_positioning(client)
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    fake_llm.replies = [written_thread(["sketch a", "sketch b"]), {"parts": ["a", "b"]}]
+    corpus = await _thread_corpus(client, fake_llm)
 
-    await client.post(POSTS, json={"brief": "ship", "format": "thread"})
-
-    corpus = writing_calls(fake_llm)[0].messages[1]["content"]
     assert corpus.count("<post>") == 21
     assert "<post>paulg post 19</post>" in corpus
     assert "paulg post 20<" not in corpus
@@ -122,11 +128,8 @@ async def test_posts_posted_in_the_same_second_are_ordered_by_post_id_descending
     ]
     await save_positioning(client)
     await client.post(AUTHORS, json={"handle": "levelsio"})
-    fake_llm.replies = [written_thread(["sketch a", "sketch b"]), {"parts": ["a", "b"]}]
+    corpus = await _thread_corpus(client, fake_llm)
 
-    await client.post(POSTS, json={"brief": "ship", "format": "thread"})
-
-    corpus = writing_calls(fake_llm)[0].messages[1]["content"]
     assert corpus.index("higher id") < corpus.index("lower id")
 
 
@@ -164,33 +167,6 @@ async def test_a_brief_of_exactly_200000_characters_is_accepted(client, with_aut
 
 async def test_a_blank_brief_returns_422(client, with_author, fake_llm):
     response = await client.post(POSTS, json={"brief": "  \n "})
-
-    assert response.status_code == 422
-    assert fake_llm.calls == []
-
-
-async def test_starting_a_thread_with_no_inspiration_authors_returns_422(
-    client, subscribed, fake_llm
-):
-    await save_positioning(client)
-
-    response = await client.post(POSTS, json={"brief": "ship", "format": "thread"})
-
-    assert response.status_code == 422
-    assert response.json()["detail"] == (
-        "Add an inspiration author with posts before writing a post."
-    )
-    assert fake_llm.calls == []
-
-
-async def test_starting_a_thread_when_no_author_has_stored_posts_returns_422(
-    client, db, user, subscribed, fake_llm, clock
-):
-    db.add(InspirationAuthor(user_id=user.id, handle="quiet", position=0, added_at=clock()))
-    await db.commit()
-    await save_positioning(client)
-
-    response = await client.post(POSTS, json={"brief": "ship", "format": "thread"})
 
     assert response.status_code == 422
     assert fake_llm.calls == []

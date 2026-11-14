@@ -1,9 +1,11 @@
 """
-The plan call's system prompt and user message, ported from pumpkit-new-architecture-v5 and
-fitted to the character limit of the User's X account.
+The plan call's system prompt and user message, ported from pumpkit-new-architecture-v5, fitted
+to the character limit of the User's X account, and with a Thread among the formats.
 """
 
 from functools import cache
+
+from pumpkit.posts.writing.constants import THREAD_MAX_PARTS, THREAD_MIN_PARTS
 
 SHORT_LIMIT = 280
 MEDIUM_LIMIT = 700
@@ -16,7 +18,11 @@ def is_short_only(char_limit: int) -> bool:
 
 
 def _format_names(short_only: bool) -> str:
-    return "short" if short_only else "short, medium or long"
+    return "short or thread" if short_only else "short, medium, long or thread"
+
+
+def _thread_line(char_limit: int) -> str:
+    return f"- thread: {THREAD_MIN_PARTS} to {THREAD_MAX_PARTS} posts of at most {char_limit:,} characters each, read in order, each replying to the one before."
 
 
 def _format_section(char_limit: int) -> str:
@@ -25,17 +31,19 @@ def _format_section(char_limit: int) -> str:
         return f"""\
 ## format
 
-How long the post is. A post on my X account holds at most {char_limit:,} characters, so every post is short.
+How long the post is, or whether it is a thread. Choose the shortest format that delivers the core idea and the takeaway with the proof the raw input gives. The post never invents material, so a format the raw input can't fill ends up padded. A post on my X account holds at most {char_limit:,} characters.
 
-- short: at most {short} characters, all visible in the feed. For one idea that lands in a breath."""
+- short: at most {short} characters, all visible in the feed. For one idea that lands in a breath.
+{_thread_line(char_limit)} Choose it when I ask for a thread, or when the material needs more room than one post on my account holds: several items or steps each worth a line or two, a story with its details, a result with its explanation and method."""
     return f"""\
 ## format
 
-How long the post is. Choose the shortest format that delivers the core idea and the takeaway with the proof the raw input gives. The post never invents material, so a format the raw input can't fill ends up padded. A post on my X account holds at most {char_limit:,} characters.
+How long the post is, or whether it is a thread. Choose the shortest format that delivers the core idea and the takeaway with the proof the raw input gives. The post never invents material, so a format the raw input can't fill ends up padded. A post on my X account holds at most {char_limit:,} characters.
 
 - short: at most {short} characters, all visible in the feed. For one idea that lands in a breath.
 - medium: about {MEDIUM_TARGET} characters (hard limit {min(MEDIUM_LIMIT, char_limit)}). For one developed point: the hook, the point with its proof, the closer.
-- long: about 400 to 2,000 characters, read behind "Show more". For material that needs the room: several items or steps each worth a line or two, a story with its details, a result with its explanation and method."""
+- long: about 400 to 2,000 characters, read behind "Show more". For material that needs the room: several items or steps each worth a line or two, a story with its details, a result with its explanation and method.
+{_thread_line(char_limit)} Choose it when I ask for a thread, or when the material needs more room than one post on my account holds. A post here has room for long material, so otherwise prefer a medium or long post to a thread: the reader stays in one place."""
 
 
 _STRUCTURE_INTRO = """\
@@ -52,13 +60,12 @@ _LONGER_STRUCTURES = """\
 - hook_story_insight_closer: a story, then what it showed me. Only when the raw input tells something that happened over time, with a turn in it.
 - hook_playbook_closer: steps the reader can copy, in order. Only when the raw input describes a method or process that breaks into steps."""
 
-_SHORT_ONLY_STRUCTURES = """\
-A list, a story or a playbook doesn't fit a short post: plan its sharpest point as one of these two."""
+_THREAD_STRUCTURES = """\
+one_line and few_lines are for a short post. A thread takes one of the other four."""
 
 
-def _structure_section(short_only: bool) -> str:
-    rest = f"\n\n{_SHORT_ONLY_STRUCTURES}" if short_only else f"\n{_LONGER_STRUCTURES}"
-    return _STRUCTURE_INTRO + rest
+def _structure_section() -> str:
+    return f"{_STRUCTURE_INTRO}\n{_LONGER_STRUCTURES}\n\n{_THREAD_STRUCTURES}"
 
 
 _FIT_HEADING = "## The choices must fit each other"
@@ -68,16 +75,16 @@ _FIT_MATERIAL = "- bookmark goes with a list, a playbook or a finding with a met
 
 def _fit_section(short_only: bool) -> str:
     if short_only:
-        # No material line: it pairs actions with structures and lengths this account can't use.
         lines = [
-            "- Every post is short, with one_line or few_lines, whatever the funnel.",
+            "- A short post is one_line or few_lines. A thread is a list, a playbook, a problem or a story.",
             _FIT_ACTION,
+            _FIT_MATERIAL,
         ]
     else:
         lines = [
             "- TOF leans short or medium. MOF and BOF lean medium or long.",
             _FIT_ACTION,
-            "- one_line and few_lines go with short, and short goes with one_line or few_lines. The list, playbook, problem and story structures need medium or long.",
+            "- one_line and few_lines go with short, and short goes with one_line or few_lines. The list, playbook, problem and story structures need medium, long or thread.",
             _FIT_MATERIAL,
         ]
     return "\n".join([_FIT_HEADING, "", *lines])
@@ -145,7 +152,7 @@ Four choices per post: funnel, desired_action, format and structure. Two things 
 - What the raw input holds for that post's idea. The material sets what the post can be: a single sharp opinion can't fill a playbook, and a post can't ask for a sign-up when there is nothing to sign up for. Judge the material that serves the core idea, not everything in the raw input.
 - What my positioning says I post for. When it names a goal (reach, trust, signups), lean toward it wherever the material allows.
 
-If the raw input itself asks for a kind of post ("make it short", "a list", "ask them to DM me"), do that.
+If the raw input itself asks for a kind of post ("make it short", "a list", "as a thread", "ask them to DM me"), do that.
 
 ## funnel
 
@@ -175,7 +182,7 @@ Never choose an action whose ask I can't back: no follow without a reason to fol
 
 {_format_section(char_limit)}
 
-{_structure_section(short_only)}
+{_structure_section()}
 
 {_fit_section(short_only)}
 

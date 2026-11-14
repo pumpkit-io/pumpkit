@@ -15,7 +15,10 @@ from tests.mcp_client import error_text
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     PLAN,
+    POST_IDEAS,
     REVISED_POST,
+    ideas,
+    planned_thread,
     revised,
     written_thread,
 )
@@ -78,13 +81,13 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
     }
 
 
-async def test_starting_a_post_as_a_thread_returns_its_parts(with_author, mcp, fake_llm):
-    fake_llm.replies = [
-        written_thread(["sketch one", "sketch two"]),
-        {"parts": ["final one", "final two 🚀"]},
-    ]
+async def test_starting_a_post_the_planner_makes_a_thread_returns_its_parts(
+    with_author, mcp, fake_llm
+):
+    fake_llm.standing[POST_IDEAS] = ideas(planned_thread())
+    fake_llm.replies = [{"parts": ["final one", "final two 🚀"]}]
 
-    result = await mcp.call_tool("start_post", brief="ship small things", format="thread")
+    result = await mcp.call_tool("start_post", brief="ship small things, as a thread")
 
     assert result["isError"] is False
     [version] = result["structuredContent"]["versions"]
@@ -97,22 +100,11 @@ async def test_starting_a_post_as_a_thread_returns_its_parts(with_author, mcp, f
     )
 
 
-async def test_start_post_takes_an_optional_format_of_post_or_thread(subscribed, mcp):
+async def test_start_post_takes_only_a_brief(subscribed, mcp):
     schema = (await mcp.list_tools())["start_post"]["inputSchema"]
 
     assert schema["required"] == ["brief"]
-    assert schema["properties"]["format"]["enum"] == ["post", "thread"]
-    assert schema["properties"]["format"]["default"] == "post"
-
-
-async def test_starting_a_thread_without_authors_links_to_persona(subscribed, mcp):
-    await mcp.call_tool("set_positioning", text="I post about bootstrapping.")
-
-    result = await mcp.call_tool("start_post", brief="ship small things", format="thread")
-
-    assert error_text(result) == (
-        "Add an inspiration author with posts before writing a post. http://localhost:5173/persona"
-    )
+    assert list(schema["properties"]) == ["brief"]
 
 
 @pytest.fixture

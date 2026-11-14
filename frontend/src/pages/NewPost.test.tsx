@@ -217,7 +217,7 @@ describe('New post', () => {
     const brief = area.getByLabelText('Brief');
     expect(brief).toHaveAttribute('placeholder', 'Write a new post about…');
     expect(brief).toHaveFocus();
-    expect(area.getByRole('radiogroup', { name: 'Format' })).toBeInTheDocument();
+    expect(area.queryByRole('radiogroup', { name: 'Format' })).not.toBeInTheDocument();
     expect(area.queryByText('Brief')).not.toBeInTheDocument();
     expect(area.queryByText('Format')).not.toBeInTheDocument();
     expect(area.queryByText(/rambling is fine/i)).not.toBeInTheDocument();
@@ -365,22 +365,26 @@ describe('New post', () => {
       expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
     });
 
-    it('replaces the write button with "Set up your persona" for a Thread while no Inspiration author has posts', async () => {
+    it('lets a User with no Inspiration author write, since the planner chooses a single post or a thread', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
       renderNewPost();
 
       const area = await writer();
-      await area.findByRole('button', { name: 'Write the post' });
-      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
-      const setUp = await area.findByRole('link', { name: 'Set up your persona' });
-      // No gradient on New post: the solid Pumpkin fill.
-      expect(setUp).not.toHaveClass('bg-primary-gradient');
-      expect(area.queryByText(/at least one Inspiration author/i)).not.toBeInTheDocument();
-      expect(area.queryByRole('button', { name: 'Write the post' })).not.toBeInTheDocument();
+      expect(area.queryByRole('radiogroup', { name: 'Format' })).not.toBeInTheDocument();
+      expect(area.queryByRole('radio', { name: 'Thread' })).not.toBeInTheDocument();
+      fireEvent.change(area.getByLabelText('Brief'), {
+        target: { value: 'five lessons from shipping weekly, as a thread' },
+      });
+      await waitFor(() =>
+        expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled(),
+      );
+      fireEvent.click(area.getByRole('button', { name: 'Write the post' }));
 
-      fireEvent.click(setUp);
-
-      expect(await screen.findByRole('heading', { level: 1, name: 'Persona' })).toBeInTheDocument();
+      expect(postService.start).toHaveBeenCalledWith(
+        'five lessons from shipping weekly, as a thread',
+      );
+      expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
     });
 
     it('replaces the write button with "Set up your persona" while the User has no Positioning', async () => {
@@ -429,7 +433,7 @@ describe('New post', () => {
 
       fireEvent.keyDown(brief, { key: 'Enter', ...modifier });
 
-      expect(postService.start).toHaveBeenCalledWith('ship small things', 'post');
+      expect(postService.start).toHaveBeenCalledWith('ship small things');
     });
 
     it('leaves Enter alone, so it adds a newline instead of sending', async () => {
@@ -453,11 +457,10 @@ describe('New post', () => {
       expect(area.getByLabelText('Brief')).toBeDisabled();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
       expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
-      expect(area.getByRole('radio', { name: 'Thread' })).toBeDisabled();
       expect(area.getByRole('status')).toHaveTextContent(
         'Writing your post. This takes a minute or two.',
       );
-      expect(postService.start).toHaveBeenCalledWith('ship small things', 'post');
+      expect(postService.start).toHaveBeenCalledWith('ship small things');
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'brief' });
 
       answer(postWith('the final text'));
@@ -472,10 +475,9 @@ describe('New post', () => {
       expect(postService.get).toHaveBeenCalledWith('post_01');
     });
 
-    it('empties the form on New post, back to a single post', async () => {
+    it('empties the form on New post', async () => {
       const area = await readyToWrite();
       fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'half a thought' } });
-      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
 
       fireEvent.click(
         within(screen.getAllByRole('navigation', { name: 'Main' })[0]!).getByRole('link', {
@@ -486,20 +488,6 @@ describe('New post', () => {
       const fresh = await writer();
       await waitFor(() => expect(fresh.getByLabelText('Brief')).toHaveValue(''));
       expect(fresh.getByLabelText('Brief')).toHaveFocus();
-      expect(fresh.getByRole('radio', { name: 'Single post' })).toBeChecked();
-    });
-
-    it('starts on a single post and writes a Thread when the User picks Thread', async () => {
-      vi.mocked(postService.start).mockResolvedValue(postWith('the final text'));
-      const area = await readyToWrite();
-      const format = within(area.getByRole('radiogroup', { name: 'Format' }));
-      expect(format.getByRole('radio', { name: 'Single post' })).toBeChecked();
-      expect(format.getByRole('radio', { name: 'Thread' })).not.toBeChecked();
-
-      fireEvent.click(format.getByRole('radio', { name: 'Thread' }));
-      await writeBrief(area, 'ship small things');
-
-      expect(postService.start).toHaveBeenCalledWith('ship small things', 'thread');
     });
 
     it('shows a failure, keeps the Brief and retries it as a new Post', async () => {
@@ -523,7 +511,7 @@ describe('New post', () => {
 
       expect(await screen.findByRole('article', { name: 'Text' })).toBeInTheDocument();
       expect(postService.start).toHaveBeenCalledTimes(2);
-      expect(postService.start).toHaveBeenNthCalledWith(2, 'ship small things', 'post');
+      expect(postService.start).toHaveBeenNthCalledWith(2, 'ship small things');
     });
 
     it('says when the User can write again once they reach the hourly limit', async () => {

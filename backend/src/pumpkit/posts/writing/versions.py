@@ -1,7 +1,7 @@
 """
-Writing a Version, the pumpkit-v6 way: the writing call (the sketch call for the first Version,
-the revision call after Feedback), which chooses and writes the Hook too, the scrub, then the
-humanizer call.
+Writing a Version from Feedback, the pumpkit-v6 way, as a Thread's Feedback still is: the revision
+call, which continues the sketch call's conversation and chooses and writes the Hook too, the
+scrub, then the humanizer call.
 
 The scrubbed writing-call text is the Sketch and the humanizer's text is the Version's text. Every call
 gets the system prompt first and the corpus second, as in v6, so the per-call parts come after a
@@ -62,10 +62,6 @@ class WrittenPost(_HookedWriting):
     post: str
 
 
-class SketchedPost(WrittenPost):
-    pass
-
-
 class FinalPost(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -82,10 +78,6 @@ class WrittenThread(_HookedWriting):
     parts: list[str]
 
 
-class SketchedThread(WrittenThread):
-    pass
-
-
 class RevisedThread(WrittenThread):
     pass
 
@@ -97,11 +89,9 @@ class FinalThread(BaseModel):
 
 
 # The SDK names the structured-output schema after the class. The model reads these names, so
-# they stay the ones the prompts were tuned with, v6's for the post ones, "drafted" included.
-SketchedPost.__name__ = "drafted_post"
+# they stay the ones the prompts were tuned with, v6's.
 FinalPost.__name__ = "refined_post"
 RevisedPost.__name__ = "revised_post"
-SketchedThread.__name__ = "drafted_thread"
 RevisedThread.__name__ = "revised_thread"
 FinalThread.__name__ = "refined_thread"
 
@@ -113,10 +103,6 @@ _SKETCH_PROMPTS: dict[Format, Callable[[int], str]] = {
 _HUMANIZER_PROMPTS: dict[Format, Callable[[int], str]] = {
     FORMAT_POST: lambda _char_limit: HUMANIZER_PROMPT,
     FORMAT_THREAD: humanizer_thread_prompt,
-}
-_SKETCHED: dict[Format, type[_HookedWriting]] = {
-    FORMAT_POST: SketchedPost,
-    FORMAT_THREAD: SketchedThread,
 }
 _REVISED: dict[Format, type[_HookedWriting]] = {
     FORMAT_POST: RevisedPost,
@@ -195,16 +181,6 @@ def _humanizer_prefix(corpus: Corpus, brief: str, format: Format, char_limit: in
         system_message(_HUMANIZER_PROMPTS[format](char_limit)),
         user_message(context_message(corpus)),
         user_message(brief_message(brief, format)),
-    ]
-
-
-def humanizer_messages(
-    corpus: Corpus, brief: str, format: Format, char_limit: int, sketch_parts: list[str]
-) -> list[dict]:
-    """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Sketch last."""
-    return [
-        *_humanizer_prefix(corpus, brief, format, char_limit),
-        user_message(format_text(format, sketch_parts, first_reply=False)),
     ]
 
 
@@ -329,7 +305,7 @@ def _usage(result: StructuredResult) -> Optional[dict]:
     return None if result.usage is None else result.usage.raw
 
 
-def _thread_parts(call: str, parts: list[str]) -> list[str]:
+def thread_parts(call: str, parts: list[str]) -> list[str]:
     """A Thread reply's Parts, or an `LLMError` that fails the attempt: a Thread is never cut."""
     if not THREAD_MIN_PARTS <= len(parts) <= THREAD_MAX_PARTS:
         raise LLMError(
@@ -344,27 +320,9 @@ def _thread_parts(call: str, parts: list[str]) -> list[str]:
 def _parts_of(call: str, reply: BaseModel) -> list[str]:
     """A single post's text as its one Part, or a Thread's Parts once checked."""
     if isinstance(reply, (WrittenThread, FinalThread)):
-        return _thread_parts(call, reply.parts)
+        return thread_parts(call, reply.parts)
     assert isinstance(reply, (WrittenPost, FinalPost))
     return [reply.post]
-
-
-async def write_first_version(
-    llm: LLM, corpus: Corpus, brief: str, format: Format, char_limit: int
-) -> WrittenVersion:
-    """
-    Write it for an X account whose posts hold up to `char_limit` characters. Raises whatever
-    the LLM port raises, or an `LLMError` for a Thread of the wrong length.
-    """
-    sketched = await llm.structured(
-        model=settings.LLM_SKETCHING_MODEL,
-        messages=sketch_messages(corpus, brief, format, char_limit),
-        response_model=_SKETCHED[format],
-        max_tokens=MAX_TOKENS,
-    )
-    sketch_parts = [scrub(part) for part in _parts_of("sketch", sketched.parsed)]
-    messages = humanizer_messages(corpus, brief, format, char_limit, sketch_parts)
-    return await _humanize(llm, format, messages, sketched, sketch_parts, _hook(sketched.parsed))
 
 
 async def write_next_version(

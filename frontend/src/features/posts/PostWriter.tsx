@@ -2,15 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useHasPositioning } from '@/features/positioning/useHasPositioning';
-import { useInspirationAuthorsContext } from '@/features/inspirationAuthors/useInspirationAuthorsContext';
 import { track } from '@/lib/analytics';
-import {
-  BRIEF_MAX_CHARS,
-  FORMAT_POST,
-  FORMAT_THREAD,
-  postService,
-  type Format,
-} from '@/services/postService';
+import { BRIEF_MAX_CHARS, postService } from '@/services/postService';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Composer } from './Composer';
 import { Notice } from '@/components/Notice';
@@ -38,12 +31,12 @@ function useStartPost() {
 
   /** Every call starts a new Post, a retry after a failure included. */
   const start = useCallback(
-    async (brief: string, format: Format) => {
+    async (brief: string) => {
       setIsWriting(true);
       clear();
       track('post_version_requested', { kind: 'brief' });
       try {
-        const post = await postService.start(brief, format);
+        const post = await postService.start(brief);
         if (mounted.current) navigate(`/posts/${post.id}`);
       } catch (e) {
         if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
@@ -58,14 +51,15 @@ function useStartPost() {
   return { start, isWriting, error, notice, allowanceUsedUp, clear };
 }
 
-/** The line and the composer: a Brief and its Format, sent with the arrow or ⌘Enter. */
+/**
+ * The line and the composer: a Brief, sent with the arrow or ⌘Enter. The planner chooses a single
+ * post or a thread, so a User who wants a thread asks for one in the Brief.
+ */
 export function PostWriter() {
-  const { authors } = useInspirationAuthorsContext();
   const hasPositioning = useHasPositioning();
   const { start, isWriting, error, notice, allowanceUsedUp, clear } = useStartPost();
   const { usage } = useUsage();
   const [brief, setBrief] = useState('');
-  const [format, setFormat] = useState<Format>(FORMAT_POST);
   const briefRef = useRef<HTMLTextAreaElement>(null);
   const { key } = useLocation();
   const shownKey = useRef(key);
@@ -77,19 +71,15 @@ export function PostWriter() {
     shownKey.current = key;
     if (isWriting) return;
     setBrief('');
-    setFormat(FORMAT_POST);
     clear();
     briefRef.current?.focus();
   }, [key, isWriting, clear]);
 
-  // A Thread is written from the Inspiration authors' posts; a single post needs none.
-  const thread = format === FORMAT_THREAD;
-  const noCorpus = thread && authors !== null && !authors.some((a) => a.postCount > 0);
   const typed = brief.trim();
-  const send = () => void start(typed, format);
+  const send = () => void start(typed);
 
   const gate =
-    noCorpus || hasPositioning === false ? (
+    hasPositioning === false ? (
       <Button asChild variant="solid" className="h-10 shrink-0">
         <Link to="/persona">Set up your persona</Link>
       </Button>
@@ -110,13 +100,11 @@ export function PostWriter() {
         placeholder="Write a new post about…"
         value={brief}
         onChange={setBrief}
-        format={format}
-        onFormatChange={setFormat}
         maxLength={BRIEF_MAX_CHARS}
         sendLabel="Write the post"
         onSend={send}
         isWriting={isWriting}
-        sendDisabled={(thread && authors === null) || hasPositioning === null}
+        sendDisabled={hasPositioning === null}
         gate={gate}
       />
       {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}

@@ -324,9 +324,9 @@ export const postService = {
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
     };
   },
-  /** Writes the first Version before answering, which can take a minute or two. */
-  start: async (brief: string, format: Format): Promise<Post> => {
-    const { data } = await apiService.post<PostApi>('/posts', { brief, format });
+  /** Plans the Brief, which chooses the Format, and writes the first Version before answering. */
+  start: async (brief: string): Promise<Post> => {
+    const { data } = await apiService.post<PostApi>('/posts', { brief });
     return { id: data.id, brief: data.brief, versions: data.versions.map(toVersion) };
   },
   /**

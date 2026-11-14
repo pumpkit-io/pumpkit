@@ -117,13 +117,17 @@ from tests.oauth_app import (  # noqa: E402
 )
 from tests.posts.writing_replies import (  # noqa: E402
     MERGED_SKETCH,
+    MERGED_THREAD,
     POST_IDEAS,
     REVISED_POST,
     SKETCHED_POST,
+    SKETCHED_THREAD,
     ideas,
     merged,
+    merged_thread,
     revised,
     sketched,
+    sketched_thread,
 )
 
 
@@ -268,8 +272,8 @@ def fake_x_publisher():
 def fake_llm():
     """
     Every test calls a scripted fake model: queue `fake_llm.replies`, read `fake_llm.calls`.
-    The plan, sketch, merge and revise calls have standing answers, so a single post needs only
-    its humanizer's reply queued; set `fake_llm.standing[...]` to answer them otherwise.
+    The plan, sketch, merge and revise calls have standing answers, so a single post or a Thread
+    needs only its humanizer's reply queued; set `fake_llm.standing[...]` to answer them otherwise.
     """
     fake = FakeLLM(
         standing={
@@ -277,6 +281,8 @@ def fake_llm():
             SKETCHED_POST: sketched(),
             MERGED_SKETCH: merged(),
             REVISED_POST: revised(),
+            SKETCHED_THREAD: sketched_thread(),
+            MERGED_THREAD: merged_thread(),
         }
     )
     app.dependency_overrides[get_llm] = lambda: fake
