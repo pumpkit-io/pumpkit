@@ -3,7 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from pumpkit.posts.formats import FORMAT_POST, Format
+from pumpkit.posts.formats import Format
 from pumpkit.posts.media_files import cleaned_alt_text
 from pumpkit.posts.models import MediaKind
 from pumpkit.posts.plans import DesiredAction, Funnel, Length, Structure
@@ -18,8 +18,8 @@ MEDIA_RATE = "60/minute"
 class PostStartRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # The planner chooses the Format, so a Brief asks for a Thread in its own words.
     brief: str = Field(..., max_length=BRIEF_MAX_CHARS)
-    format: Format = FORMAT_POST
 
     @field_validator("brief")
     @classmethod

@@ -42,6 +42,17 @@ async def test_initialize_returns_the_server_instructions(subscribed, mcp):
     assert "Only a draft or a failed post takes feedback" in instructions
 
 
+async def test_the_instructions_say_pumpkit_chooses_a_thread_and_a_brief_can_ask_for_one(
+    subscribed, mcp
+):
+    instructions = (await mcp.initialize())["instructions"]
+
+    assert "Pumpkit chooses the format when it plans the post" in instructions
+    assert "or when the brief asks for one" in instructions
+    assert "A thread is written in the style" not in instructions
+    assert "unless the user asks for a thread" not in instructions
+
+
 async def test_the_instructions_and_scheduling_tools_copy_the_post_s_text(subscribed, mcp):
     instructions = (await mcp.initialize())["instructions"]
     tools = await mcp.list_tools()

@@ -1,14 +1,16 @@
 """
-The writing guide of a single post's sketch and merge calls, ported from
-pumpkit-new-architecture-v5.
+The writing guide of a single post's sketch, merge and revise calls, ported from
+pumpkit-new-architecture-v5, and the sections it shares with a Thread's guide (`thread_guide.py`).
 
 `writing_guide(plan, char_limit)` assembles it from fixed sections (content rules, hook craft,
 closer and CTA rules, rhythm) and one tailored section for each of the Plan's choices: funnel,
 desired action, length and structure. Only the section for the chosen value goes into the prompt.
 """
 
+from dataclasses import asdict, dataclass
 from typing import Literal
 
+from pumpkit.posts.formats import FORMAT_THREAD
 from pumpkit.posts.plans import (
     FUNNEL_ACTIONS,
     LENGTH_SHORT,
@@ -122,7 +124,7 @@ CTA_RULES = """\
 ## CTA rules at every stage
 
 - One CTA per post at most. Two CTAs means they do neither.
-- Never put an external link in the post. It goes in `first_reply`. Native links (a thread, an X Article, my profile) are fine in the post.
+{external_link}
 - The post must be complete without the CTA. Don't withhold the value behind "DM me": it reads as bait.
 - Give a reason, don't give an order. "Follow me" is weak. "I'm posting the full build daily" is a reason to follow.
 - When an ask fits, prefer one that makes people reply. A good question beats "like and repost".
@@ -134,7 +136,7 @@ Weak CTA -> strong CTA (shape only, never copy the wording):
 - "Follow for more" -> "I'm documenting the whole build. Follow if you want day 2."
 - "Thoughts?" -> "What's the one tool you'd never drop from your stack?"
 - "Bookmark this" -> "Save this for the next time your RAG eval looks too good to be true."
-- "Link below" -> "Repo's in the first reply. It's free.\""""
+- "Link below" -> "{link_example}\""""
 
 RHYTHM = """\
 # How the lines read
@@ -200,7 +202,7 @@ FUNNEL_CTA: dict[PromptFunnel, str] = {
     "BOF": """\
 ## CTAs that fit bottom of funnel
 
-- Best: a DM with a keyword ("DM me 'harness' and I'll send it"); a sign-up or waitlist (link in the first reply); a buy (link in the first reply); a lead magnet, used sparingly.
+- Best: a DM with a keyword ("DM me 'harness' and I'll send it"); a sign-up or waitlist (link in {link_place}); a buy (link in {link_place}); a lead magnet, used sparingly.
 - Avoid: vague asks ("check it out").""",
 }
 
@@ -285,7 +287,7 @@ I want the reader to click through to something.
 
 - Say exactly what they get on the other side and why it's worth the click.
 - The post still gives real value on its own.
-- A native link (a thread, an X Article, my profile, my pinned post) can sit in the post. An external link goes in `first_reply`, and the post's closer says it is there.""",
+{click_link}""",
     },
     "DM": {
         "levers": "payoff + proof + loss_aversion",
@@ -303,7 +305,7 @@ I want the reader to DM me.
 I want the reader to sign up.
 
 - Say what they sign up for, who it's for and what they get, in specifics from the raw input.
-- The link goes in `first_reply`. The post's closer says it is there.""",
+{link}""",
     },
     "buy": {
         "levers": "payoff + proof + loss_aversion",
@@ -313,9 +315,45 @@ I want the reader to buy.
 
 - Say what it is, who it's for, what it changes for them, and the price if the raw input gives it.
 - Proof before the ask.
-- The link goes in `first_reply`. The post's closer says it is there.""",
+{link}""",
     },
 }
+
+
+@dataclass(frozen=True)
+class LinkPlacement:
+    """Where an external link goes, in the words of the sections that place one."""
+
+    external_link: str
+    link_example: str
+    link_place: str
+    click_link: str
+    link: str
+
+
+# A single post's link goes in its first reply (ADR 0027).
+POST_LINKS = LinkPlacement(
+    external_link="- Never put an external link in the post. It goes in `first_reply`. Native links (a thread, an X Article, my profile) are fine in the post.",
+    link_example="Repo's in the first reply. It's free.",
+    link_place="the first reply",
+    click_link="- A native link (a thread, an X Article, my profile, my pinned post) can sit in the post. An external link goes in `first_reply`, and the post's closer says it is there.",
+    link="- The link goes in `first_reply`. The post's closer says it is there.",
+)
+
+# A Thread has no first reply: its link goes in its last Part.
+THREAD_LINKS = LinkPlacement(
+    external_link="- An external link goes in the last part, and the closer says what it leads to. A thread has no first reply. Native links (another thread, an X Article, my profile) are fine in any part.",
+    link_example="Everything above is in the repo. It's free.",
+    link_place="the last part",
+    click_link="- A native link (another thread, an X Article, my profile, my pinned post) can sit in any part. An external link goes in the last part, and the closer says what it leads to.",
+    link="- The link goes in the last part, and the closer says what it leads to.",
+)
+
+
+def placed(section: str, links: LinkPlacement) -> str:
+    """`section` with its link placeholders filled in."""
+    return section.format(**asdict(links))
+
 
 MEDIUM_TARGET = "350 to 600"
 LONG_TARGET: dict[PromptFunnel, str] = {
@@ -400,6 +438,11 @@ STRUCTURE: dict[Structure, str] = {
 }
 
 
+def prompt_format(plan: Plan) -> str:
+    """The Plan's `format` as the prompts name it: the Length of a single post, or `thread`."""
+    return FORMAT_THREAD if plan.format == FORMAT_THREAD else effective_length(plan)
+
+
 def effective_length(plan: Plan) -> Length:
     """one_line and few_lines are short by definition, whatever the Length says."""
     if plan.structure in ("one_line", "few_lines") or plan.length is None:
@@ -413,12 +456,12 @@ def char_limit_for_plan(plan: Plan, char_limit: int) -> int:
     return min(v5_limit[effective_length(plan)], char_limit)
 
 
-def _action_section(plan: Plan) -> str:
+def action_section(plan: Plan, links: LinkPlacement) -> str:
     action = ACTION[plan.desired_action]
     lines = [
         f"# Desired action: {plan.desired_action}",
         "",
-        action["text"],
+        placed(action["text"], links),
         "",
         f"Levers that drive this action on X: {action['levers']}. Start from this combination. "
         "Swap a lever only when the raw input can't support it honestly (no proof lever without a number, "
@@ -433,7 +476,7 @@ def _action_section(plan: Plan) -> str:
     return "\n".join(lines)
 
 
-def _closer_section(plan: Plan) -> str:
+def closer_section(plan: Plan, links: LinkPlacement) -> str:
     action = ACTION[plan.desired_action]
     if plan.structure == "one_line":
         chosen = (
@@ -451,8 +494,9 @@ def _closer_section(plan: Plan) -> str:
             "written the way the desired-action section says. "
             'If the raw input and positioning give nothing real to ask for, or the ask would feel forced, close on the takeaway and set `cta_type` to "none".'
         )
-    funnel_cta = FUNNEL_CTA[PROMPT_FUNNELS[plan.funnel]]
-    return "\n\n".join(["# The closer and the CTA", CLOSER_RULES, funnel_cta, CTA_RULES, chosen])
+    funnel_cta = placed(FUNNEL_CTA[PROMPT_FUNNELS[plan.funnel]], links)
+    cta_rules = placed(CTA_RULES, links)
+    return "\n\n".join(["# The closer and the CTA", CLOSER_RULES, funnel_cta, cta_rules, chosen])
 
 
 def writing_guide(plan: Plan, char_limit: int) -> str:
@@ -462,12 +506,12 @@ def writing_guide(plan: Plan, char_limit: int) -> str:
             CONTENT_RULES,
             GOOD_POST,
             FUNNEL[PROMPT_FUNNELS[plan.funnel]],
-            _action_section(plan),
+            action_section(plan, POST_LINKS),
             _format_section(plan, char_limit),
             STRUCTURE[plan.structure],
             HOOK,
             OPENING,
-            _closer_section(plan),
+            closer_section(plan, POST_LINKS),
             RHYTHM,
             NEVER_ADD,
         ]

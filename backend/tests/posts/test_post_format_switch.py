@@ -15,7 +15,7 @@ from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written, written_thread
+from tests.posts.writing_replies import start_thread, written, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -41,13 +41,10 @@ async def with_author(client, subscribed, fake_x_reader):
 async def _start(client, fake_llm, format: str) -> str:
     """A Post whose first version's text is "final 1", or the Thread "final a", "final b"."""
     if format == "thread":
-        fake_llm.replies = [
-            written_thread(["sketch a", "sketch b"]),
-            {"parts": ["final a", "final b"]},
-        ]
+        response = await start_thread(client, fake_llm, ["final a", "final b"])
     else:
         fake_llm.replies = [{"post": "final 1"}]
-    response = await client.post(POSTS, json={"brief": "ship small things", "format": format})
+        response = await client.post(POSTS, json={"brief": "ship small things"})
     assert response.status_code == 201, response.text
     fake_llm.calls.clear()
     return response.json()["id"]

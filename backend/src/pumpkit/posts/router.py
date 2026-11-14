@@ -29,13 +29,12 @@ async def start_post(
     llm: LLM = Depends(get_llm),
     clock: Clock = Depends(get_clock),
 ) -> PostResponse:
-    """Writes the first Version before answering, which takes two model calls."""
+    """Plans the Brief and writes the first Version before answering, which takes a few minutes."""
     return await mediator.start_post(
         db=db,
         llm=llm,
         user=current_user,
         brief=start_request.brief,
-        format=start_request.format,
         now=clock(),
     )
 

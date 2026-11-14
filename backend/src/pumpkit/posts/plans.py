@@ -30,14 +30,15 @@ FUNNEL_ACTIONS: dict[Funnel, frozenset[DesiredAction]] = {
 
 Length = Literal["short", "medium", "long"]
 LENGTH_SHORT: Length = "short"
-Structure = Literal[
-    "one_line",
-    "few_lines",
+ShortStructure = Literal["one_line", "few_lines"]
+# Every structure but the short ones, which a Thread can't take.
+ThreadStructure = Literal[
     "hook_list_closer",
     "hook_problem_insight_closer",
     "hook_story_insight_closer",
     "hook_playbook_closer",
 ]
+Structure = Literal[ShortStructure, ThreadStructure]
 
 
 @dataclass(frozen=True)
