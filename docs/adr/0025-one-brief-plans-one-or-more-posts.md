@@ -24,7 +24,7 @@ This amends ADR 0016's premise of one Brief per Post, and ADR 0012 for the tools
 
 ## A Post's place among its Brief's Posts
 
-A Brief's Posts are the Posts of its Ideas, in the order of those Ideas: the single-post Idea's Post first, then the split Ideas' Posts in posting order. A Post written, being written or not written counts, since each opens on its page and sits on the Brief's page. An Idea with no Post doesn't count, and a discarded Post leaves the count. A Brief can hold the single-post Idea's Post next to split Posts once the User writes both in two requests; the one covering the whole Brief comes first. So "2 of 4" on a Post's page, a Draft's row and the Brief's page counts the same Posts, and previous and next step through all of them. A Post that is its Brief's only one shows no place.
+A Brief's Posts are the Posts of its Ideas, in the order of those Ideas: the single-post Idea's Post first, then the split Ideas' Posts in posting order. A Post written, being written or not written counts, since each opens on its page and sits on the Brief's page. An Idea with no Post doesn't count, and a discarded Post leaves the count. A Brief can hold the single-post Idea's Post next to split Posts once the User writes both in two requests; the one covering the whole Brief comes first. So a card's number on the Brief's page and "2 of 4" on a Post's page and a Draft's row give the same place, and previous and next step through all of those Posts. The Brief's page header counts something else: progress over those Posts and the Ideas still offered (see [The Brief's page](#the-briefs-page)). A Post that is its Brief's only one shows no place.
 
 ## What ADR 0016 keeps and what changes
 
