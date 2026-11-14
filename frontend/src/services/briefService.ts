@@ -21,6 +21,8 @@ export interface BriefPost {
    * answer to a write, which doesn't read it.
    */
   status: PostStatus | null;
+  /** Scheduled and being published now. */
+  publishing: boolean;
   /** Null until its first Version is written. */
   text: PostText | null;
   /** Each of the Text's Parts' Media, in order, for "Post to…" to send. */
@@ -65,6 +67,7 @@ interface BriefApi {
       id: string;
       writing_state: WritingState | null;
       status?: PostStatus | null;
+      publishing?: boolean;
       text: PostTextApi | null;
     } | null;
   }[];
@@ -84,6 +87,7 @@ const toBrief = (data: BriefApi): Brief => ({
       id: idea.post.id,
       writingState: idea.post.writing_state,
       status: idea.post.status ?? null,
+      publishing: idea.post.publishing ?? false,
       text: idea.post.text ? toText(idea.post.text) : null,
       textMedia: idea.post.text ? idea.post.text.parts.map((p) => p.media.map(toMedia)) : [],
     },
@@ -109,18 +113,17 @@ export function briefPosts(brief: Brief): { idea: Idea; post: BriefPost }[] {
 }
 
 /**
- * The Ideas the Brief's page offers to write. The single-post Idea and the split Ideas are
- * alternatives, so once a Post exists only Ideas of its kind are offered; while none does, every
- * split Idea in posting order and then the single-post one.
+ * The Ideas the Brief's page offers to write (ADR 0025). The single-post Idea and the split Ideas
+ * are alternatives, so once a kind has a Post only Ideas of that kind are offered, the split ones
+ * when both have; while none has, every split Idea in posting order and then the single-post one.
  */
 export function notWrittenIdeas(brief: Brief): Idea[] {
   const unwritten = brief.ideas.filter((idea) => !idea.post);
-  const first = brief.ideas.find((idea) => idea.post);
-  if (first) return unwritten.filter((idea) => idea.wholeBrief === first.wholeBrief);
-  return [
-    ...unwritten.filter((idea) => !idea.wholeBrief),
-    ...unwritten.filter((idea) => idea.wholeBrief),
-  ];
+  const split = unwritten.filter((idea) => !idea.wholeBrief);
+  const written = briefPosts(brief);
+  if (written.some(({ idea }) => !idea.wholeBrief)) return split;
+  if (written.length > 0) return [];
+  return [...split, ...unwritten.filter((idea) => idea.wholeBrief)];
 }
 
 export const briefService = {

@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -151,6 +151,7 @@ const written = (id: string, words: string, text: PostText = textOf(words)): Bri
   id,
   writingState: null,
   status: 'draft',
+  publishing: false,
   text,
   textMedia: text.parts.map(() => []),
 });
@@ -158,6 +159,7 @@ const beingWritten = (id: string): BriefPost => ({
   id,
   writingState: 'writing',
   status: null,
+  publishing: false,
   text: null,
   textMedia: [],
 });
@@ -165,6 +167,7 @@ const notWritten = (id: string): BriefPost => ({
   id,
   writingState: 'not_written',
   status: null,
+  publishing: false,
   text: null,
   textMedia: [],
 });
@@ -172,6 +175,12 @@ const notWritten = (id: string): BriefPost => ({
 /** The card of the Post whose core idea is `coreIdea`. */
 async function card(coreIdea: string) {
   return within(await screen.findByRole('listitem', { name: coreIdea }));
+}
+
+/** The card of `coreIdea`'s Post in the list of Posts, once it is there. */
+async function postCard(coreIdea: string) {
+  const posts = within(await screen.findByRole('list', { name: 'Posts' }));
+  return within(await posts.findByRole('listitem', { name: coreIdea }));
 }
 
 async function poll() {
@@ -213,7 +222,8 @@ describe('Brief page', () => {
     expect(within(cards[1]!).getByRole('status')).toHaveTextContent('Writing…');
     expect(within(cards[2]!).getByText(/couldn't be written/)).toBeInTheDocument();
     expect(within(cards[0]!).getByText('1')).toBeInTheDocument();
-    expect(within(cards[2]!).getByText('4')).toBeInTheDocument();
+    expect(within(cards[2]!).getByText('3')).toBeInTheDocument();
+    expect(screen.getByText('3 of 4 written')).toBeInTheDocument();
     expect(within(list).queryByText(OAUTH)).not.toBeInTheDocument();
     expect(within(cards[1]!).getByRole('link', { name: `Open “${B2B}”` })).toHaveAttribute(
       'href',
@@ -315,7 +325,6 @@ describe('Brief page', () => {
   it("retries a post that couldn't be written, and reads the brief while it is written", async () => {
     vi.mocked(briefService.get)
       .mockResolvedValueOnce(brief({ 1: notWritten('post_1') }))
-      .mockResolvedValueOnce(brief({ 1: beingWritten('post_1') }))
       .mockResolvedValue(brief({ 1: written('post_1', 'Written at last.') }));
     vi.mocked(postService.retry).mockResolvedValue({} as never);
     renderSignedIn('/briefs/brief_01');
@@ -357,11 +366,12 @@ describe('Brief page', () => {
   it('lists the ideas not written, and writes one without planning again', async () => {
     vi.mocked(briefService.get)
       .mockResolvedValueOnce(brief({ 1: written('post_1', 'First.') }))
-      .mockResolvedValueOnce(brief({ 1: written('post_1', 'First.'), 3: beingWritten('post_3') }))
       .mockResolvedValue(
         brief({ 1: written('post_1', 'First.'), 3: written('post_3', 'OAuth post.') }),
       );
-    vi.mocked(briefService.write).mockResolvedValue(brief({}));
+    vi.mocked(briefService.write).mockResolvedValue(
+      brief({ 1: written('post_1', 'First.'), 3: beingWritten('post_3') }),
+    );
     renderSignedIn('/briefs/brief_01');
 
     const notWrittenList = within(await screen.findByRole('list', { name: 'Not written' }));
@@ -379,21 +389,20 @@ describe('Brief page', () => {
     expect(await screen.findByText('OAuth post.')).toBeInTheDocument();
   });
 
-  it('offers the one post covering everything when it is the only idea', async () => {
+  it('offers the one post covering everything when it is the only idea, and goes to its post', async () => {
     const oneIdea: Brief = { ...brief({}), ideas: [brief({}).ideas[0]!] };
-    vi.mocked(briefService.get)
-      .mockResolvedValueOnce(oneIdea)
-      .mockResolvedValue({
-        ...oneIdea,
-        ideas: [{ ...oneIdea.ideas[0]!, post: beingWritten('p') }],
-      });
-    vi.mocked(briefService.write).mockResolvedValue(oneIdea);
+    const started: Brief = {
+      ...oneIdea,
+      ideas: [{ ...oneIdea.ideas[0]!, post: beingWritten('p') }],
+    };
+    vi.mocked(briefService.get).mockResolvedValueOnce(oneIdea).mockResolvedValue(started);
+    vi.mocked(briefService.write).mockResolvedValue(started);
     renderSignedIn('/briefs/brief_01');
 
     const notWrittenList = within(await screen.findByRole('list', { name: 'Not written' }));
     fireEvent.click(notWrittenList.getByRole('button', { name: `Write “${WHOLE}”` }));
 
-    expect(await screen.findByText('Writing…')).toBeInTheDocument();
+    await waitFor(() => expect(currentPath()).toBe('/posts/p'));
     expect(briefService.write).toHaveBeenCalledWith('brief_01', ['idea_whole']);
   });
 
@@ -408,12 +417,11 @@ describe('Brief page', () => {
     expect(notWrittenList.getByText('One post covering everything')).toBeInTheDocument();
   });
 
-  it('offers no idea once the one post covering everything is written', async () => {
+  it('goes to the post when the brief has one post and no idea left to write', async () => {
     vi.mocked(briefService.get).mockResolvedValue(brief({}, written('post_w', 'Everything.')));
     renderSignedIn('/briefs/brief_01');
 
-    expect(await screen.findByText('Everything.')).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: 'Not written' })).not.toBeInTheDocument();
+    await waitFor(() => expect(currentPath()).toBe('/posts/post_w'));
   });
 
   it('reads the brief again when an idea was written meanwhile', async () => {
@@ -536,5 +544,110 @@ describe('Brief page', () => {
 
     expect(await screen.findByText('First.')).toBeInTheDocument();
     expect(currentPath()).toBe('/briefs/brief_01');
+  });
+  it('numbers the cards by their place among the posts, whatever idea they come from', async () => {
+    vi.mocked(briefService.get).mockResolvedValue(
+      brief({ 1: written('post_1', 'First.'), 3: written('post_3', 'Third idea.') }),
+    );
+    renderSignedIn('/briefs/brief_01');
+
+    expect((await card(PAIN)).getByText('1')).toBeInTheDocument();
+    expect((await card(OAUTH)).getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('2 of 4 written')).toBeInTheDocument();
+  });
+
+  it('disables "Post to…" while feedback rewrites a post', async () => {
+    vi.mocked(briefService.get).mockResolvedValue(
+      brief({ 1: { ...written('post_1', 'Old text.'), writingState: 'writing' } }),
+    );
+    renderSignedIn('/briefs/brief_01');
+
+    expect((await card(PAIN)).getByRole('button', { name: 'Post to…' })).toBeDisabled();
+  });
+
+  it('shows "Publishing" on a post going out', async () => {
+    vi.mocked(briefService.get).mockResolvedValue(
+      brief({ 1: { ...written('post_1', 'Going.'), status: 'scheduled', publishing: true } }),
+    );
+    renderSignedIn('/briefs/brief_01');
+
+    expect((await card(PAIN)).getByText('Publishing')).toBeInTheDocument();
+  });
+
+  it('says why a retry was refused when the post still is not written', async () => {
+    const refusal = "This post was started before plans existed, so it can't be written again.";
+    vi.mocked(briefService.get).mockResolvedValue(brief({ 1: notWritten('post_1') }));
+    vi.mocked(postService.retry).mockRejectedValue(apiError(409, refusal));
+    renderSignedIn('/briefs/brief_01');
+
+    fireEvent.click((await card(PAIN)).getByRole('button', { name: 'Retry' }));
+
+    expect(await (await card(PAIN)).findByRole('alert')).toHaveTextContent(refusal);
+  });
+
+  it('ignores a read that started before an idea was written', async () => {
+    let answerStaleRead: (brief: Brief) => void = () => {};
+    vi.mocked(briefService.get)
+      .mockResolvedValueOnce(brief({ 1: beingWritten('post_1') }))
+      .mockReturnValueOnce(new Promise((resolve) => (answerStaleRead = resolve)))
+      .mockReturnValue(new Promise(() => {}));
+    vi.mocked(briefService.write).mockResolvedValue(
+      brief({ 1: beingWritten('post_1'), 2: beingWritten('post_2') }),
+    );
+    renderSignedIn('/briefs/brief_01');
+    await screen.findByText('Writing…');
+    await poll();
+    expect(briefService.get).toHaveBeenCalledTimes(2);
+
+    const notWrittenList = within(await screen.findByRole('list', { name: 'Not written' }));
+    fireEvent.click(notWrittenList.getByRole('button', { name: `Write “${B2B}”` }));
+    await (await postCard(B2B)).findByText('Writing…');
+    await act(async () => answerStaleRead(brief({ 1: beingWritten('post_1') })));
+
+    const posts = within(screen.getByRole('list', { name: 'Posts' }));
+    expect(posts.getByRole('listitem', { name: B2B })).toHaveTextContent('Writing…');
+  });
+
+  it('keeps the page when the brief cannot be read after a write', async () => {
+    vi.mocked(briefService.get)
+      .mockResolvedValueOnce(brief({ 1: written('post_1', 'First.') }))
+      .mockRejectedValueOnce(apiError(500, 'The server is down.'))
+      .mockResolvedValue(
+        brief({ 1: written('post_1', 'First.'), 2: written('post_2', 'B2B post.') }),
+      );
+    vi.mocked(briefService.write).mockResolvedValue(
+      brief({ 1: written('post_1', 'First.'), 2: beingWritten('post_2') }),
+    );
+    renderSignedIn('/briefs/brief_01');
+
+    const notWrittenList = within(await screen.findByRole('list', { name: 'Not written' }));
+    fireEvent.click(notWrittenList.getByRole('button', { name: `Write “${B2B}”` }));
+    await (await postCard(B2B)).findByText('Writing…');
+    await poll();
+
+    expect(screen.getByText('First.')).toBeInTheDocument();
+    expect(screen.queryByText("This brief couldn't be loaded.")).not.toBeInTheDocument();
+    await poll();
+    await poll();
+    expect(await screen.findByText('B2B post.')).toBeInTheDocument();
+  });
+
+  it('keeps two requests in flight apart, with their own failures', async () => {
+    let failRetry: (e: unknown) => void = () => {};
+    vi.mocked(briefService.get).mockResolvedValue(brief({ 1: notWritten('post_1') }));
+    vi.mocked(postService.retry).mockReturnValue(new Promise((_, reject) => (failRetry = reject)));
+    vi.mocked(briefService.write).mockRejectedValue(apiError(500, 'Writing B2B failed.'));
+    renderSignedIn('/briefs/brief_01');
+
+    fireEvent.click((await card(PAIN)).getByRole('button', { name: 'Retry' }));
+    const notWrittenList = within(await screen.findByRole('list', { name: 'Not written' }));
+    fireEvent.click(notWrittenList.getByRole('button', { name: `Write “${B2B}”` }));
+
+    expect(await notWrittenList.findByRole('alert')).toHaveTextContent('Writing B2B failed.');
+    expect((await card(PAIN)).getByRole('button', { name: 'Retrying…' })).toBeDisabled();
+    await act(async () => failRetry(apiError(500, 'Retrying failed.')));
+
+    expect(await (await card(PAIN)).findByRole('alert')).toHaveTextContent('Retrying failed.');
+    expect(notWrittenList.getByRole('alert')).toHaveTextContent('Writing B2B failed.');
   });
 });

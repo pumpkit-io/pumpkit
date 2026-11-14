@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Notice } from '@/components/Notice';
@@ -16,13 +16,7 @@ import type { ShownPart } from '@/features/posts/shownText';
 import { PersonaLink } from '@/features/positioning/PersonaLink';
 import { StatusBadge } from '@/features/scheduledPosts/StatusBadge';
 import { Topbar } from '@/features/topbar/Topbar';
-import {
-  briefPosts,
-  notWrittenIdeas,
-  type Brief,
-  type BriefPost,
-  type Idea,
-} from '@/services/briefService';
+import { briefPosts, notWrittenIdeas, type BriefPost, type Idea } from '@/services/briefService';
 import { FORMAT_THREAD, type PostText } from '@/services/postService';
 
 const COLUMN = 'mx-auto w-full max-w-[49rem] px-4 sm:px-6';
@@ -109,7 +103,9 @@ function Facts({ idea, text }: { idea: Idea; text: PostText }) {
   );
   return (
     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 font-sans text-[13px] text-muted-foreground">
-      {first && <CharacterCount count={first.charCount} limit={first.charLimit} />}
+      {first && (
+        <CharacterCount count={first.charCount} limit={first.charLimit} className="font-mono" />
+      )}
       {text.format === FORMAT_THREAD && <p>{shapeName(count, text.firstReply)}</p>}
       {over.map((line) => (
         <p key={line} className="text-destructive">
@@ -121,7 +117,7 @@ function Facts({ idea, text }: { idea: Idea; text: PostText }) {
   );
 }
 
-/** "Post to…" for a Draft's card, which sends its Text with its Media. */
+/** "Post to…" for a Draft's card, which sends its Text with its Media; off while it is rewritten. */
 function CardPostTo({
   post,
   text,
@@ -139,23 +135,36 @@ function CardPostTo({
     media: post.textMedia[i] ?? [],
     firstReply: text.firstReply && i === text.parts.length - 1,
   }));
-  return <PostToButton quiet format={text.format} parts={parts} sender={sender} onDone={onDone} />;
+  return (
+    <PostToButton
+      quiet
+      format={text.format}
+      parts={parts}
+      sender={sender}
+      disabled={post.writingState === 'writing'}
+      onDone={onDone}
+    />
+  );
 }
 
 function PostCard({
   idea,
   post,
+  place,
   busy,
   failure,
   onRetry,
-  onScheduled,
+  onSent,
 }: {
   idea: Idea;
   post: BriefPost;
+  /** Its place among the Brief's Posts, from 1. */
+  place: number;
   busy: boolean;
-  failure: BriefFailure | null;
+  failure: BriefFailure | undefined;
   onRetry: () => void;
-  onScheduled: () => void;
+  /** After "Post to…" scheduled it or posted it now. */
+  onSent: () => void;
 }) {
   const coreIdea = idea.plan?.coreIdea ?? 'Your post';
   const { text, status } = post;
@@ -176,7 +185,7 @@ function PostCard({
     <li aria-label={coreIdea} className="space-y-2">
       <p className="flex gap-3 font-sans text-[13px] text-muted-foreground">
         <span aria-hidden className="tabular-nums">
-          {idea.postingOrder}
+          {place}
         </span>
         <span>{coreIdea}</span>
       </p>
@@ -188,8 +197,10 @@ function PostCard({
             Open
           </Link>
         </Button>
-        {text && status === 'draft' && <CardPostTo post={post} text={text} onDone={onScheduled} />}
-        {text && status && status !== 'draft' && <StatusBadge status={status} />}
+        {text && status === 'draft' && <CardPostTo post={post} text={text} onDone={onSent} />}
+        {text && status && status !== 'draft' && (
+          <StatusBadge status={status} publishing={post.publishing} />
+        )}
       </div>
       {failure && <Failure failure={failure} />}
     </li>
@@ -198,13 +209,13 @@ function PostCard({
 
 function NotWritten({
   ideas,
-  busyIdea,
-  failure,
+  busy,
+  failures,
   onWrite,
 }: {
   ideas: Idea[];
-  busyIdea: string | null;
-  failure: BriefFailure | null;
+  busy: ReadonlySet<string>;
+  failures: Readonly<Record<string, BriefFailure>>;
   onWrite: (ideaId: string) => void;
 }) {
   return (
@@ -215,6 +226,7 @@ function NotWritten({
       <ul aria-labelledby="not-written" className="divide-y divide-border border-y border-border">
         {ideas.map((idea) => {
           const coreIdea = idea.plan?.coreIdea ?? 'Your post';
+          const failure = failures[idea.id];
           return (
             <li key={idea.id} aria-label={coreIdea} className="space-y-2 py-3">
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
@@ -231,13 +243,13 @@ function NotWritten({
                   variant="outline"
                   className="h-10 shrink-0"
                   aria-label={`Write “${coreIdea}”`}
-                  disabled={busyIdea !== null}
+                  disabled={busy.has(idea.id)}
                   onClick={() => onWrite(idea.id)}
                 >
-                  {busyIdea === idea.id ? 'Starting…' : 'Write this one'}
+                  {busy.has(idea.id) ? 'Starting…' : 'Write this one'}
                 </Button>
               </div>
-              {failure?.ideaId === idea.id && <Failure failure={failure} />}
+              {failure && <Failure failure={failure} />}
             </li>
           );
         })}
@@ -288,21 +300,14 @@ function Placeholders() {
   );
 }
 
-function writtenCount(brief: Brief, offered: Idea[]): string | null {
-  const posts = briefPosts(brief);
-  if (posts.length === 0) return null;
-  const written = posts.filter(({ post }) => post.text).length;
-  return `${written} of ${posts.length + offered.length} written`;
-}
-
 /**
- * The Posts written from one Brief, in posting order, each with its core idea and its text, or
+ * The Posts written from one Brief, in the Brief's order, each with its core idea and its text, or
  * its writing state until it is written, and the Ideas still to write (ADR 0025). It reads the
- * Brief again while any is written.
+ * Brief again while any is written. A Brief with one Post and no Idea left goes to that Post.
  */
 export function BriefPage() {
   const { id = '' } = useParams<{ id: string }>();
-  const { load, reload, refresh, write, retry, busyIdea, failure } = useBrief(id);
+  const { load, reload, refresh, write, retry, busy, failures } = useBrief(id);
 
   if (load.kind === 'loading')
     return (
@@ -331,7 +336,12 @@ export function BriefPage() {
   const { brief } = load;
   const posts = briefPosts(brief);
   const offered = notWrittenIdeas(brief);
-  const count = writtenCount(brief, offered);
+  const [only] = posts;
+  if (only && posts.length === 1 && offered.length === 0)
+    return <Navigate to={`/posts/${only.post.id}`} replace />;
+  // The Brief's Posts, written or not, out of those and the Ideas still offered.
+  const count =
+    posts.length > 0 ? `${posts.length} of ${posts.length + offered.length} written` : null;
   return (
     <Page
       written={
@@ -341,15 +351,16 @@ export function BriefPage() {
       <BriefLine text={brief.text} />
       {posts.length > 0 && (
         <ol aria-label="Posts" className="max-w-[68ch] space-y-8">
-          {posts.map(({ idea, post }) => (
+          {posts.map(({ idea, post }, index) => (
             <PostCard
               key={idea.id}
               idea={idea}
               post={post}
-              busy={busyIdea === idea.id}
-              failure={failure?.ideaId === idea.id ? failure : null}
+              place={index + 1}
+              busy={busy.has(idea.id)}
+              failure={failures[idea.id]}
               onRetry={() => void retry(idea.id, post.id)}
-              onScheduled={() => void refresh()}
+              onSent={() => void refresh()}
             />
           ))}
         </ol>
@@ -357,8 +368,8 @@ export function BriefPage() {
       {offered.length > 0 && (
         <NotWritten
           ideas={offered}
-          busyIdea={busyIdea}
-          failure={failure}
+          busy={busy}
+          failures={failures}
           onWrite={(ideaId) => void write(ideaId)}
         />
       )}

@@ -57,6 +57,7 @@ from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
     PUBLISHED,
+    PUBLISHING,
     SCHEDULED,
     ScheduledPost,
 )
@@ -696,6 +697,7 @@ async def get_brief(
             post=BriefPostDetailResponse(
                 **post.model_dump(),
                 status=post_status(states.get(post.id)) if post.text else None,
+                publishing=states.get(post.id) == PUBLISHING,
             )
             if post
             else None,

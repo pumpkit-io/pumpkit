@@ -8,7 +8,7 @@ import asyncio
 import pytest
 from sqlalchemy import update
 
-from pumpkit.scheduling.models import PUBLISHED, ScheduledPost
+from pumpkit.scheduling.models import PUBLISHED, PUBLISHING, ScheduledPost
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import SKETCHED_POST, started_post_id
 
@@ -37,7 +37,10 @@ async def _post_of(client, brief: dict) -> dict:
 
 
 async def test_a_written_post_reads_as_a_draft(client, written):
-    assert (await _post_of(client, written))["status"] == "draft"
+    post = await _post_of(client, written)
+
+    assert post["status"] == "draft"
+    assert post["publishing"] is False
 
 
 async def test_a_post_being_written_has_no_status(
@@ -80,3 +83,21 @@ async def test_a_published_post_reads_as_published(client, db, written):
     await db.commit()
 
     assert (await _post_of(client, written))["status"] == "published"
+
+
+async def test_a_post_being_published_reads_as_scheduled_and_publishing(client, db, written):
+    post = await _post_of(client, written)
+    scheduled = await client.post(
+        SCHEDULED_POSTS, json={"post_id": post["id"], "publish_at": LATER}
+    )
+    assert scheduled.status_code == 201, scheduled.text
+    await db.execute(
+        update(ScheduledPost)
+        .where(ScheduledPost.id == scheduled.json()["id"])
+        .values(state=PUBLISHING)
+    )
+    await db.commit()
+
+    post = await _post_of(client, written)
+    assert post["status"] == "scheduled"
+    assert post["publishing"] is True

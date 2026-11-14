@@ -66,6 +66,7 @@ test('a brief of several ideas is written as the ideas picked, which fill in on 
     "Don't make OAuth integrations your core value",
   );
   await expect(page.getByText('Writing…')).toHaveCount(2);
+  await expect(page.getByText('2 of 3 written')).toBeVisible();
 
   runSeedScript('planned_brief.py', ['written', briefId]);
 
