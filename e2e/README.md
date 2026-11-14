@@ -2,6 +2,8 @@
 
 Run the normal default-off suite with `E2E_BASE_URL=<Dev URL> npm test` from this directory. Use `scripts/dev-stack` from the repository root to manage its stack.
 
+`make e2e-managed-payments`, from the repository root, restarts the stack with `STRIPE_MANAGED_PAYMENTS=true` and reruns `tests/stripe-emulator.spec.ts` with `E2E_STRIPE_MANAGED_PAYMENTS=1`, which makes the spec expect every Checkout in Managed Payments mode. CI runs it after `make e2e`.
+
 ## Coupon journeys
 
 Use a disposable linked worktree with its own `.env` and stack. From its root:

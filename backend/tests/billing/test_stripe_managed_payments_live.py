@@ -9,7 +9,7 @@ import os
 import subprocess
 import time
 import warnings
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
@@ -17,7 +17,7 @@ import pytest
 import stripe
 from stripe.params import PriceCreateParams
 
-from pumpkit.billing.gateway import BillingProviderError, StripeBillingGateway
+from pumpkit.billing.gateway import TRIAL_END_FLOOR, BillingProviderError, StripeBillingGateway
 from pumpkit.core.config import settings
 
 KEY = os.environ.get("PUMPKIT_STRIPE_TEST_KEY", "")
@@ -27,8 +27,8 @@ CHECKOUT_SCRIPT = Path(__file__).resolve().parents[3] / "e2e" / "stripe-checkout
 # Software as a service, business use: eligible for Managed Payments.
 TAX_CODE = "txcd_10103001"
 MONTHLY, ANNUAL, TOP_UP = 1900, 19000, 1000
-# Pumpkit opens the paid signup Checkout no later than 48 hours 5 minutes before Free access ends.
-FIRST_PAYMENT_LEAD = 48 * 3600 + 5 * 60
+# Pumpkit opens the paid signup Checkout at least the trial end floor plus 5 minutes before Free access ends.
+FIRST_PAYMENT_LEAD = int((TRIAL_END_FLOOR + timedelta(minutes=5)).total_seconds())
 
 
 @pytest.fixture(scope="module")

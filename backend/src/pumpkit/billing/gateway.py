@@ -347,7 +347,7 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
         trial_end=_optional_timestamp(subscription.get("trial_end")),
         billing_cycle_anchor=_optional_timestamp(subscription.get("billing_cycle_anchor")),
         has_pending_update=subscription.get("pending_update") is not None,
-        schedule_id=_customer_id(subscription.get("schedule")),
+        schedule_id=_object_id(subscription.get("schedule")),
         item_id=first_item.get("id"),
         item_count=len(subscription.get("items", {}).get("data", []))
         if not subscription.get("items", {}).get("has_more") and first_item.get("quantity") == 1
@@ -374,7 +374,7 @@ def _subscription_state(subscription: dict[str, Any]) -> SubscriptionState:
 
 
 def _paid_signup_checkout(session: dict[str, Any]) -> PaidSignupCheckout:
-    customer = _customer_id(session.get("customer"))
+    customer = _object_id(session.get("customer"))
     operation = session.get("metadata", {}).get("pumpkit_paid_signup")
     if not customer or not operation or session.get("mode") != "subscription":
         raise BillingProviderError("Stripe returned an unrelated paid signup Checkout")
@@ -384,7 +384,7 @@ def _paid_signup_checkout(session: dict[str, Any]) -> PaidSignupCheckout:
         operation_id=operation,
         status=session.get("status", "unknown"),
         url=session.get("url"),
-        subscription_id=_customer_id(session.get("subscription")),
+        subscription_id=_object_id(session.get("subscription")),
     )
 
 
@@ -418,12 +418,12 @@ def _paid_current_period(subscription: dict[str, Any], item: dict[str, Any]) -> 
     )
 
 
-def _customer_id(customer: Any) -> Optional[str]:
-    """A Stripe `customer` field, sent as an ID or as an expanded customer, as the ID."""
-    if isinstance(customer, str):
-        return customer
-    if isinstance(customer, dict):
-        return customer.get("id")
+def _object_id(field: Any) -> Optional[str]:
+    """A Stripe field that refers to another object, sent as an ID or expanded, as the ID."""
+    if isinstance(field, str):
+        return field
+    if isinstance(field, dict):
+        return field.get("id")
     return None
 
 
@@ -474,7 +474,7 @@ def _webhook_event(event: dict[str, Any]) -> WebhookEvent:
         return WebhookEvent(
             id=event["id"],
             type=event["type"],
-            customer_id=_customer_id(data_object.get("customer")),
+            customer_id=_object_id(data_object.get("customer")),
             charge_id=charge if isinstance(charge, str) else None,
         )
     except (KeyError, TypeError, AttributeError) as error:
@@ -649,7 +649,7 @@ class StripeBillingGateway:
                 state = session.to_dict()
                 if state.get("status") == "expired":
                     continue
-                # Paid signup in 0.11 and earlier left setup Checkouts, finished by their SetupIntent.
+                # The old paid signup flow left setup Checkouts, finished by their SetupIntent.
                 if state.get("mode") == "setup" and state.get("status") == "complete":
                     setup = state.get("setup_intent")
                     if isinstance(setup, dict) and setup.get("status") in {"succeeded", "canceled"}:
@@ -934,7 +934,7 @@ class StripeBillingGateway:
         charge = await self._call(
             "look up a charge", lambda: self._client.v1.charges.retrieve(charge_id)
         )
-        return _customer_id(charge.to_dict().get("customer"))
+        return _object_id(charge.to_dict().get("customer"))
 
 
 @dataclass(frozen=True)

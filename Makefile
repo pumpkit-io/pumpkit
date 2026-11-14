@@ -5,7 +5,7 @@ SMOKE_URL ?= http://localhost:8080
 # The app e2e runs against. For a worktree's own stack, pass the Dev URL `scripts/dev-stack up` prints.
 E2E_BASE_URL ?= http://localhost:5173
 
-.PHONY: dev dev-personal check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-wait smoke
+.PHONY: dev dev-personal check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-managed-payments e2e-wait smoke
 
 dev:
 	scripts/dev-stack up
@@ -57,6 +57,12 @@ else
 	$(MAKE) e2e-wait
 	cd e2e && npm test
 endif
+
+# Restarts the dev stack with Stripe as the seller, then reruns the Emulator Checkout specs against it.
+e2e-managed-payments:
+	@set -e; url=$$(STRIPE_MANAGED_PAYMENTS=true scripts/dev-stack up); \
+	$(MAKE) e2e-wait E2E_BASE_URL="$$url"; \
+	cd e2e && E2E_BASE_URL="$$url" E2E_STRIPE_MANAGED_PAYMENTS=1 npx playwright test tests/stripe-emulator.spec.ts
 
 e2e-wait:
 	@for url in $(E2E_BASE_URL)/api/v1/health $(E2E_BASE_URL); do \

@@ -25,6 +25,14 @@ interface Delivery {
   customer: string;
 }
 
+/** Checks the Checkout was opened in the seller mode this run expects. */
+async function expectSeller(page: Page, origin: string, sessionId: string): Promise<void> {
+  const session = await (
+    await page.request.get(`${origin}/v1/checkout/sessions/${sessionId}`)
+  ).json();
+  expect(session.managed_payments.enabled).toBe(process.env.E2E_STRIPE_MANAGED_PAYMENTS === '1');
+}
+
 const planButtons = (page: Page) => page.getByRole('button', { name: /^Start trial: / });
 
 /** Opens the Paywall once it lists Plans, or skips when the stack's Stripe can't list them. */
@@ -71,7 +79,8 @@ test('a Trial bought through the Emulator Checkout opens Onboarding', async ({ p
   await signInAsNewUser(page);
   await startMonthlyTrial(page);
   const checkout = new URL(page.url());
-  const sessionId = checkout.pathname.split('/').pop();
+  const sessionId = checkout.pathname.split('/').pop() ?? '';
+  await expectSeller(page, checkout.origin, sessionId);
 
   await page.getByRole('button', { name: 'Pay' }).click();
 
@@ -114,6 +123,7 @@ test('a Top-up bought through the Emulator Checkout reaches the backend', async 
   });
   expect(checkout.status()).toBe(200);
   const { url, session_id: sessionId } = await checkout.json();
+  await expectSeller(page, new URL(url).origin, sessionId);
   await page.goto(url);
   await page.getByRole('button', { name: 'Pay' }).click();
 
