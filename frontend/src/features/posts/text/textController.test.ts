@@ -19,6 +19,7 @@ function draft(versions: Version[]): PostDetail {
   return {
     id: 'post_01',
     brief: 'ship small things',
+    plan: null,
     versions,
     text: textOf(versions[versions.length - 1]!),
     status: 'draft',

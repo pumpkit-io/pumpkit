@@ -37,6 +37,14 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
     refresh: vi.fn(),
   },
 }));
+vi.mock('@/services/positioningService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/positioningService')>()),
+  positioningService: {
+    get: vi.fn().mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true }),
+    save: vi.fn(),
+    draft: vi.fn(),
+  },
+}));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
@@ -80,6 +88,7 @@ import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
+import { positioningService } from '@/services/positioningService';
 import { postService, type PostDetail } from '@/services/postService';
 import { usageService } from '@/services/usageService';
 import { xConnectionService } from '@/services/xConnectionService';
@@ -122,6 +131,7 @@ function postWith(final: string): PostDetail {
   return {
     id: 'post_01',
     brief: 'ship small things',
+    plan: null,
     text: {
       format: 'post',
       parts: [{ text: final, charCount: final.length, charLimit: 280 }],
@@ -186,6 +196,9 @@ describe('New post', () => {
     vi.mocked(inspirationAuthorService.remove).mockReset();
     vi.mocked(inspirationAuthorService.refresh).mockReset();
     vi.mocked(postService.start).mockReset();
+    vi.mocked(positioningService.get)
+      .mockReset()
+      .mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true });
     vi.mocked(postService.get).mockReset().mockResolvedValue(postWith('the final text'));
     vi.mocked(postService.addVersion).mockReset();
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
@@ -351,6 +364,30 @@ describe('New post', () => {
       fireEvent.click(setUp);
 
       expect(await screen.findByRole('heading', { level: 1, name: 'Persona' })).toBeInTheDocument();
+    });
+
+    it('replaces the write button with "Set up your persona" while the User has no Positioning', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
+      vi.mocked(positioningService.get).mockResolvedValue({ text: null, canDraft: true });
+      renderNewPost();
+
+      const area = await writer();
+      const setUp = await area.findByRole('link', { name: 'Set up your persona' });
+      expect(setUp).toHaveAttribute('href', '/persona');
+      expect(area.queryByRole('button', { name: 'Write the post' })).not.toBeInTheDocument();
+    });
+
+    it('keeps the write button when the Positioning could not be read, so the refusal can say why', async () => {
+      vi.mocked(positioningService.get).mockRejectedValue(apiError(500, 'The server is down.'));
+      const area = await readyToWrite();
+
+      fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
+
+      await waitFor(() =>
+        expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled(),
+      );
+      expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
     });
 
     it('greys out the send arrow until something is typed', async () => {

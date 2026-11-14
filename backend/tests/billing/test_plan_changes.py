@@ -20,6 +20,7 @@ from tests.billing.test_monthly_coupons import monthly
 from tests.billing.test_paid_signups import SIGNUPS, _open
 from tests.billing.test_paid_signups import billing_clock as billing_clock
 from tests.billing.test_top_ups import _send
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written
 
 CHANGES = "/api/v1/billing/plan-changes"
@@ -450,6 +451,7 @@ async def test_interval_change_keeps_used_generation_and_captured_paid_caps(
     fake_x_reader.posts["levelsio"] = [
         FetchedPost(post_id="plan-author", text="An example", posted_at=fixed_clock())
     ]
+    await save_positioning(authed_client)
     assert (
         await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     ).status_code == 201

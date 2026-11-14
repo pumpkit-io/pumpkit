@@ -16,6 +16,7 @@ from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 from tests.billing.test_top_ups import _send
 from tests.migrations import migrate
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written
 
 
@@ -220,6 +221,7 @@ async def test_month_end_paid_usage_and_accepted_caps_survive_webhooks_and_stack
         "customer.subscription.updated",
         {"customer": "cus_monthly"},
     )
+    await save_positioning(authed_client)
     await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     fake_llm.replies = [written("Sketch"), {"post": "Paid allowance survives redemption"}]
     assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201

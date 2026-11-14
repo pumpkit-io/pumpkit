@@ -28,6 +28,14 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
     refresh: vi.fn(),
   },
 }));
+vi.mock('@/services/positioningService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/positioningService')>()),
+  positioningService: {
+    get: vi.fn().mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true }),
+    save: vi.fn(),
+    draft: vi.fn(),
+  },
+}));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
@@ -83,6 +91,7 @@ import {
 const POST: PostDetail = {
   id: 'post_01',
   brief: 'ship small things',
+  plan: null,
   text: {
     format: 'post',
     parts: [{ text: 'the final text', charCount: 14, charLimit: 280 }],

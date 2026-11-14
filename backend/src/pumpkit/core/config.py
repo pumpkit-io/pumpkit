@@ -161,6 +161,8 @@ class Settings(BaseSettings):
     LLM_SKETCHING_MODEL: str = "openai/gpt-5.6-luna"
     LLM_HUMANIZING_MODEL: str = "openai/gpt-5.6-luna"
     LLM_REVISING_MODEL: str = "openai/gpt-5.6-luna"
+    # The model that plans a Brief into its Ideas before any Post is written.
+    LLM_PLANNING_MODEL: str = "openai/gpt-6-luna"
     # The model that drafts a Positioning from the User's X profile and posts.
     LLM_POSITIONING_MODEL: str = "openai/gpt-6-luna"
 

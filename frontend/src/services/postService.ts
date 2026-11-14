@@ -59,8 +59,38 @@ export interface Post {
 /** Where a Post stands, from its one Scheduled post (ADR 0015): none makes it a Draft. */
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
 
+export type Funnel = 'top' | 'middle' | 'bottom';
+export type DesiredAction =
+  | 'dwell_time'
+  | 'reply'
+  | 'bookmark'
+  | 'repost'
+  | 'share'
+  | 'follow'
+  | 'trust'
+  | 'click'
+  | 'DM'
+  | 'sign-up'
+  | 'buy';
+export type Length = 'short' | 'medium' | 'long';
+
+/** What Pumpkit decided about a Post before writing it (ADR 0025). */
+export interface Plan {
+  coreIdea: string;
+  takeaway: string;
+  /** Who the Post is for: `top` for reach, `middle` for trust, `bottom` for conversion. */
+  funnel: Funnel;
+  desiredAction: DesiredAction;
+  format: Format;
+  /** Null for a Thread. */
+  length: Length | null;
+  structure: string;
+}
+
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
+  /** Null for a Post written before Briefs were planned. */
+  plan: Plan | null;
   /** Null only for a Post whose first Version failed. */
   text: PostText | null;
   status: PostStatus;
@@ -182,11 +212,32 @@ interface PostTextApi {
   edited: boolean;
 }
 
+interface PlanApi {
+  core_idea: string;
+  takeaway: string;
+  funnel: Funnel;
+  desired_action: DesiredAction;
+  format: Format;
+  length: Length | null;
+  structure: string;
+}
+
 interface PostDetailApi extends PostApi {
+  plan: PlanApi | null;
   text: PostTextApi | null;
   status: PostStatus;
   scheduled_post: ScheduledPostApi | null;
 }
+
+const toPlan = (p: PlanApi): Plan => ({
+  coreIdea: p.core_idea,
+  takeaway: p.takeaway,
+  funnel: p.funnel,
+  desiredAction: p.desired_action,
+  format: p.format,
+  length: p.length,
+  structure: p.structure,
+});
 
 const toPart = (p: PartApi): Part => ({
   text: p.text,
@@ -252,6 +303,7 @@ export const postService = {
     return {
       id: data.id,
       brief: data.brief,
+      plan: data.plan ? toPlan(data.plan) : null,
       text: data.text ? toText(data.text) : null,
       versions: data.versions.map(toVersion),
       status: data.status,

@@ -14,6 +14,7 @@ from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prom
 from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -33,6 +34,7 @@ async def with_author(client, subscribed, fake_x_reader):
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc) - timedelta(hours=1),
         )
     ]
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 

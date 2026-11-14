@@ -12,6 +12,7 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Brief, Idea, Post
 from tests.connected_apps.conftest import foreign_keys_session as foreign_keys_session
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -28,6 +29,7 @@ async def with_author(client, subscribed, fake_x_reader):
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     ]
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 

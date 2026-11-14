@@ -13,7 +13,8 @@ from pumpkit.posts.models import Post
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZER_PROMPT
 from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import POST_IDEAS, writing_calls, written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -39,6 +40,7 @@ def _posts(handle: str, count: int) -> list[FetchedPost]:
 async def post_id(client, subscribed, fake_x_reader, fake_llm) -> str:
     """A Post from the Brief "ship small things" whose first version's text is "final 1"."""
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
     fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
     response = await client.post(POSTS, json={"brief": "ship small things"})
@@ -61,6 +63,16 @@ async def test_feedback_returns_a_new_version_with_the_next_number(client, post_
         {"text": "final 2", "char_count": 7, "char_limit": X_POST_MAX_CHARS}
     ]
     assert version["starting_text"] is None
+
+
+async def test_feedback_makes_no_plan_call(client, post_id, fake_llm):
+    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+
+    response = await client.post(_versions_url(post_id), json={"feedback": "make it shorter"})
+
+    assert response.status_code == 201
+    assert len(fake_llm.calls) == 2
+    assert POST_IDEAS not in [call.response_model.__name__ for call in fake_llm.calls]
 
 
 def _system(prompt: str) -> dict:
@@ -305,6 +317,7 @@ async def test_feedback_on_a_post_with_no_version_returns_409(
     client, db, subscribed, fake_x_reader, fake_llm
 ):
     fake_x_reader.posts["levelsio"] = _posts("levelsio", 1)
+    await save_positioning(client)
     await client.post(AUTHORS, json={"handle": "levelsio"})
     fake_llm.replies = [LLMError("provider down")]
     await client.post(POSTS, json={"brief": "ship"})
@@ -313,7 +326,7 @@ async def test_feedback_on_a_post_with_no_version_returns_409(
     response = await client.post(_versions_url(failed_post_id), json={"feedback": "shorter"})
 
     assert response.status_code == 409
-    assert len(fake_llm.calls) == 1
+    assert len(writing_calls(fake_llm)) == 1
 
 
 async def _stored_post(db, post_id: str) -> Post:

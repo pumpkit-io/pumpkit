@@ -260,6 +260,7 @@ function LoadedPost({
   const origin = (
     <OriginLine
       brief={post.brief}
+      plan={post.plan}
       version={textVersion}
       edited={post.text?.edited ?? false}
       writing={text.writing ? latest.number + 1 : null}

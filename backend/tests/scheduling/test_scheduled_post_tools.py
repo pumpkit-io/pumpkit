@@ -19,6 +19,7 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
 )
 from tests.mcp_client import error_text
+from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import written, written_thread
 from tests.scheduling.reading import scheduled_posts_through_mcp
 
@@ -41,6 +42,7 @@ async def written_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     ]
+    await save_positioning(client)
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
     fake_llm.replies = [written("sketch one"), {"post": "The final, version one."}]
@@ -83,6 +85,7 @@ async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
         )
     ]
+    await save_positioning(client)
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
     fake_llm.replies = [written_thread(["one", "two", "three"]), {"parts": THREAD_FINAL}]

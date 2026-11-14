@@ -307,6 +307,7 @@ describe('Posts page', () => {
       vi.mocked(postService.get).mockResolvedValue({
         id: 'post_01',
         brief: 'ship small things',
+        plan: null,
         status: 'scheduled',
         textMedia: [],
         text: {
@@ -572,6 +573,7 @@ describe('Posts page', () => {
       return {
         id,
         brief: 'ship small things',
+        plan: null,
         text: { format: 'post', parts: [], versionNumber: 2, edited: false },
         versions: [1, 2].map((number) => ({
           id: `${id}_v${number}`,

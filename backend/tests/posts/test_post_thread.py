@@ -13,7 +13,8 @@ from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prom
 from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
-from tests.posts.writing_replies import written, written_thread
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import writing_calls, written, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -28,6 +29,7 @@ async def with_author(client, subscribed, fake_x_reader):
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc) - timedelta(hours=1),
         )
     ]
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
@@ -99,7 +101,7 @@ async def test_a_thread_is_sketched_and_humanized_with_the_thread_prompts_and_sc
 
     await client.post(POSTS, json={"brief": "ship small things", "format": "thread"})
 
-    sketch_call, humanizer_call = fake_llm.calls
+    sketch_call, humanizer_call = writing_calls(fake_llm)
     assert sketch_call.response_model.__name__ == "drafted_thread"
     assert sketch_call.messages == [
         _system(sketch_thread_prompt(X_POST_MAX_CHARS)),
@@ -165,7 +167,7 @@ async def test_a_post_started_with_the_post_format_is_a_single_post(client, with
 
     [version] = response.json()["versions"]
     assert (version["format"], len(version["parts"])) == ("post", 1)
-    assert fake_llm.calls[0].messages[0] == _system(sketch_post_prompt(X_POST_MAX_CHARS))
+    assert writing_calls(fake_llm)[0].messages[0] == _system(sketch_post_prompt(X_POST_MAX_CHARS))
 
 
 async def test_an_unknown_format_returns_422(client, with_author, fake_llm):

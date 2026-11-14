@@ -6,7 +6,7 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 from pumpkit.billing.allowance import WayOut
 from pumpkit.posts.formats import Format, part_name
 from pumpkit.posts.media_files import cleaned_alt_text
-from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
+from pumpkit.posts.schemas import MediaResponse, PlanResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
@@ -108,6 +108,8 @@ class PostDetailResponse(BaseModel):
 
     id: str
     brief: str
+    # None for a Post written before Briefs were planned.
+    plan: Optional[PlanResponse]
     # None only for a Post whose first Version failed.
     text: Optional[TextResponse]
     versions: list[VersionResponse]

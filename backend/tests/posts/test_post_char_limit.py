@@ -12,7 +12,8 @@ from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
-from tests.posts.writing_replies import written, written_thread
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import writing_calls, written, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -27,6 +28,7 @@ async def with_author(client, subscribed, fake_x_reader):
             posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc) - timedelta(hours=1),
         )
     ]
+    await save_positioning(client)
     assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
@@ -64,7 +66,7 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
 
     assert _limits(post.json()["versions"][0]) == [X_POST_MAX_CHARS]
     assert _limits(thread.json()["versions"][0]) == [X_POST_MAX_CHARS, X_POST_MAX_CHARS]
-    assert [_system_text(call) for call in fake_llm.calls] == [
+    assert [_system_text(call) for call in writing_calls(fake_llm)] == [
         sketch_post_prompt(X_POST_MAX_CHARS),
         HUMANIZER_PROMPT,
         sketch_thread_prompt(X_POST_MAX_CHARS),
@@ -97,7 +99,7 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
 
     assert _limits(post.json()["versions"][0]) == [char_limit]
     assert _limits(thread.json()["versions"][0]) == [char_limit, char_limit]
-    assert [_system_text(call) for call in fake_llm.calls] == [
+    assert [_system_text(call) for call in writing_calls(fake_llm)] == [
         sketch_post_prompt(char_limit),
         HUMANIZER_PROMPT,
         sketch_thread_prompt(char_limit),
@@ -125,7 +127,9 @@ async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "longer"})
 
     assert _limits(response.json()) == [X_LONG_POST_MAX_CHARS, X_LONG_POST_MAX_CHARS]
-    assert _system_text(fake_llm.calls[2]) == sketch_thread_prompt(X_LONG_POST_MAX_CHARS)
-    assert _system_text(fake_llm.calls[3]) == humanizer_thread_prompt(X_LONG_POST_MAX_CHARS)
+    assert _system_text(writing_calls(fake_llm)[2]) == sketch_thread_prompt(X_LONG_POST_MAX_CHARS)
+    assert _system_text(writing_calls(fake_llm)[3]) == humanizer_thread_prompt(
+        X_LONG_POST_MAX_CHARS
+    )
     read = (await client.get(f"{POSTS}/{post_id}")).json()
     assert [_limits(v) for v in read["versions"]] == [[X_LONG_POST_MAX_CHARS] * 2] * 2
