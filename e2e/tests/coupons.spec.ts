@@ -194,10 +194,10 @@ test('a coupon-only recipient explicitly arranges future payment without losing 
   await futureReview.getByRole('button', { name: 'Agree and continue to checkout' }).click();
   await page.waitForURL((url) => url.origin !== appOrigin);
   expect(new URL(page.url()).hostname.endsWith('.localhost')).toBe(true);
-  await expect(
-    page.getByRole('heading', { name: 'Save a card for your accepted future plan' }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Save card', exact: true }).click();
+  await expect(page.getByRole('heading', { name: /^Pay for / })).toBeVisible();
+  const freeUntil = new Date(before.free_access?.ends_at ?? '').toISOString();
+  await expect(page.getByText(`Free until ${freeUntil}`)).toBeVisible();
+  await page.getByRole('button', { name: 'Pay', exact: true }).click();
   await expect(page).toHaveURL(/\/settings(?:\?.*)?$/);
   await expect(
     page.getByText('Subscription arranged. Your free access stays unchanged.'),
