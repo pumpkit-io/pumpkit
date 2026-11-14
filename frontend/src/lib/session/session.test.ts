@@ -12,6 +12,7 @@ import { POSTHOG_IDENTIFIED_KEY, resetPostHog } from '@/lib/analyticsConsent';
 import { api } from '@/services/apiService';
 import { installRefreshOnUnauthorized, SESSION_STORAGE_KEY, session } from '@/lib/session';
 import { recentDraftIds, recordDraftOpened } from '@/features/posts/list/recentDrafts';
+import { keepDraft, keptDraft } from '@/features/positioning/keptDraft';
 
 installRefreshOnUnauthorized();
 const inMinutes = (m: number) => new Date(Date.now() + m * 60_000).toISOString();
@@ -384,6 +385,21 @@ describe('the recently opened Drafts', () => {
       await session.end(reason);
 
       expect(recentDraftIds()).toEqual([]);
+    },
+  );
+});
+
+describe('the kept Positioning draft', () => {
+  it.each(['user', 'session_ended', 'other_tab'] as const)(
+    'is forgotten when the Session ends for %s',
+    async (reason) => {
+      session.start('t', inMinutes(60));
+      fakeBackend({});
+      keepDraft('I post about pricing.');
+
+      await session.end(reason);
+
+      expect(keptDraft()).toBeNull();
     },
   );
 });
