@@ -1,8 +1,8 @@
+import { PersonaLink } from '@/features/positioning/PersonaLink';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
-import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
 import { CopyTextButton } from '@/features/posts/CopyTextButton';
 import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
@@ -67,7 +67,7 @@ function Page({
 }) {
   return (
     <>
-      <Topbar title={title} actions={<PersonaChip />} />
+      <Topbar title={title} actions={<PersonaLink />} />
       {dock}
       {pinned ? (
         <div className="flex min-h-0 flex-1 flex-col bg-background">

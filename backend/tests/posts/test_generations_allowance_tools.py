@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.mcp_client import error_text
@@ -16,19 +15,11 @@ REFUSAL = (
 
 
 @pytest.fixture
-async def with_author(subscribed, mcp, fake_x_reader, monkeypatch):
+async def with_positioning(subscribed, mcp, monkeypatch):
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 2)
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     assert (await mcp.call_tool("set_positioning", text="I post about bootstrapping."))[
         "isError"
     ] is False
-    assert (await mcp.call_tool("add_inspiration_author", handle="levelsio"))["isError"] is False
 
 
 async def _use_a_generation(db, user_id: str) -> None:
@@ -51,7 +42,7 @@ async def _use_a_generation(db, user_id: str) -> None:
 
 
 async def test_start_post_refuses_with_no_generations_left_and_links_to_settings(
-    db, user, with_author, mcp, fake_llm, fixed_clock
+    db, user, with_positioning, mcp, fake_llm, fixed_clock
 ):
     await _use_a_generation(db, user.id)
     await _use_a_generation(db, user.id)
@@ -73,7 +64,7 @@ async def test_start_post_refuses_with_no_generations_left_and_links_to_settings
 
 
 async def test_give_feedback_refuses_with_no_generations_left(
-    db, user, with_author, mcp, fake_llm, fixed_clock
+    db, user, with_positioning, mcp, fake_llm, fixed_clock
 ):
     fake_llm.replies = [{"post": "final"}]
     post_id = (await mcp.call_tool("start_post", brief="ship"))["structuredContent"]["id"]

@@ -18,15 +18,15 @@ Each X account gets at most one introductory trial per Instance. Subscription hi
 
 ```
 backend/src/pumpkit/
-  main.py          the FastAPI app: mounts every area's router and the MCP endpoint, and registers the error handlers
-  mcp_server.py    the MCP server: every area's tools behind OAuth access tokens (ADR 0020), the access gate and per-User limits
+  main.py          the FastAPI app: mounts every active area's router and the MCP endpoint, and registers the error handlers
+  mcp_server.py    the MCP server: every active area's tools behind OAuth access tokens (ADR 0020), the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
   core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the LLM port and OpenAI-compatible client, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions and refresh tokens; retained inactive Google/Magic link implementations and mail templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
   connected_apps/  Connected apps: OAuth clients, app connections, authorization requests and access and refresh tokens for the MCP server (ADR 0020)
                     service/: redirect_uris.py (which redirect URIs may be registered and matched), clients.py (registration), authorizations.py (consent requests, their codes and the PKCE check), connections.py (Users' connections to apps, one unrevoked per app, and disconnecting one), tokens.py (access and refresh tokens, their lifetimes and refresh rotation), retention.py (purges stale clients and authorization requests)
-  authors/         Inspiration authors, their posts and the Author directory; the X reader (twitterapi.io)
+  authors/         the X reader (twitterapi.io), in use; inactive Inspiration authors, their posts and the Author directory (ADR 0024)
   x_connection/    X sign-in and same-account publishing authorization; the X publisher port (X's API) and X's weighted length count
   support/         the support contact redirect (a router only)
   positioning/     each User's Positioning: the free text saying who they are on X and what they post for, and its draft from their X profile
@@ -36,7 +36,7 @@ backend/src/pumpkit/
   scheduling/      Scheduled posts: rules, publish steps, publishing, and the publisher process
 backend/tests/     pytest suite, mirroring the package tree; fixtures in conftest.py
 frontend/src/
-  features/        self-contained feature modules (account, analyticsConsent, billing, connectedApps, inspirationAuthors, instance, legal, onboarding, positioning, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
+  features/        self-contained feature modules (account, analyticsConsent, billing, connectedApps, inspirationAuthors (inactive), instance, legal, onboarding, positioning, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
   components/      shared UI: auth, blocks, brand, ui primitives, the Settings card
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
@@ -61,12 +61,18 @@ Every other page renders inside `pages/AppLayout.tsx` (the providers, the sideba
 - `/new` (`pages/NewPost.tsx`): the Brief and Format form, `features/posts/PostWriter.tsx`.
 - `/posts/scheduled`, `/posts/drafts`, `/posts/published` and `/posts/failed` (`pages/Posts.tsx`): one tab per status, built from `features/posts/list/`. `/posts` opens the Scheduled tab.
 - `/posts/:id` (`pages/PostPage.tsx`): the Text card (`features/posts/TextCard.tsx`) and, pinned below it, one dock per status from `features/posts/panels/`; the "Post to…" dialog is `features/posts/postTo/` and the inline edit of a Scheduled post is `features/posts/edit/`.
-- `/persona` (`pages/Persona.tsx`): the Positioning panel (`features/positioning/`), a textarea saved through `GET` and `PUT /api/v1/positioning` and filled, unsaved, by `POST /api/v1/positioning/draft`, then the Inspiration authors, `features/inspirationAuthors/`. Planning a Brief reads the Positioning (see [Write a Post](#write-a-post)).
+- `/persona` (`pages/Persona.tsx`): the Positioning panel (`features/positioning/`), a textarea saved through `GET` and `PUT /api/v1/positioning` and filled, unsaved, by `POST /api/v1/positioning/draft`. It is the whole page: the Inspiration authors panel in `features/inspirationAuthors/` renders nowhere (ADR 0024). Planning a Brief reads the Positioning (see [Write a Post](#write-a-post)).
 - `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile) and `features/connectedApps/` (Connect AI apps). `features/xConnection/` supplies the shared connection provider and recovery banner, not a separate account card.
 
 `features/scheduledPosts/` keeps what those pages share about Scheduled posts: Destinations and Communities, the X length counter, live Parts and local time.
 
 ADR 0008 orders the areas `core` <- `auth` <- {`billing`, `connected_apps`} <- {`authors`, `x_connection`, `support`} <- `positioning` <- {`posts`, `onboarding`} <- `scheduling`: an area imports only areas to its left, and only their service, models, schemas and domain modules, never a router or mediator. `core` imports no area. `cd backend && uv run --extra dev lint-imports` checks these rules with the contracts in `backend/pyproject.toml`, and CI runs it. When an endpoint belongs to one area but needs a higher area's data, serve it from the higher area: `GET /x-connection` and `POST /x-connection/authorizations/complete` answer with the count of waiting Scheduled posts, so `scheduling/router.py` serves them, and `x_connection/router.py` starts only authenticated same-account reconnect. Unauthenticated sign-in start/completion live in `x_connection/sign_in_router.py`, using auth services without reversing the area order. There are no active disconnect or photo-choice endpoints.
+
+### Inactive Inspiration authors
+
+Inspiration authors are inactive in every Instance (ADR 0024), the way ADR 0023 keeps Google and Magic link. `main.py` never mounts `authors/router.py`, so `/api/v1/inspiration-authors` and `/api/v1/author-directory` answer 404, and `mcp_server.TOOLS` leaves out `authors/tools.py`. The Persona page renders only the Positioning panel, and the header's Persona link names no author. No configuration switch turns them back on.
+
+The code keeps its tests on a test-owned assembly. In the backend, a test that requests the `authors_app` fixture (`backend/tests/conftest.py`) runs against the application's routes plus the author routes, with an MCP endpoint that lists the author tools; `backend/tests/authors/` marks its files with it. `backend/tests/authors/test_authors_inactive_assembly.py` asserts the application mounts neither. In the frontend, `pages/Persona.test.tsx` renders the panel and its provider in a test-owned route through `renderSignedIn(path, { routes })`. The X reader in `authors/` stays active: the Positioning draft reads the User's newest posts through the `authors` service, and Community lookups use it.
 
 ## Recipes
 
@@ -155,10 +161,10 @@ A mediator serves both the web routes and the MCP tools, so it refuses with one 
 
 ### Add an MCP tool
 
-AI apps reach Pumpkit through the MCP endpoint at `POST /api/v1/mcp` (ADR 0012), signed in with OAuth (ADR 0020; the user guide is `docs/mcp.md`). A tool lives in its area's `tools.py`, beside the router, and calls only that area's mediator, as the router does. `authors/tools.py` is the example to copy.
+AI apps reach Pumpkit through the MCP endpoint at `POST /api/v1/mcp` (ADR 0012), signed in with OAuth (ADR 0020; the user guide is `docs/mcp.md`). A tool lives in its area's `tools.py`, beside the router, and calls only that area's mediator, as the router does. `positioning/tools.py` is the example to copy.
 
 1. Write the tool as an async function whose first parameter is `call: ToolCall[User]` (`core/mcp_tools.py`), followed by the tool's arguments. Its name is the tool's name (a snake_case verb), its docstring is the description the app reads, its arguments become the input schema, and its return type, a response schema, becomes the output schema. `call.user`, `call.db` and `call.now` are what a route gets from `get_current_user`, `get_async_db` and `clock()`; `await call.provide(get_x_reader)` gives any other provider, honouring the app's dependency overrides, so the tests' fakes apply.
-2. Validate input as the route does: build the route's request schema (`InspirationAuthorAddRequest(handle=handle)`) so its checks and messages are the same.
+2. Validate input as the route does: build the route's request schema (`PositioningSaveRequest(text=text)`) so its checks and messages are the same.
 3. Add an `McpTool(fn, rate=..., annotations=...)` to the module's `TOOLS` list. Use the web route's rate where it has one, through the area's `WRITE_RATE` in `schemas.py`, and `READ_ONLY_RATE` for tools that only read. Pick `READ_ONLY`, `ADDITIVE` or `DESTRUCTIVE`: clients ask the User before a destructive tool, and treat a tool without annotations as destructive. `McpTool.requires_subscription` defaults to `True`: access-required tools refuse a User who isn't Subscribed (ADR 0018). Only same-account recovery tools such as `connect_x` set it to `False`, so losing paid access cannot prevent restoring publishing authorization. A browser-only tool just answers with a web app link, as a `LinkToolResponse` (`core/schemas.py`): `connect_x` in `scheduling/tools.py` and `manage_subscription` in `billing/tools.py`.
 
 `pumpkit/mcp_server.py` authenticates every request before any tool runs. It takes the bearer credential to `connected_apps/mediator.authenticate_mcp_token`, which accepts an access token when:
@@ -175,7 +181,7 @@ It registers every module's `TOOLS` and wraps each tool: it counts the call agai
 
 import-linter lets only `pumpkit.mcp_server` import a tools module, and keeps a tools module from importing its router or the router from importing it.
 
-Test a tool through the endpoint with the `mcp` fixture: Claude Code connected with the access token from the `mcp_access_token` fixture, which registers the app and has `user`, signed in for real, approve it through OAuth, on a client without the `get_current_user` override. Request `subscribed` or `sells_no_plans` before it, since approving an app needs access. `await mcp.call_tool("add_inspiration_author", handle="levelsio")` returns the result, with `structuredContent` holding the response schema; `error_text(result)` (`tests/mcp_client.py`) asserts a tool error and returns its text. See `backend/tests/authors/test_inspiration_author_tools.py`. `backend/tests/connected_apps/test_sdk_client_flow.py` drives the official MCP SDK client through discovery, registration, sign-in and a refresh against the app, and once more identified by a Client ID Metadata Document that the `fake_client_metadata_fetcher` fixture serves.
+Test a tool through the endpoint with the `mcp` fixture: Claude Code connected with the access token from the `mcp_access_token` fixture, which registers the app and has `user`, signed in for real, approve it through OAuth, on a client without the `get_current_user` override. Request `subscribed` or `sells_no_plans` before it, since approving an app needs access. `await mcp.call_tool("set_positioning", text="I post about bootstrapping.")` returns the result, with `structuredContent` holding the response schema; `error_text(result)` (`tests/mcp_client.py`) asserts a tool error and returns its text. See `backend/tests/positioning/test_positioning_tools.py`. `backend/tests/connected_apps/test_sdk_client_flow.py` drives the official MCP SDK client through discovery, registration, sign-in and a refresh against the app, and once more identified by a Client ID Metadata Document that the `fake_client_metadata_fetcher` fixture serves.
 
 ### Call an LLM
 
@@ -208,7 +214,7 @@ A URL that an app or a User names can point anywhere, so it is fetched only thro
 
 ### Add a page to the shell
 
-Add its route to `signedInRoutes()` in `frontend/src/pages/signedInRoutes.tsx`, which both `App.tsx` and the page tests mount inside `AppLayout`, and give the page a `Topbar` with its title and any header controls as `actions`. A page the sidebar links to also goes in `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`. `frontend/src/pages/AppLayout.tsx` holds the shell and the state pages share: the Persona, the X connection and the Post counts. A page that changes a Post's Scheduled post refreshes the counts through `usePostCounts()`, as `usePost.setScheduledPost` does. Each Post is read by its own page, never held in the layout. Page tests render the route tree with `renderSignedIn(path)` from `frontend/src/pages/testing/signedInApp.tsx`, and mock `postService.list` (`NO_POSTS` there), which the counts provider calls on mount.
+Add its route to `signedInRoutes()` in `frontend/src/pages/signedInRoutes.tsx`, which both `App.tsx` and the page tests mount inside `AppLayout`, and give the page a `Topbar` with its title and any header controls as `actions`. A page the sidebar links to also goes in `SIDEBAR_PAGES` in `frontend/src/features/sidebar/pages.ts`. `frontend/src/pages/AppLayout.tsx` holds the shell and the state pages share: the X connection and the Post counts. A page that changes a Post's Scheduled post refreshes the counts through `usePostCounts()`, as `usePost.setScheduledPost` does. Each Post is read by its own page, never held in the layout. Page tests render the route tree with `renderSignedIn(path)` from `frontend/src/pages/testing/signedInApp.tsx`, and mock `postService.list` (`NO_POSTS` there), which the counts provider calls on mount.
 
 ### Edit the user profile
 

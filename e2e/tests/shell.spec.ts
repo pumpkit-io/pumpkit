@@ -55,12 +55,13 @@ test.describe('logged in', () => {
   test('with an empty Persona, New post offers to set it up', async ({ page }) => {
     await page.goto('/new');
     const writer = page.getByRole('region', { name: "What's the post about?" });
-    await expect(page.getByRole('link', { name: 'Persona: empty, set it up' })).toBeVisible();
+    await expect(page.locator('header').getByRole('link', { name: 'Persona' })).toBeVisible();
 
     await writer.getByRole('link', { name: 'Set up your persona' }).click();
 
     await expect(page).toHaveURL(/\/persona$/);
-    await expect(page.getByRole('region', { name: 'How your posts sound' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Who you are on X' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'How your posts sound' })).toHaveCount(0);
   });
 
   test('the New Post shortcut opens an empty New post from another page', async ({ page }) => {

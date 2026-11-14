@@ -213,7 +213,7 @@ describe('Consent page', () => {
       );
       expect(
         main.getByText(
-          "Claude will be able to use Quill as you: write and revise posts, manage your inspiration authors, schedule posts and publish them on X. It can't see your password or change your subscription.",
+          "Claude will be able to use Quill as you: write and revise posts, edit your positioning, schedule posts and publish them on X. It can't see your password or change your subscription.",
         ),
       ).toBeInTheDocument();
       expect(main.getByText('Verified: claude.ai')).toBeInTheDocument();

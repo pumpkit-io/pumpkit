@@ -37,12 +37,12 @@ def assert_refused(response) -> None:
 
 
 async def test_an_access_token_lists_the_tools_and_calls_one(mcp_app):
-    assert "list_inspiration_authors" in await mcp_app.list_tools()
+    assert "get_positioning" in await mcp_app.list_tools()
 
-    result = await mcp_app.call_tool("list_inspiration_authors")
+    result = await mcp_app.call_tool("get_positioning")
 
     assert result["isError"] is False
-    assert result["structuredContent"] == {"data": []}
+    assert result["structuredContent"] == {"text": None, "saved_at": None}
 
 
 async def test_an_expired_access_token_is_refused(mcp_app, clock):
@@ -117,7 +117,7 @@ async def test_a_user_without_a_subscription_gets_the_subscribe_link(mcp_app, db
     await db.execute(delete(Subscription))
     await db.commit()
 
-    result = await mcp_app.call_tool("list_inspiration_authors")
+    result = await mcp_app.call_tool("get_positioning")
 
     assert error_text(result) == (
         "This needs a subscription. Subscribe to continue. http://localhost:5173/subscribe"

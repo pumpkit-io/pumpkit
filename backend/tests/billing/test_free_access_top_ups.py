@@ -3,7 +3,6 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.gateway import TopUpPurchase
 from pumpkit.billing.models import FreeAccess, Subscription
 from pumpkit.core.config import settings
@@ -175,13 +174,7 @@ async def test_free_access_spends_existing_packs_allowance_first_and_keeps_rever
         )
     ).status_code == 200
     await redeem(client, coupons)
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="example", text="A useful note", posted_at=fixed_clock())
-    ]
     await save_positioning(client)
-    assert (
-        await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    ).status_code == 201
     for i in range(4):
         fake_llm.replies = [{"post": "finished"}]
         response = await client.post("/api/v1/posts", json={"brief": "Write something useful"})

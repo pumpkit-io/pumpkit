@@ -8,6 +8,8 @@ from pumpkit.authors.x_reader import FetchedPost, FetchedProfile
 from pumpkit.core.config import settings
 from tests.mcp_client import error_text
 
+pytestmark = pytest.mark.usefixtures("authors_app")
+
 
 def _posts(*ids: str) -> list[FetchedPost]:
     start = datetime(2026, 10, 1, tzinfo=timezone.utc)
@@ -170,3 +172,18 @@ async def test_removing_a_handle_that_isnt_listed_is_refused(subscribed, mcp, ha
     result = await mcp.call_tool("remove_inspiration_author", handle=handle)
 
     assert error_text(result) == "That handle isn't one of your inspiration authors."
+
+
+async def test_tools_list_shows_the_inspiration_author_tools_with_their_annotations(
+    subscribed, mcp
+):
+    tools = await mcp.list_tools()
+
+    assert tools["list_inspiration_authors"]["annotations"]["readOnlyHint"] is True
+    assert tools["add_inspiration_author"]["annotations"] == {
+        "readOnlyHint": False,
+        "destructiveHint": False,
+    }
+    assert tools["remove_inspiration_author"]["annotations"]["destructiveHint"] is True
+    assert tools["add_inspiration_author"]["inputSchema"]["required"] == ["handle"]
+    assert tools["list_inspiration_authors"]["description"]

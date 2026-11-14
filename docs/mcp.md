@@ -99,7 +99,7 @@ None of these setups add a header. If an app already has Pumpkit set up with an 
 The consent page, `PUBLIC_URL/oauth/consent`, opens when an app asks to connect. It shows:
 
 - "Connect {app} to Pumpkit", with the account you're signed in as. **Not you?** signs you out and brings you back to the same request once you sign in with the right account.
-- What the app can do: "write and revise posts, manage your inspiration authors, schedule posts and publish them on X". It can't see your X password or change your subscription.
+- What the app can do: "write and revise posts, edit your positioning, schedule posts and publish them on X". It can't see your X password or change your subscription.
 - Who the app is. **Verified: claude.ai** means the app identified itself with a document published on that domain. **Unverified app** means it registered itself with Pumpkit, as Cursor and Gemini CLI do, so its name is only what it claims. An unverified app can still be allowed in one click: check that you started the connection yourself.
 - Where it sends you back: **Sends you back to** a host, or **An app on this computer** for an app such as Claude Code that receives the answer on your machine.
 
@@ -134,15 +134,9 @@ Your positioning is a few sentences about who you are on X, what you post about,
 
 `set_positioning` is limited to 20 calls a minute per User, and `get_positioning` to 60.
 
-## Inspiration author tools
+## No inspiration author tools
 
-| Tool                        | What it does                                                                                                                                                                                                                                                                                                                 |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_inspiration_authors`  | Lists your Inspiration authors, in the order you added them, with how many posts Pumpkit holds for each.                                                                                                                                                                                                                     |
-| `add_inspiration_author`    | Adds an X account as an Inspiration author, by its handle with or without the @, and reads its recent posts. You can have up to three. An account Pumpkit doesn't know yet is looked up on X first, as in the web app: a handle that isn't on X or is private is refused, and lookups are limited per User and per Instance. |
-| `remove_inspiration_author` | Removes one of your Inspiration authors. Apps such as Claude Code ask before calling it.                                                                                                                                                                                                                                     |
-
-Each tool refuses what the web app refuses, with the same message. Tools are limited per User: 20 calls a minute to add or remove an Inspiration author, and 60 for the tools that only read. Over the limit, a tool answers with when to try again.
+The server lists no tools for inspiration authors. Your positioning is your persona, and Pumpkit no longer writes in the style of other X accounts (ADR 0024). `list_inspiration_authors`, `add_inspiration_author` and `remove_inspiration_author` are gone from every Instance, and an app that calls one gets an unknown-tool error.
 
 ## Post tools
 

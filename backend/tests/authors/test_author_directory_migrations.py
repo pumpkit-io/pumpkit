@@ -14,6 +14,8 @@ from sqlalchemy import Connection
 from alembic import command
 from tests.migrations import insert, migrate
 
+pytestmark = pytest.mark.usefixtures("authors_app")
+
 AUTHORS = "/api/v1/inspiration-authors"
 DIRECTORY = "/api/v1/author-directory"
 SEEDS = json.loads(

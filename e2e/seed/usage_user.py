@@ -9,7 +9,6 @@ from sqlalchemy import delete
 
 from pumpkit.auth.models import User
 from pumpkit.auth.tokens import create_access_token
-from pumpkit.authors.models import AuthorPost, InspirationAuthor
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
 from pumpkit.core.db.session import _db_session_handler
@@ -65,23 +64,12 @@ async def main() -> None:
                     trial_end=now + timedelta(days=5) if trial else None,
                     current_period_end=now + timedelta(days=5 if trial else 28),
                 ),
-                InspirationAuthor(user_id=user.id, handle="e2e_usage", position=0, added_at=anchor),
                 # Starting a Post is refused without one, before the Allowance is checked.
                 Positioning(
                     user_id=user.id, text="I post about testing for developers.", saved_at=anchor
                 ),
             ]
         )
-        if await db.get(AuthorPost, "e2e-usage-author-post") is None:
-            db.add(
-                AuthorPost(
-                    id="e2e-usage-author-post",
-                    handle="e2e_usage",
-                    text="A locally seeded post.",
-                    posted_at=anchor,
-                    fetched_at=now,
-                )
-            )
         await save_connection(
             db,
             user_id=user.id,

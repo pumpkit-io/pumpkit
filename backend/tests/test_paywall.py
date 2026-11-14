@@ -14,7 +14,6 @@ from pumpkit.billing.models import Subscription
 SUBSCRIPTION_NEEDED = "This needs a subscription. Subscribe to continue."
 
 GATED_ROUTES = [
-    ("GET", "/api/v1/inspiration-authors"),
     ("POST", "/api/v1/oauth/authorizations/request_unknown/approve"),
     ("GET", "/api/v1/positioning"),
     ("PUT", "/api/v1/positioning"),
@@ -27,7 +26,6 @@ GATED_ROUTES = [
 
 # The gated routes a new User, with nothing stored yet, reads successfully.
 READS_OF_NOTHING_YET = [
-    ("GET", "/api/v1/inspiration-authors"),
     ("GET", "/api/v1/positioning"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/scheduled-posts/communities"),
@@ -88,7 +86,7 @@ async def test_a_user_whose_subscription_ended_is_refused(client, db, subscribed
 async def test_a_user_behind_on_payment_still_reads(client, db, user):
     await _hold(db, user, "past_due")
 
-    response = await client.get("/api/v1/inspiration-authors")
+    response = await client.get("/api/v1/positioning")
 
     assert response.status_code == 200
 

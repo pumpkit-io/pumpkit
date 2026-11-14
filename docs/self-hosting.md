@@ -173,13 +173,13 @@ Writes every Post and drafts each Positioning. Pumpkit calls any OpenAI-compatib
 
 ### twitterapi.io (required)
 
-Reads the recent posts of each Inspiration author, which set the style Pumpkit writes in (ADR 0005), and the name of each Community a User pastes to post into.
+Reads a User's newest posts to draft their Positioning (ADR 0005), and the name of each Community a User pastes to post into.
 
 - Get a key: sign up at [twitterapi.io](https://twitterapi.io/dashboard); the key is on the dashboard.
 - Pricing: [twitterapi.io pricing](https://twitterapi.io/pricing).
 - Settings: `TWITTERAPI_IO_API_KEY`.
-- Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, adding an Inspiration author fails, and a User with no Inspiration author cannot write a Post. A pasted Community shows its ID instead of its name, and posting into it still works.
-- **Check:** adding an X handle on the **Persona** page lists it.
+- Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, the Positioning draft comes back empty and the User writes their Positioning themselves. A pasted Community shows its ID instead of its name, and posting into it still works.
+- **Check:** **Draft again from my X profile** on the **Persona** page fills the textarea.
 
 ### Inactive legacy sign-in implementations
 
@@ -448,7 +448,7 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **X sign-in is refused or loops.** Check the exact registered `PUBLIC_URL/oauth/x/callback`, confidential-client credentials and all required scopes, including `users.email`. A user without confirmed email must confirm it on X and retry. A cancelled, expired or pre-upgrade authorization needs a fresh **Continue with X**. Google and magic link routes are inactive regardless of credentials or SMTP.
 
-**Adding an Inspiration author shows "X can't be read right now. Please try again later."** twitterapi.io refused the request. `docker compose logs backend | grep "twitterapi.io returned" | tail -1` prints the status: `twitterapi.io returned HTTP 401` means `TWITTERAPI_IO_API_KEY` is wrong; for another status, check your account and credit on the twitterapi.io dashboard.
+**The Persona page can't draft a Positioning from the X profile.** twitterapi.io may have refused the request. `docker compose logs backend | grep "twitterapi.io returned" | tail -1` prints the status: `twitterapi.io returned HTTP 401` means `TWITTERAPI_IO_API_KEY` is wrong; for another status, check your account and credit on the twitterapi.io dashboard.
 
 **Writing a Post fails.** The LLM key is wrong or has no credit, or `LLM_BASE_URL` and the three models don't match. `docker compose logs --tail 50 backend` shows the endpoint's error.
 

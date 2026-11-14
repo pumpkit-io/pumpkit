@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from pumpkit.authors import mediator as authors_mediator
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import LLMError
 from pumpkit.core.llm_client import LLMNotConfiguredError
@@ -13,7 +14,6 @@ from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import start_thread, written_post
 
-AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
 # The model the merge and the humanizer were tuned against, unless a setting says otherwise.
 DEFAULT_MODEL = "openai/gpt-6.1-terra"
@@ -31,15 +31,13 @@ def _posts(handle: str, count: int) -> list[FetchedPost]:
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader):
-    """`levelsio` on the User's list, with two stored posts."""
-    fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
+async def with_positioning(client, subscribed):
+    """A Positioning saved, which writing a Post needs."""
     await save_positioning(client)
-    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
 async def test_starting_a_post_returns_it_with_its_first_version(
-    client, with_author, fake_llm, fixed_clock
+    client, with_positioning, fake_llm, fixed_clock
 ):
     fake_llm.replies = [{"post": "the final"}]
 
@@ -64,7 +62,7 @@ async def test_starting_a_post_returns_it_with_its_first_version(
 
 
 async def test_a_version_response_has_the_versions_text_and_no_sketch(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     fake_llm.replies = [
         {"post": "final one"},
@@ -92,8 +90,14 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
 
 
 async def test_no_version_is_written_from_the_inspiration_authors_posts(
-    client, db, with_author, fake_llm
+    client, db, user, with_positioning, fake_x_reader, fake_llm, clock
 ):
+    # The routes are inactive (ADR 0024): a User keeps only authors added before they were.
+    fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
+    await authors_mediator.add_author(
+        db=db, reader=fake_x_reader, user=user, handle="levelsio", now=clock()
+    )
+    await db.commit()
     post_id = (await start_thread(client, fake_llm, ["a", "b"], brief="ship")).json()["id"]
     fake_llm.replies = [{"parts": ["c", "d"]}, {"post": "one"}, {"post": "two"}]
     for body in ({"feedback": "shorter"}, {"feedback": "condense", "format": "post"}):
@@ -108,7 +112,7 @@ async def test_no_version_is_written_from_the_inspiration_authors_posts(
 
 
 async def test_the_final_is_counted_as_x_counts_it_and_kept_when_over_the_limit(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     # X counts an emoji as 2.
     long_final = "🚀" + "a" * 300
@@ -123,7 +127,7 @@ async def test_the_final_is_counted_as_x_counts_it_and_kept_when_over_the_limit(
 
 
 async def test_a_brief_over_200000_characters_returns_422_without_calling_the_model(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     response = await client.post(POSTS, json={"brief": "a" * 200_001})
 
@@ -131,7 +135,7 @@ async def test_a_brief_over_200000_characters_returns_422_without_calling_the_mo
     assert fake_llm.calls == []
 
 
-async def test_a_brief_of_exactly_200000_characters_is_accepted(client, with_author, fake_llm):
+async def test_a_brief_of_exactly_200000_characters_is_accepted(client, with_positioning, fake_llm):
     fake_llm.replies = [{"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "a" * 200_000})
@@ -139,7 +143,7 @@ async def test_a_brief_of_exactly_200000_characters_is_accepted(client, with_aut
     assert response.status_code == 201
 
 
-async def test_a_blank_brief_returns_422(client, with_author, fake_llm):
+async def test_a_blank_brief_returns_422(client, with_positioning, fake_llm):
     response = await client.post(POSTS, json={"brief": "  \n "})
 
     assert response.status_code == 422
@@ -156,9 +160,7 @@ async def test_a_user_who_is_not_subscribed_gets_403(client, fake_llm):
 async def test_a_user_without_a_subscription_writes_a_post_where_no_plans_are_sold(
     client, sells_no_plans, fake_x_reader, fake_llm
 ):
-    fake_x_reader.posts["levelsio"] = _posts("levelsio", 2)
     await save_positioning(client)
-    await client.post(AUTHORS, json={"handle": "levelsio"})
     fake_llm.replies = [{"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "ship"})
@@ -172,7 +174,7 @@ async def _stored_posts(db) -> list[Post]:
 
 
 async def test_a_post_stores_its_brief_and_version_with_models_and_usage(
-    client, db, with_author, fake_llm, clock
+    client, db, with_positioning, fake_llm, clock
 ):
     fake_llm.replies = [{"post": "final"}]
 
@@ -201,7 +203,7 @@ async def test_a_post_stores_its_brief_and_version_with_models_and_usage(
 
 
 async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_reports_it(
-    client, db, with_author, fake_llm, fake_posthog
+    client, db, with_positioning, fake_llm, fake_posthog
 ):
     fake_llm.replies = [LLMError("provider timed out")]
 
@@ -218,7 +220,7 @@ async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_reports
     assert attempt.format == "post"
 
 
-async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_author, fake_llm):
+async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_positioning, fake_llm):
     fake_llm.replies = [LLMError("provider down"), {"post": "final"}]
     await client.post(POSTS, json={"brief": "ship"})
 
@@ -231,7 +233,7 @@ async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_autho
 
 
 async def test_a_write_without_the_llm_key_leaves_the_post_not_written_and_stores_the_attempt(
-    client, db, with_author, fake_llm
+    client, db, with_positioning, fake_llm
 ):
     fake_llm.replies = [LLMNotConfiguredError("LLM_API_KEY is not set. Add it to .env.")]
 
