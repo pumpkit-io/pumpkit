@@ -135,6 +135,39 @@ describe('briefService', () => {
     expect(brief.ideas[1]!.post).toMatchObject({ status: 'scheduled', publishing: true });
   });
 
+  it('lists the recent briefs with their posts counted', async () => {
+    const get = vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        data: [
+          {
+            id: 'brief_01',
+            text_start: 'so I have been testing…',
+            created_at: '2026-10-10T12:00:30Z',
+            posts_written: 2,
+            posts_writing: 1,
+            posts_not_written: 0,
+            ideas_offered: 1,
+            post_ids: ['post_01', 'post_02', 'post_03'],
+          },
+        ],
+      },
+    } as never);
+
+    expect(await briefService.recent()).toEqual([
+      {
+        id: 'brief_01',
+        textStart: 'so I have been testing…',
+        createdAt: '2026-10-10T12:00:30Z',
+        postsWritten: 2,
+        postsWriting: 1,
+        postsNotWritten: 0,
+        ideasOffered: 1,
+        postIds: ['post_01', 'post_02', 'post_03'],
+      },
+    ]);
+    expect(get).toHaveBeenCalledWith('/briefs');
+  });
+
   it('reads a brief', async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({ data: BRIEF_API } as never);
 

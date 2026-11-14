@@ -3,15 +3,16 @@ import { errorStatus } from '@/services/apiErrors';
 import { pollDelay } from '@/services/postService';
 
 /**
- * Calls `read` again after `pollDelay` while `writing`, handing each answer to `onRead`. Reading
+ * Calls `read` again after `delay` while `writing`, handing each answer to `onRead`. Reading
  * stops when the page closes and on a 404 or 403, which goes to `onGone`; any other failed read
- * waits longer before the next. `read`, `onRead` and `onGone` must be stable.
+ * waits longer before the next. `read`, `onRead`, `onGone` and `delay` must be stable.
  */
 export function useReadWhileWriting<T>(
   writing: boolean,
   read: () => Promise<T>,
   onRead: (value: T) => void,
   onGone: (e: unknown) => void,
+  delay: (failures: number) => number = pollDelay,
 ) {
   const [poll, setPoll] = useState({ count: 0, failures: 0 });
   useEffect(() => {
@@ -31,10 +32,10 @@ export function useReadWhileWriting<T>(
           else setPoll(({ count, failures }) => ({ count: count + 1, failures: failures + 1 }));
         },
       );
-    }, pollDelay(poll.failures));
+    }, delay(poll.failures));
     return () => {
       stopped = true;
       clearTimeout(timer);
     };
-  }, [writing, poll, read, onRead, onGone]);
+  }, [writing, poll, read, onRead, onGone, delay]);
 }

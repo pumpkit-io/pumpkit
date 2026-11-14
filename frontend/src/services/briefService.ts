@@ -54,6 +54,33 @@ export interface Brief {
   generationsLeft: number | null;
 }
 
+/** A Brief as New post lists it, with its Posts counted (ADR 0025). */
+export interface RecentBrief {
+  id: string;
+  /** The text on one line, cut with "…" when longer. */
+  textStart: string;
+  createdAt: string;
+  postsWritten: number;
+  postsWriting: number;
+  /** Posts whose first Version failed or was lost. */
+  postsNotWritten: number;
+  /** The Ideas its page offers under "Not written". */
+  ideasOffered: number;
+  /** Its Posts in its order, written or not. */
+  postIds: string[];
+}
+
+interface RecentBriefApi {
+  id: string;
+  text_start: string;
+  created_at: string;
+  posts_written: number;
+  posts_writing: number;
+  posts_not_written: number;
+  ideas_offered: number;
+  post_ids: string[];
+}
+
 interface BriefApi {
   id: string;
   text: string;
@@ -116,6 +143,7 @@ export function briefPosts(brief: Brief): { idea: Idea; post: BriefPost }[] {
  * The Ideas the Brief's page offers to write (ADR 0025). The single-post Idea and the split Ideas
  * are alternatives, so once a kind has a Post only Ideas of that kind are offered, the split ones
  * when both have; while none has, every split Idea in posting order and then the single-post one.
+ * `posts/brief_reading.offered_ideas` counts them the same way for the recent Briefs.
  */
 export function notWrittenIdeas(brief: Brief): Idea[] {
   const unwritten = brief.ideas.filter((idea) => !idea.post);
@@ -124,6 +152,15 @@ export function notWrittenIdeas(brief: Brief): Idea[] {
   if (written.some(({ idea }) => !idea.wholeBrief)) return split;
   if (written.length > 0) return [];
   return [...split, ...unwritten.filter((idea) => idea.wholeBrief)];
+}
+
+/**
+ * The Post a Brief opens on in place of its page: its only Post, when no Idea is left to offer
+ * (ADR 0025). Null when it opens on its page.
+ */
+export function lonePost<T>(posts: readonly T[], offered: number): T | null {
+  const [only] = posts;
+  return only !== undefined && posts.length === 1 && offered === 0 ? only : null;
 }
 
 export const briefService = {
@@ -135,6 +172,20 @@ export const briefService = {
   plan: async (brief: string): Promise<Brief> => {
     const { data } = await apiService.post<BriefApi>('/briefs', { brief });
     return toBrief(data);
+  },
+  /** The User's latest ten Briefs, newest first. */
+  recent: async (): Promise<RecentBrief[]> => {
+    const { data } = await apiService.get<{ data: RecentBriefApi[] }>('/briefs');
+    return data.data.map((brief) => ({
+      id: brief.id,
+      textStart: brief.text_start,
+      createdAt: brief.created_at,
+      postsWritten: brief.posts_written,
+      postsWriting: brief.posts_writing,
+      postsNotWritten: brief.posts_not_written,
+      ideasOffered: brief.ideas_offered,
+      postIds: brief.post_ids,
+    }));
   },
   /** The Brief with its Ideas and their Posts as they are now. */
   get: async (briefId: string): Promise<Brief> => {

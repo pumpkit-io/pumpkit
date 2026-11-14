@@ -208,3 +208,25 @@ class BriefFields(BaseModel):
 class BriefResponse(BriefFields):
     # The single-post Idea first, then the split Ideas in posting order.
     ideas: list[IdeaResponse]
+
+
+class RecentBriefResponse(BaseModel):
+    """A Brief as New post lists it: what its page header and its row's label are read from."""
+
+    id: str
+    # The text on one line, cut at a word with "…" when longer.
+    text_start: str
+    created_at: datetime
+    # Its Posts by writing state: written, being written, and not written (failed or lost).
+    posts_written: int
+    posts_writing: int
+    posts_not_written: int
+    # The Ideas its page offers under "Not written".
+    ideas_offered: int
+    # Its Posts in its order, written or not.
+    post_ids: list[str]
+
+
+class RecentBriefsResponse(BaseModel):
+    # Newest first.
+    data: list[RecentBriefResponse]
