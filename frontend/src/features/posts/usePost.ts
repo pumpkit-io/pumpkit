@@ -11,8 +11,10 @@ import { errorAllowanceUsedUp, errorMessage, errorStatus } from '@/services/apiE
 import {
   isUnwritten,
   postService,
+  VersionNotWritten,
   WRITING_POLL_MAX_MS,
   WRITING_POLL_MS,
+  type FailedFeedback,
   type Format,
   type PostDetail,
   type UnwrittenPost,
@@ -26,7 +28,6 @@ import { useWritingFailure } from './useWritingFailure';
 
 /** How long "Newer rewrites are in History" stays in the origin line. */
 export const REWRITES_DROPPED_MS = 4_000;
-export { WRITING_POLL_MAX_MS, WRITING_POLL_MS };
 
 export type PostLoad =
   | { kind: 'loading' }
@@ -63,6 +64,17 @@ export function usePost(postId: string) {
   const [load, setLoad] = useState<PostLoad>({ kind: 'loading' });
   const writing = useWritingFailure();
   const { fail, clear } = writing;
+  // Feedback whose Version Pumpkit couldn't write, offered again until the User moves on.
+  const [failedFeedback, setFailedFeedback] = useState<FailedFeedback | null>(null);
+
+  /** Shows why Feedback wrote no Version, keeping the Feedback the server says failed. */
+  const feedbackFailed = useCallback(
+    (e: unknown) => {
+      if (e instanceof VersionNotWritten && e.failedFeedback) setFailedFeedback(e.failedFeedback);
+      fail(e, FEEDBACK_FAILED);
+    },
+    [fail],
+  );
   const { refresh: refreshCounts } = usePostCounts();
   const controller = load.kind === 'loaded' ? load.controller : null;
   const status = load.kind === 'loaded' ? load.post.status : null;
@@ -72,10 +84,17 @@ export function usePost(postId: string) {
     controller?.snapshot ?? noSnapshot,
   );
 
-  const show = useCallback((post: PostDetail | UnwrittenPost) => {
-    if (isUnwritten(post)) setLoad({ kind: 'unwritten', post });
-    else setLoad({ kind: 'loaded', post, controller: controllerFor(post) });
-  }, []);
+  const show = useCallback(
+    (post: PostDetail | UnwrittenPost) => {
+      if (isUnwritten(post)) setLoad({ kind: 'unwritten', post });
+      else {
+        setLoad({ kind: 'loaded', post, controller: controllerFor(post) });
+        if (post.failedFeedback && !post.writing)
+          feedbackFailed(new VersionNotWritten(post.failedFeedback));
+      }
+    },
+    [feedbackFailed],
+  );
 
   /** Shows why the Post couldn't be read, in place of the Post. */
   const loadFailed = useCallback((e: unknown) => {
@@ -161,13 +180,13 @@ export function usePost(postId: string) {
     if (!rewriting) return;
     let live = true;
     void rewriting.resumeWriting().then((outcome) => {
-      if (live && typeof outcome === 'object') fail(outcome.failed, FEEDBACK_FAILED);
+      if (live && typeof outcome === 'object') feedbackFailed(outcome.failed);
     });
     return () => {
       live = false;
       rewriting.stopWaiting();
     };
-  }, [rewriting, fail]);
+  }, [rewriting, feedbackFailed]);
 
   // Before paint, so the Text's tools never show a gate a step behind the page.
   useLayoutEffect(() => {
@@ -213,12 +232,20 @@ export function usePost(postId: string) {
     async (feedback: string, format: Format): Promise<boolean> => {
       if (!controller) return false;
       clear();
+      setFailedFeedback(null);
       const outcome = await controller.sendFeedback(feedback, format);
-      if (typeof outcome === 'object') fail(outcome.failed, FEEDBACK_FAILED);
+      if (typeof outcome === 'object') feedbackFailed(outcome.failed);
       return outcome === 'sent';
     },
-    [controller, clear, fail],
+    [controller, clear, feedbackFailed],
   );
+
+  const dismissFailedFeedback = useCallback(() => {
+    clear();
+    setFailedFeedback(null);
+    // Not awaited: should it fail, the Post shows the failure again when next opened, nothing worse.
+    postService.dismissFailedFeedback(postId).catch(() => {});
+  }, [postId, clear]);
 
   return {
     load,
@@ -229,6 +256,8 @@ export function usePost(postId: string) {
     gone,
     text,
     sendFeedback,
+    failedFeedback,
+    dismissFailedFeedback,
     rewritesDropped: dropped !== null && dropped !== dismissedDrop,
     error: writing.error,
     notice: writing.notice,

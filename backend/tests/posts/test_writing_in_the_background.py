@@ -145,6 +145,21 @@ async def test_a_write_older_than_the_timeout_shows_the_post_not_written(
     assert (await _post(client, post_id))["writing_state"] == "not_written"
 
 
+async def test_a_write_that_ends_after_the_timeout_records_nothing(
+    client, ready, fake_llm, background_tasks, held, clock
+):
+    post_id = await _start(client, fake_llm)
+    clock.advance(WRITING_TIMEOUT)
+
+    held.set()
+    await background_tasks.wait()
+
+    post = await _post(client, post_id)
+    assert post["writing_state"] == "not_written"
+    assert post["text"] is None
+    assert await _generations_used(client) == 0
+
+
 async def test_retry_writes_the_post_again_from_its_plan_without_planning(
     client, ready, fake_llm, background_tasks
 ):

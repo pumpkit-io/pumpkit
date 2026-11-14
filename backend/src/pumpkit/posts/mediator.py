@@ -35,6 +35,7 @@ from pumpkit.posts.version_writing import (
 )
 from pumpkit.posts.writing.planning import plan_brief
 from pumpkit.posts.writing.post_writing import write_planned_version
+from pumpkit.posts.writing.versions import WrittenVersion
 from pumpkit.posts.writing_state import WRITING, writing_state
 
 # Where the User saves their Positioning.
@@ -181,8 +182,8 @@ async def _write_first_version(
     clock: Clock,
 ) -> None:
     """
-    The background task: the model calls with no session open, then the Version and its charge,
-    or the failed attempt, in a session of its own.
+    The background task: the model calls with no session open, then the Version and its charge in
+    a session of its own, or else the failed attempt in a fresh one.
     """
     try:
         written = await write_planned_version(
@@ -193,35 +194,30 @@ async def _write_first_version(
             char_limit=write.char_limit,
             user_id=write.user_id,
         )
+        await _record_first_version(write, written, sessions, clock)
     except Exception as error:
-        async with sessions() as db:
-            post = await post_still_writing(
-                db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at
-            )
-            if post is not None:
-                await record_failed_attempt(
-                    db,
-                    post=post,
-                    sequence=len(post.attempts) + 1,
-                    feedback=None,
-                    format=write.plan.format,
-                    error=error,
-                    now=clock(),
-                )
-                await db.commit()
-        if not isinstance(error, AppError) or error.reported:
-            report_background_exception(_task_name(write.post_id), error)
-        return
+        try:
+            await _record_failed_first_version(write, sessions, clock, error)
+        finally:
+            if not isinstance(error, AppError) or error.reported:
+                report_background_exception(_task_name(write.post_id), error)
 
+
+async def _record_first_version(
+    write: _FirstVersionWrite,
+    written: WrittenVersion,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+) -> None:
     async with sessions() as db:
         # Before the Post: its key share on the User deadlocks two writes upgrading it to charge.
         await users_service.lock_user_id(db, user_id=write.user_id)
+        now = clock()
         post = await post_still_writing(
-            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now
         )
         if post is None:
             return
-        now = clock()
         version = await service.record_version(
             db,
             post=post,
@@ -233,6 +229,39 @@ async def _write_first_version(
         )
         await charge_generation(db, user_id=write.user_id, version=version, now=now)
         await db.commit()
+
+
+async def _record_failed_first_version(
+    write: _FirstVersionWrite,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+    error: Exception,
+) -> None:
+    async with sessions() as db:
+        now = clock()
+        post = await post_still_writing(
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now
+        )
+        if post is None:
+            return
+        await record_failed_attempt(
+            db,
+            post=post,
+            sequence=len(post.attempts) + 1,
+            feedback=None,
+            format=write.plan.format,
+            error=error,
+            now=now,
+        )
+        await db.commit()
+
+
+async def dismiss_failed_feedback(
+    db: AsyncSession, *, user: User, post_id: str, now: datetime
+) -> None:
+    post = await user_post(db, user=user, post_id=post_id, for_update=True)
+    service.dismiss_failed_feedback(post, now=now)
+    await db.commit()
 
 
 @dataclass(frozen=True)

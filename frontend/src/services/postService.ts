@@ -103,9 +103,15 @@ export const WRITING_POLL_MS = 3_000;
 /** The longest wait between reads, which doubles after each read that fails. */
 export const WRITING_POLL_MAX_MS = 60_000;
 
+/** Feedback whose Version Pumpkit couldn't write, as it was sent, to send again. */
+export interface FailedFeedback {
+  feedback: string;
+  format: Format;
+}
+
 /** Feedback's write failed or outlived the backend's timeout: the Text is as it was. */
 export class VersionNotWritten extends Error {
-  constructor() {
+  constructor(readonly failedFeedback: FailedFeedback | null = null) {
     super("Pumpkit couldn't write the next version, so your text hasn't changed. Try again.");
     this.name = 'VersionNotWritten';
   }
@@ -148,6 +154,8 @@ export interface PostDetail extends Post {
   status: PostStatus;
   /** True while Feedback's Version is being written: the Text can't change until it is. */
   writing: boolean;
+  /** The last Feedback when its Version couldn't be written, until the User moves on. */
+  failedFeedback: FailedFeedback | null;
   /** Null while the Post is a Draft. */
   scheduledPost: ScheduledPost | null;
   /**
@@ -290,6 +298,7 @@ interface PostDetailApi extends PostApi {
   plan: PlanApi | null;
   text: PostTextApi | null;
   writing_state: WritingState | null;
+  failed_feedback: FailedFeedback | null;
   /** Null until the first Version is written. */
   status: PostStatus | null;
   scheduled_post: ScheduledPostApi | null;
@@ -396,6 +405,7 @@ export const postService = {
       versions: data.versions.map(toVersion),
       status: data.status,
       writing: data.writing_state === 'writing',
+      failedFeedback: data.failed_feedback,
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
     };
@@ -458,8 +468,12 @@ export const postService = {
       const versions = isUnwritten(post) ? [] : post.versions.filter((v) => v.number > after);
       const written = versions[versions.length - 1];
       if (written) return written;
-      throw new VersionNotWritten();
+      throw new VersionNotWritten(isUnwritten(post) ? null : post.failedFeedback);
     }
+  },
+  /** Stops showing the Post's last Feedback as one Pumpkit couldn't write. */
+  dismissFailedFeedback: async (postId: string): Promise<void> => {
+    await apiService.delete(`/posts/${postId}/failed-feedback`);
   },
   /**
    * Stores the User's edit of the Post's Text, every Part in order, as typed, and whether the

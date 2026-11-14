@@ -49,6 +49,7 @@ from pumpkit.posts.media_upload_links import NewUploadLink
 from pumpkit.posts.models import Media, Post
 from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse
 from pumpkit.posts.writing.post_writing import revise_version
+from pumpkit.posts.writing.versions import WrittenVersion
 from pumpkit.posts.writing_state import writing_state
 from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
@@ -342,6 +343,7 @@ async def create_scheduled_post(
     # Serializes the User's checks and charges of X posts until the commit.
     await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=new.post_id)
+    posts_service.check_not_writing(post, now=now)
     if await service.get_for_post(db, post_id=post.id) is not None:
         raise _already_scheduled()
     parts = _text_of(post)
@@ -518,8 +520,13 @@ async def edit_scheduled_post(
     parts = edit.parts
     post = None
     first_reply = scheduled_post.first_reply
-    if edit.copy_text:
-        post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
+    if edit.copy_text or edit.reschedules:
+        text_post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
+        # A Failed Post may be taking Feedback, whose Version replaces the Text.
+        posts_service.check_not_writing(text_post, now=now)
+        if edit.copy_text:
+            post = text_post
+    if post is not None:
         # The Text's Parts in the places of the live ones are already on X as they were.
         parts = live + _text_of(post)[len(live) :]
         first_reply = post.text_first_reply
@@ -691,6 +698,7 @@ async def get_post(
             for v in version_writing.versions_of(post)
         ],
         writing_state=writing_state(post, now=now),
+        failed_feedback=version_writing.failed_feedback_response(post, now=now),
         status=post_status(scheduled_post.state if scheduled_post else None) if written else None,
         scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
     )
@@ -784,7 +792,7 @@ async def give_feedback(
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
     next_version = await version_writing.prepare_next_version(
-        db, user=user, post=post, format=format, sent_text=sent_text, now=now
+        db, user=user, post=post, feedback=feedback, format=format, sent_text=sent_text, now=now
     )
     response = await get_post(db, user, post_id, now=now)
     write = _FeedbackWrite(
@@ -824,9 +832,8 @@ async def _write_feedback_version(
     clock: Clock,
 ) -> None:
     """
-    The background task: the model calls with no session open, then the Version and its charge,
-    or the failed attempt, in a session of its own. Takes-Feedback and Media checks run again
-    there, since the Post may have been scheduled or its Media changed during the calls.
+    The background task: the model calls with no session open, then the Version and its charge in
+    a session of its own, or else the failed attempt in a fresh one.
     """
     next_version = write.next_version
     try:
@@ -837,42 +844,44 @@ async def _write_feedback_version(
             next_version.starting_text,
             write.feedback,
         )
+        await _record_feedback_version(write, written, sessions, clock)
     except Exception as error:
-        await _record_failed_feedback(write, sessions, clock, error)
-        if not isinstance(error, AppError) or error.reported:
-            report_background_exception(_feedback_task_name(write.post_id), error)
-        return
+        try:
+            await _record_failed_feedback(write, sessions, clock, error)
+        finally:
+            if not isinstance(error, AppError) or error.reported:
+                report_background_exception(_feedback_task_name(write.post_id), error)
+            else:
+                logger.info("Feedback on post %s recorded as failed: %s", write.post_id, error)
 
+
+async def _record_feedback_version(
+    write: _FeedbackWrite,
+    written: WrittenVersion,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+) -> None:
+    """
+    Takes-Feedback and Media checks run again, since the Post may have been scheduled or its Media
+    changed during the calls; a refusal raises, and nothing here is committed.
+    """
+    next_version = write.next_version
     async with sessions() as db:
         # User before Post, as every path that takes both locks them, since the charge locks the User.
         await users_service.lock_user_id(db, user_id=write.user_id)
+        now = clock()
         post = await version_writing.post_still_writing(
-            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now
         )
         if post is None:
             return
-        now = clock()
-        try:
-            scheduled_post = await _check_takes_feedback(db, post_id=write.post_id)
-            media_service.check_dropped_parts_media_movable(
-                post,
-                part_count=len(written.parts),
-                first_reply=written.first_reply,
-                live_count=_live_count(scheduled_post),
-            )
-        except AppError as error:
-            await version_writing.record_failed_attempt(
-                db,
-                post=post,
-                sequence=next_version.sequence,
-                feedback=write.feedback,
-                format=next_version.format,
-                error=error,
-                now=now,
-            )
-            await db.commit()
-            logger.info("Feedback on post %s recorded as failed: %s", write.post_id, error)
-            return
+        scheduled_post = await _check_takes_feedback(db, post_id=write.post_id)
+        media_service.check_dropped_parts_media_movable(
+            post,
+            part_count=len(written.parts),
+            first_reply=written.first_reply,
+            live_count=_live_count(scheduled_post),
+        )
         version = await posts_service.record_version(
             db,
             post=post,
@@ -894,8 +903,9 @@ async def _record_failed_feedback(
     error: Exception,
 ) -> None:
     async with sessions() as db:
+        now = clock()
         post = await version_writing.post_still_writing(
-            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now
         )
         if post is None:
             return
@@ -906,7 +916,7 @@ async def _record_failed_feedback(
             feedback=write.feedback,
             format=write.next_version.format,
             error=error,
-            now=clock(),
+            now=now,
         )
         await db.commit()
 

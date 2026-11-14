@@ -46,6 +46,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     retry: vi.fn(),
     addVersion: vi.fn(),
     awaitVersion: vi.fn(),
+    dismissFailedFeedback: vi.fn(),
     restoreVersion: vi.fn(),
     saveText: vi.fn(),
   },
@@ -97,13 +98,13 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import type { Instance } from '@/lib/instance';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from '@/features/posts/text/textSaver';
-import { WRITING_POLL_MS } from '@/features/posts/usePost';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import {
   postService,
   VersionNotWritten,
+  WRITING_POLL_MS,
   textOf,
   type Part,
   type Plan,
@@ -179,6 +180,7 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
       versions: [],
       status: 'draft',
       writing: false,
+      failedFeedback: null,
       scheduledPost: null,
       textMedia: [],
     },
@@ -229,9 +231,13 @@ function withScheduledPost(scheduledPost: ScheduledPost): PostDetail {
   };
 }
 
-function renderPost(post: PostDetail, instance: Instance = SELLS_PLANS) {
+function renderPost(
+  post: PostDetail,
+  instance: Instance = SELLS_PLANS,
+  { strict = false }: { strict?: boolean } = {},
+) {
   vi.mocked(postService.get).mockResolvedValue(post);
-  return renderSignedIn(`/posts/${post.id}`, { instance });
+  return renderSignedIn(`/posts/${post.id}`, { instance, strict });
 }
 
 async function textCard() {
@@ -280,6 +286,7 @@ describe('Post page', () => {
     vi.mocked(postService.get).mockReset();
     vi.mocked(postService.addVersion).mockReset();
     vi.mocked(postService.awaitVersion).mockReset();
+    vi.mocked(postService.dismissFailedFeedback).mockReset().mockResolvedValue();
     vi.mocked(postService.restoreVersion).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
@@ -3968,10 +3975,14 @@ describe('Post page', () => {
 
     it('opens a Post that Feedback is rewriting in the writing state, then shows the new version', async () => {
       let answer: (v: Version) => void = () => {};
-      vi.mocked(postService.awaitVersion).mockReturnValue(
-        new Promise((resolve) => (answer = resolve)),
+      vi.mocked(postService.awaitVersion).mockImplementation(
+        (_postId, _after, signal) =>
+          new Promise((resolve, reject) => {
+            answer = resolve;
+            signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+          }),
       );
-      renderPost({ ...postWith('the first final'), writing: true });
+      renderPost({ ...postWith('the first final'), writing: true }, SELLS_PLANS, { strict: true });
 
       expect(
         await (await textCard()).findByText('Writing version 2 from your feedback…'),
@@ -3984,6 +3995,67 @@ describe('Post page', () => {
 
       expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
       expect(feedbackBox()).toBeEnabled();
+    });
+
+    const NOT_WRITTEN =
+      "Pumpkit couldn't write the next version, so your text hasn't changed. Try again.";
+
+    it('opens a Post whose last Feedback failed with the failure and the Feedback to send again', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(versionTwo);
+      renderPost({
+        ...postWith('the first final'),
+        failedFeedback: { feedback: 'make it a thread', format: 'thread' },
+      });
+      await textCard();
+
+      const alert = within(await panel('Draft').findByRole('alert'));
+      expect(alert.getByText(NOT_WRITTEN)).toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('make it a thread');
+      const format = within(panel('Draft').getByRole('radiogroup', { name: 'Format' }));
+      expect(format.getByRole('radio', { name: 'Thread' })).toBeChecked();
+
+      const tryAgain = alert.getByRole('button', { name: 'Try again' });
+      await waitFor(() => expect(tryAgain).toBeEnabled());
+      fireEvent.click(tryAgain);
+
+      await waitFor(() =>
+        expect(postService.addVersion).toHaveBeenCalledWith(
+          'post_01',
+          'make it a thread',
+          'thread',
+          ['the first final'],
+          expect.any(AbortSignal),
+        ),
+      );
+      expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
+    });
+
+    it('dismisses a failed Feedback, emptying the box', async () => {
+      renderPost({
+        ...postWith('the first final'),
+        failedFeedback: { feedback: 'warmer', format: 'post' },
+      });
+      await textCard();
+      const alert = within(await panel('Draft').findByRole('alert'));
+
+      fireEvent.click(alert.getByRole('button', { name: 'Dismiss' }));
+
+      await waitFor(() => expect(panel('Draft').queryByRole('alert')).not.toBeInTheDocument());
+      expect(feedbackBox()).toHaveValue('');
+      expect(postService.dismissFailedFeedback).toHaveBeenCalledWith('post_01');
+    });
+
+    it('opens a Post mid-Feedback, then offers that Feedback again once it fails', async () => {
+      vi.mocked(postService.awaitVersion).mockRejectedValue(
+        new VersionNotWritten({ feedback: 'warmer', format: 'post' }),
+      );
+      renderPost({ ...postWith('the first final'), writing: true });
+      await textCard();
+
+      const alert = within(await panel('Draft').findByRole('alert'));
+      expect(alert.getByText(NOT_WRITTEN)).toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('warmer');
+      expect(alert.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
     });
 
     it('opens a Post whose Feedback then fails with the Text as it was and the failure', async () => {

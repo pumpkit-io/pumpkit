@@ -185,6 +185,7 @@ async def record_version(
     db.add(attempt)
     set_text_from_version(post, attempt)
     post.writing_since = None
+    _drop_unwritten_feedback(post)
     await db.flush()
     return attempt
 
@@ -224,12 +225,35 @@ def take_text(post: Post, *, now: datetime) -> None:
     """
     check_not_writing(post, now=now)
     post.writing_since = None
+    _drop_unwritten_feedback(post)
 
 
-def start_writing(post: Post, *, now: datetime) -> None:
-    """Holds the Text until the Version is recorded, or its attempt fails. Not flushed."""
+def start_writing(
+    post: Post,
+    *,
+    now: datetime,
+    feedback: Optional[str] = None,
+    format: Optional[Format] = None,
+) -> None:
+    """
+    Holds the Text until the Version is recorded, or its attempt fails, and keeps the `feedback` it
+    is written from, in `format`, until then or until the User moves on. Not flushed.
+    """
     check_not_writing(post, now=now)
     post.writing_since = now
+    post.unwritten_feedback = feedback
+    post.unwritten_feedback_format = format if feedback is not None else None
+
+
+def dismiss_failed_feedback(post: Post, *, now: datetime) -> None:
+    """Forgets a Feedback whose write failed or timed out; one being written stays. Not flushed."""
+    if not is_writing(post, now=now):
+        _drop_unwritten_feedback(post)
+
+
+def _drop_unwritten_feedback(post: Post) -> None:
+    post.unwritten_feedback = None
+    post.unwritten_feedback_format = None
 
 
 class TextShapeKept(ConflictError):

@@ -94,8 +94,12 @@ export interface TextGate {
   status: PostStatus;
 }
 
-/** 'notSaved' when the last edit didn't reach the server, or nothing was sent at all. */
-export type FeedbackOutcome = 'sent' | 'notSaved' | { failed: unknown };
+/**
+ * 'notSaved' when the last edit didn't reach the server, or nothing was sent at all; 'stopped' when
+ * the wait for the Version was stopped; 'alreadyWriting' when another wait already shows it.
+ */
+export type FeedbackOutcome =
+  'sent' | 'notSaved' | 'stopped' | 'alreadyWriting' | { failed: unknown };
 
 type Direction = 'undo' | 'redo';
 
@@ -244,23 +248,31 @@ export class TextController {
         this.deps.backend.addVersion(feedback, format, parts, signal),
       );
     } finally {
-      this.writing = false;
-      this.emit();
+      this.doneWriting();
     }
   }
 
-  /** Waits for the Version Feedback was writing when the Post was read, then shows it. */
+  /**
+   * Waits for the Version Feedback was writing when the Post was read, then shows it. Takes over
+   * from a wait that was stopped, as an effect that runs again stops and resumes.
+   */
   async resumeWriting(): Promise<FeedbackOutcome> {
-    if (this.writing) return 'notSaved';
+    if (this.writing && !this.waiting?.signal.aborted) return 'alreadyWriting';
     this.writing = true;
     this.emit();
     try {
       const after = this.versions[this.versions.length - 1]?.number ?? 0;
       return await this.land((signal) => this.deps.backend.awaitVersion(after, signal));
     } finally {
-      this.writing = false;
-      this.emit();
+      this.doneWriting();
     }
+  }
+
+  /** Lets the Text change again, unless a later wait took over and still waits. */
+  private doneWriting() {
+    if (this.waiting) return;
+    this.writing = false;
+    this.emit();
   }
 
   /** Stops waiting for a Version being written; the server goes on writing it. */
@@ -274,7 +286,7 @@ export class TextController {
     this.saver.dispose();
   }
 
-  /** Makes the Version `written` resolves with the Text; 'notSaved' when the wait was stopped. */
+  /** Makes the Version `written` resolves with the Text; 'stopped' when the wait was stopped. */
   private async land(written: (signal: AbortSignal) => Promise<Version>): Promise<FeedbackOutcome> {
     const waiting = new AbortController();
     this.waiting = waiting;
@@ -285,7 +297,7 @@ export class TextController {
       this.commit(textsOf(version.parts), 'rewrite', version.number);
       return 'sent';
     } catch (e) {
-      if (waiting.signal.aborted) return 'notSaved';
+      if (waiting.signal.aborted) return 'stopped';
       if (!isRefusal(e)) this.deps.track('post_version_failed', { kind: 'feedback' });
       return { failed: e };
     } finally {

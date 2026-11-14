@@ -322,6 +322,7 @@ describe('Posts page', () => {
         plan: null,
         status: 'scheduled',
         writing: false,
+        failedFeedback: null,
         textMedia: [],
         text: {
           format: 'post',
@@ -602,6 +603,7 @@ describe('Posts page', () => {
         })),
         status: 'draft',
         writing: false,
+        failedFeedback: null,
         scheduledPost: null,
         textMedia: [],
         ...extra,

@@ -3,17 +3,16 @@ ADR 0015 through the HTTP API: every Scheduled post is copied from its Post's Te
 most one, and a Scheduled or Published Post takes no Feedback.
 """
 
+import asyncio
 from datetime import timedelta
 
 import pytest
 
-from pumpkit.core.llm import FakeLLM, get_llm
-from pumpkit.main import app
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.positioning.positioning import save_positioning
 from tests.posts.feedback import latest_version
-from tests.posts.writing_replies import REVISED_POST, revised
+from tests.posts.writing_replies import REVISED_POST
 from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -192,32 +191,52 @@ async def test_feedback_on_someone_else_s_post_is_not_found(client, subscribed, 
     assert response.json()["detail"] == "Post not found."
 
 
-async def test_a_post_scheduled_while_its_feedback_version_is_written_does_not_take_it(
-    client, fake_llm, post
+BEING_WRITTEN = "Pumpkit is writing a new version of this post. Try again once it's written."
+
+
+@pytest.fixture
+def revising(fake_llm) -> asyncio.Event:
+    """Holds every revise call until the test sets the event, so a Feedback stays in flight."""
+    event = asyncio.Event()
+    fake_llm.held[REVISED_POST] = event
+    return event
+
+
+@pytest.mark.parametrize(
+    "when", [{"publish_at": LATER}, {"publish_now": True}], ids=["schedule", "post now"]
+)
+async def test_a_post_whose_feedback_is_being_written_cannot_be_scheduled(
+    post, client, fake_llm, fake_x_publisher, background_tasks, revising, when
 ):
-    scheduled_mid_write = []
+    feedback = await _give_feedback(client, fake_llm, post)
+    assert feedback.status_code == 202, feedback.text
 
-    class SchedulingLLM(FakeLLM):
-        async def structured(self, **kwargs):
-            if not scheduled_mid_write:
-                scheduled_mid_write.append(
-                    await client.post(
-                        SCHEDULED_POSTS,
-                        json={"post_id": post["id"], "publish_at": LATER},
-                    )
-                )
-            return await super().structured(**kwargs)
+    response = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], **when})
 
-    llm = SchedulingLLM(
-        replies=[{"post": "Version after punchier."}], standing={REVISED_POST: revised()}
-    )
-    app.dependency_overrides[get_llm] = lambda: llm
-    response = await client.post(
-        f"/api/v1/posts/{post['id']}/versions", json={"feedback": "punchier"}
-    )
-    read = await client.get(f"/api/v1/posts/{post['id']}")
+    assert response.status_code == 409
+    assert response.json()["detail"] == BEING_WRITTEN
+    assert fake_x_publisher.published == []
+    revising.set()
+    await background_tasks.wait()
+    assert (await latest_version(client, post["id"]))["number"] == 2
 
-    assert scheduled_mid_write[0].status_code == 201, scheduled_mid_write[0].text
-    assert response.status_code == 202, response.text
-    assert [version["number"] for version in read.json()["versions"]] == [1]
-    assert read.json()["writing_state"] is None
+
+@pytest.mark.parametrize(
+    "edit", [{"publish_now": True}, {"copy_text": True}], ids=["post now", "copy the text"]
+)
+async def test_a_failed_post_whose_feedback_is_being_written_cannot_be_rescheduled_or_copied(
+    post, client, fake_llm, fake_x_publisher, background_tasks, revising, edit
+):
+    fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
+    failed = await client.post(SCHEDULED_POSTS, json={"post_id": post["id"], "publish_now": True})
+    assert failed.json()["state"] == "failed"
+    fake_x_publisher.fail_publish = None
+    assert (await _give_feedback(client, fake_llm, post)).status_code == 202
+
+    response = await client.patch(f"{SCHEDULED_POSTS}/{failed.json()['id']}", json=edit)
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == BEING_WRITTEN
+    revising.set()
+    await background_tasks.wait()
+    assert (await latest_version(client, post["id"]))["number"] == 2

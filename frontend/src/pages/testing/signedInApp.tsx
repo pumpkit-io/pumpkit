@@ -1,5 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import {
   MemoryRouter,
   Route,
@@ -26,6 +26,7 @@ import { signedInRoutes } from '../signedInRoutes';
  * For tests: the signed-in route tree at `path` (with any query), as App mounts it behind
  * sign-in. The User starts at `nextStep`, past the Paywall by default; later checks go to the
  * mocked onboardingService. `routes` adds test-owned routes, such as an inactive feature's.
+ * `strict` mounts it under StrictMode, which runs every effect twice as the dev build does.
  */
 export function renderSignedIn(
   path: string,
@@ -34,9 +35,16 @@ export function renderSignedIn(
     instance = SELLS_PLANS,
     nextStep = null,
     routes,
-  }: { state?: unknown; instance?: Instance; nextStep?: NextStep | null; routes?: ReactNode } = {},
+    strict = false,
+  }: {
+    state?: unknown;
+    instance?: Instance;
+    nextStep?: NextStep | null;
+    routes?: ReactNode;
+    strict?: boolean;
+  } = {},
 ) {
-  return render(
+  const app = (
     <InstanceProvider instance={instance}>
       <AuthProvider>
         <OnboardingProvider initialNextStep={nextStep}>
@@ -56,8 +64,9 @@ export function renderSignedIn(
           </ThemeProvider>
         </OnboardingProvider>
       </AuthProvider>
-    </InstanceProvider>,
+    </InstanceProvider>
   );
+  return render(strict ? <StrictMode>{app}</StrictMode> : app);
 }
 
 function splitPath(path: string): { pathname: string; search: string } {

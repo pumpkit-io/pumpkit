@@ -134,6 +134,22 @@ async def test_a_feedback_older_than_the_timeout_is_no_longer_being_written(
     assert _texts(post) == ["Version one."]
 
 
+async def test_a_feedback_that_ends_after_the_timeout_records_nothing(
+    client, post_id, fake_llm, background_tasks, revising, clock
+):
+    fake_llm.replies.append({"post": "From the late write.", "first_reply": None})
+    await _feedback(client, post_id)
+    clock.advance(WRITING_TIMEOUT)
+
+    revising.set()
+    await background_tasks.wait()
+
+    post = await _post(client, post_id)
+    assert _texts(post) == ["Version one."]
+    assert [version["number"] for version in post["versions"]] == [1]
+    assert await _generations_used(client) == 1
+
+
 async def test_a_feedback_superseded_by_an_edit_after_the_timeout_records_nothing(
     client, post_id, fake_llm, background_tasks, revising, clock
 ):
@@ -215,3 +231,144 @@ async def test_give_feedback_over_mcp_answers_that_the_version_is_being_written(
     done = await mcp.call_tool("get_post", post_id=post_id)
     assert done["structuredContent"]["writing_state"] is None
     assert [v["number"] for v in done["structuredContent"]["versions"]] == [1, 2]
+
+
+async def test_a_failed_feedback_shows_on_the_post_until_the_user_moves_on(
+    client, post_id, fake_llm, background_tasks
+):
+    fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
+    response = await client.post(
+        f"{POSTS}/{post_id}/versions", json={"feedback": "make it a thread", "format": "thread"}
+    )
+    assert response.status_code == 202, response.text
+    assert response.json()["failed_feedback"] is None
+
+    await background_tasks.wait()
+
+    post = await _post(client, post_id)
+    assert post["failed_feedback"] == {"feedback": "make it a thread", "format": "thread"}
+
+
+async def test_a_feedback_that_outlived_the_timeout_shows_as_failed(
+    client, post_id, fake_llm, revising, clock
+):
+    await _feedback(client, post_id, "warmer")
+    assert (await _post(client, post_id))["failed_feedback"] is None
+
+    clock.advance(WRITING_TIMEOUT)
+
+    post = await _post(client, post_id)
+    assert post["failed_feedback"] == {"feedback": "warmer", "format": "post"}
+
+
+async def test_a_written_feedback_leaves_no_failure(client, post_id, fake_llm, background_tasks):
+    fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
+    await _feedback(client, post_id)
+    await background_tasks.wait()
+    fake_llm.standing.pop(HUMANIZED_POST)
+    fake_llm.replies.append({"post": "Version two.", "first_reply": None})
+
+    await _feedback(client, post_id, "warmer")
+    await background_tasks.wait()
+
+    post = await _post(client, post_id)
+    assert _texts(post) == ["Version two."]
+    assert post["failed_feedback"] is None
+
+
+@pytest.mark.parametrize(
+    "move_on",
+    [
+        lambda client, post_id: client.put(f"{POSTS}/{post_id}/text", json={"parts": ["Typed."]}),
+        lambda client, post_id: client.post(f"{POSTS}/{post_id}/versions/1/restore"),
+        lambda client, post_id: client.delete(f"{POSTS}/{post_id}/failed-feedback"),
+    ],
+    ids=["edit", "restore", "dismiss"],
+)
+async def test_a_failed_feedback_goes_once_the_user_edits_restores_or_dismisses_it(
+    client, post_id, fake_llm, background_tasks, move_on
+):
+    fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
+    await _feedback(client, post_id)
+    await background_tasks.wait()
+
+    response = await move_on(client, post_id)
+
+    assert response.status_code in (200, 204), response.text
+    assert (await _post(client, post_id))["failed_feedback"] is None
+
+
+async def test_dismissing_leaves_a_feedback_being_written_alone(
+    client, post_id, fake_llm, background_tasks, revising, clock
+):
+    fake_llm.replies.append({"post": "Version two.", "first_reply": None})
+    await _feedback(client, post_id, "warmer")
+
+    response = await client.delete(f"{POSTS}/{post_id}/failed-feedback")
+    assert response.status_code == 204, response.text
+    clock.advance(WRITING_TIMEOUT)
+
+    post = await _post(client, post_id)
+    assert post["failed_feedback"] == {"feedback": "warmer", "format": "post"}
+
+
+async def test_dismissing_another_users_post_is_not_found(
+    client, post_id, sign_in_as_another_subscribed_user
+):
+    await sign_in_as_another_subscribed_user()
+
+    response = await client.delete(f"{POSTS}/{post_id}/failed-feedback")
+
+    assert response.status_code == 404
+
+
+async def test_get_post_over_mcp_reports_the_failed_feedback(
+    client, post_id, fake_llm, background_tasks, mcp
+):
+    fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
+    await background_tasks.wait()
+
+    read = await mcp.call_tool("get_post", post_id=post_id)
+
+    assert read["structuredContent"]["failed_feedback"] == {"feedback": "shorter", "format": "post"}
+
+
+async def test_a_feedback_that_fails_while_being_recorded_is_recorded_as_failed(
+    client, post_id, fake_llm, background_tasks, fake_posthog, monkeypatch
+):
+    broken = RuntimeError("database hiccup")
+
+    async def charge_fails(*args, **kwargs):
+        raise broken
+
+    monkeypatch.setattr("pumpkit.posts.version_writing.charge_generation", charge_fails)
+    fake_llm.replies.append({"post": "Version two.", "first_reply": None})
+
+    await _feedback(client, post_id, "warmer")
+    await background_tasks.wait()
+
+    post = await _post(client, post_id)
+    assert post["writing_state"] is None
+    assert _texts(post) == ["Version one."]
+    assert [version["number"] for version in post["versions"]] == [1]
+    assert post["failed_feedback"] == {"feedback": "warmer", "format": "post"}
+    assert await _generations_used(client) == 1
+    assert fake_posthog.capture_exception.call_args_list[0].args[0] is broken
+
+
+async def test_a_feedback_reports_its_error_even_when_recording_the_failure_fails(
+    client, post_id, fake_llm, background_tasks, fake_posthog, monkeypatch
+):
+    async def recording_fails(*args, **kwargs):
+        raise RuntimeError("database gone")
+
+    monkeypatch.setattr("pumpkit.posts.version_writing.record_failed_attempt", recording_fails)
+    down = LLMError("provider down")
+    fake_llm.standing[HUMANIZED_POST] = down
+
+    await _feedback(client, post_id)
+    await background_tasks.wait()
+
+    reported = [call.args[0] for call in fake_posthog.capture_exception.call_args_list]
+    assert down in reported

@@ -312,7 +312,8 @@ async def give_feedback(
     Pumpkit writes the new version in the background, which takes about a minute, and the text
     can't change meanwhile. Read the post with `get_post` until `writing_state` is null. If it
     has a new version, show the user its text, with every part and its character count; if not,
-    Pumpkit couldn't write it and the text is as it was, so give the feedback again.
+    Pumpkit couldn't write it, the text is as it was, and `failed_feedback` holds the feedback to
+    give again.
     """
     feedback_request = FeedbackRequest(feedback=feedback, format=format)
     return await mediator.give_feedback(

@@ -394,7 +394,11 @@ describe('postService', () => {
     };
 
     /** The Post as `GET /posts/{id}` answers it, with `versions` and its writing state. */
-    function read(versions: object[], writingState: 'writing' | null) {
+    function read(
+      versions: object[],
+      writingState: 'writing' | null,
+      failedFeedback: { feedback: string; format: string } | null = null,
+    ) {
       const latest = versions[versions.length - 1] as typeof VERSION;
       return {
         data: {
@@ -410,6 +414,7 @@ describe('postService', () => {
           },
           versions,
           writing_state: writingState,
+          failed_feedback: failedFeedback,
           status: 'draft',
           scheduled_post: null,
         },
@@ -458,6 +463,38 @@ describe('postService', () => {
       await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
 
       await failed;
+    });
+
+    it('reads the Feedback Pumpkit could not write, to send again', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(
+        read([VERSION], null, { feedback: 'shorter', format: 'thread' }) as never,
+      );
+
+      const post = written(await postService.get('post_01'));
+
+      expect(post.failedFeedback).toEqual({ feedback: 'shorter', format: 'thread' });
+    });
+
+    it('rejects with the Feedback that could not be written', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(
+        read([VERSION], null, { feedback: 'warmer', format: 'post' }) as never,
+      );
+
+      const waiting = postService.awaitVersion('post_01', 1);
+      const failed = expect(waiting).rejects.toMatchObject({
+        failedFeedback: { feedback: 'warmer', format: 'post' },
+      });
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      await failed;
+    });
+
+    it('dismisses the failed Feedback', async () => {
+      vi.spyOn(apiService, 'delete').mockResolvedValue({ data: undefined } as never);
+
+      await postService.dismissFailedFeedback('post_01');
+
+      expect(apiService.delete).toHaveBeenCalledWith('/posts/post_01/failed-feedback');
     });
 
     it('waits longer after a read that fails, and stops on a 404', async () => {
