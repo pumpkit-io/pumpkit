@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.core.llm import FakeLLM, get_llm
 from pumpkit.main import app
-from pumpkit.posts.llm import FakeLLM, get_llm
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.posts.writing_replies import written

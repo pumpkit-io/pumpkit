@@ -92,6 +92,7 @@ async def save_connection(
     connection.handle = account.handle
     connection.subscription_type = account.subscription_type
     connection.photo_url = account.photo_url
+    _keep_profile(connection, account)
     connection.photo_offer_answered_at = None
     connection.access_token_encrypted = encrypt(tokens.access_token)
     connection.refresh_token_encrypted = encrypt(tokens.refresh_token)
@@ -102,6 +103,13 @@ async def save_connection(
     connection.updated_at = now
     await db.flush()
     return connection
+
+
+def _keep_profile(connection: XConnection, account: XAccount) -> None:
+    # X leaves a blank profile field out of users/me, so a missing one clears what was stored.
+    connection.bio = account.bio
+    connection.location = account.location
+    connection.website = account.website
 
 
 def offers_photo(connection: XConnection, user: User) -> bool:
@@ -153,6 +161,7 @@ async def save_account(
     """Keep what a later users/me read says about the X account. Flushes."""
     connection.subscription_type = account.subscription_type
     connection.photo_url = account.photo_url
+    _keep_profile(connection, account)
     connection.updated_at = now
     await db.flush()
 

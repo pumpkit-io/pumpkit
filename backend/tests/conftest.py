@@ -96,13 +96,13 @@ from pumpkit.core.classifier import FakeClassifier, get_classifier  # noqa: E402
 from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
 from pumpkit.core.db.session import get_async_db  # noqa: E402
+from pumpkit.core.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.core.photos import FakePhotoFetcher, get_photo_fetcher  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
 from pumpkit.core.storage import LocalDirectoryStorage, get_file_storage  # noqa: E402
 from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.main import app  # noqa: E402
 from pumpkit.posts.formats import format_of  # noqa: E402
-from pumpkit.posts.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.posts.media_fetcher import FakeMediaUrlFetcher, get_media_url_fetcher  # noqa: E402
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt  # noqa: E402
 from pumpkit.posts.service import set_text_from_version  # noqa: E402

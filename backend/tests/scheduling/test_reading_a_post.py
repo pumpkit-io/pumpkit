@@ -9,7 +9,7 @@ import pytest
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.llm import LLMError
+from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS

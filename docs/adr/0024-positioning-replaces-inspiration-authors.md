@@ -7,10 +7,11 @@ This amends ADR 0018 and ADR 0019, extends ADR 0008's area order, and takes ADR 
 ## Positioning
 
 - A User has at most one Positioning. It is one free text, with no guided fields.
-- Pumpkit drafts it and the User edits it. The draft reads the bio, location and website X gives at sign-in at no cost, and the User's newest posts, about 20, through the X reader in one paid call (ADR 0005). It runs when Onboarding's Persona step first opens, so the Operator pays twitterapi.io only for a User who is past the Paywall.
-- The draft states only what the profile and posts show, leaves out what they don't, and copies no post's wording.
-- A failed X read or model call gives no draft and no error page: the User starts from an empty Positioning.
-- A draft is not a Generation, and requesting one saves nothing: a redraft on the Persona page leaves the saved Positioning alone until the User saves. Redrafts are limited per User per day. #470 sets that number. A Positioning must not be blank once the space around it is trimmed; it has no minimum length and holds at most 4,000 characters.
+- Pumpkit drafts it and the User edits it. The draft reads the bio, location and website X gives at sign-in at no cost, and the User's newest posts, about 20, through the X reader in one paid call (ADR 0005). It reads the posts by the User's X ID, not their handle, which they may have changed since they signed in (ADR 0023). It runs when Onboarding's Persona step first opens, so the Operator pays twitterapi.io only for a User who is past the Paywall.
+- The draft states only what the profile and posts show, leaves out what they don't, and copies no post's wording. It is one model call on its own setting, `LLM_POSITIONING_MODEL`.
+- The X connection keeps the bio, location and website from every read of the X account, not only sign-in's, so a reconnect or a publish refreshes them instead of erasing them.
+- A failed X read or model call gives no draft and no error page: the request answers with the reason in words for the User, who starts from an empty Positioning or keeps the text they had.
+- A draft is not a Generation, and requesting one saves nothing: a redraft on the Persona page leaves the saved Positioning alone until the User saves. A User gets 5 drafts in any 24 hours, the first draft of Onboarding included. A request counts once it goes on to read X, whatever X and the model then answer, because the Operator pays for that read. On an Instance without `TWITTERAPI_IO_API_KEY` or `LLM_API_KEY` a request reads nothing and doesn't count. At the limit the Persona page disables the redraft button and says "You can draft again tomorrow." A Positioning must not be blank once the space around it is trimmed; it has no minimum length and holds at most 4,000 characters.
 - A Brief keeps the Positioning it was planned with (ADR 0025), so editing the Positioning later doesn't change how Feedback on older Posts behaves.
 - A User with no Positioning can't plan a Brief and is pointed at the Persona page. This replaces the check that refused a Post when the User had no Inspiration author's posts to write from.
 
@@ -35,7 +36,7 @@ The Author directory of ADR 0019 therefore stops growing: no User can look a han
 
 ## Where Positioning lives (extends ADR 0008)
 
-Positioning gets its own backend area, `positioning`, with a router, mediator, service, schemas, models and MCP tools. In the area order it sits above `authors`, whose service it calls to read the User's posts, and below `posts` and `onboarding`, which read the Positioning to plan a Brief and to tell whether the Persona step is done. ADR 0008's written order predates `onboarding`: the order in force is the layers contract in `backend/pyproject.toml`, where `onboarding` shares the layer of `posts`. The draft goes through the LLM port.
+Positioning gets its own backend area, `positioning`, with a router, mediator, service, schemas, models and MCP tools. In the area order it sits above `authors`, whose service it calls to read the User's posts, and below `posts` and `onboarding`, which read the Positioning to plan a Brief and to tell whether the Persona step is done. ADR 0008's written order predates `onboarding`: the order in force is the layers contract in `backend/pyproject.toml`, where `onboarding` shares the layer of `posts`. The draft goes through the LLM port, which moves from `posts` to `core` (`core/llm.py`, with its client and schemas): `positioning` sits below `posts` and can't import it, and the port now has two areas calling it, as the classifier port does (ADR 0013).
 
 ## Considered Options
 

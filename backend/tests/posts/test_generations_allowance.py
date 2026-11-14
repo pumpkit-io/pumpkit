@@ -7,8 +7,8 @@ import pytest
 from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
+from pumpkit.core.llm import FakeLLM, StructuredResult, get_llm
 from pumpkit.main import app
-from pumpkit.posts.llm import FakeLLM, StructuredResult, get_llm
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.posts.writing_replies import written
 

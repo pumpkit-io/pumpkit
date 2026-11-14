@@ -10,8 +10,8 @@ import pytest
 from httpx import Response
 
 from pumpkit.authors.x_reader import FetchedPost
+from pumpkit.core.llm import FakeLLM, get_llm
 from pumpkit.main import app
-from pumpkit.posts.llm import FakeLLM, get_llm
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import png
 from tests.posts.writing_replies import written, written_thread

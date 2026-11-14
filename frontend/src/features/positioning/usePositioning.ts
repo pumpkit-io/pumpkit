@@ -7,13 +7,17 @@ import { positioningService } from '@/services/positioningService';
 
 type Loading = 'loading' | 'failed' | 'loaded';
 
+/** The backend's sentence for a draft it couldn't write, for a request that never got one. */
+const NOT_DRAFTED =
+  "We couldn't draft your positioning. Write it yourself, a few sentences is enough.";
+
 /** True when the backend would find `text` blank: it drops what Postgres can't store, then trims. */
 function isBlank(text: string): boolean {
   // Python strips the C0 separators and U+0085 too, which a JS trim() keeps.
   return [...text].every((ch) => ch <= '\x1f' || ch === '\x85' || /[\s\p{Cs}]/u.test(ch));
 }
 
-/** The User's Positioning as they are editing it, loaded on mount, with save. */
+/** The User's Positioning as they are editing it, loaded on mount, with save and draft. */
 export function usePositioning() {
   const { refresh: refreshOnboarding } = useOnboarding();
   const [loading, setLoading] = useState<Loading>('loading');
@@ -24,12 +28,17 @@ export function usePositioning() {
   /** The text as of the last edit, which a save in flight can't see in its closure. */
   const latestText = useRef('');
   const [saving, setSaving] = useState(false);
-  /** Why the last save failed, until the next edit or save. */
+  /** Why the last save or draft failed, until the next edit, save or draft. */
   const [error, setError] = useState<string | null>(null);
   /** True when that save failed because the server refused the text itself. */
   const [textRefused, setTextRefused] = useState(false);
   /** True from a save until the next edit. */
   const [justSaved, setJustSaved] = useState(false);
+  /** False once the User has used up today's drafts. */
+  const [canDraft, setCanDraft] = useState(true);
+  const [drafting, setDrafting] = useState(false);
+  /** True from a draft filling the textarea until the next edit, save or draft. */
+  const [justDrafted, setJustDrafted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,9 +46,10 @@ export function usePositioning() {
       .get()
       .then((positioning) => {
         if (cancelled) return;
-        setSaved(positioning?.text ?? '');
-        setText(positioning?.text ?? '');
-        latestText.current = positioning?.text ?? '';
+        setSaved(positioning.text ?? '');
+        setText(positioning.text ?? '');
+        latestText.current = positioning.text ?? '';
+        setCanDraft(positioning.canDraft);
         setLoading('loaded');
       })
       .catch(() => !cancelled && setLoading('failed'));
@@ -59,12 +69,14 @@ export function usePositioning() {
     setJustSaved(false);
     setError(null);
     setTextRefused(false);
+    setJustDrafted(false);
   }, []);
 
   const save = useCallback(async () => {
     setSaving(true);
     setError(null);
     setTextRefused(false);
+    setJustDrafted(false);
     try {
       const positioning = await positioningService.save(text);
       setSaved(positioning.text);
@@ -96,7 +108,34 @@ export function usePositioning() {
     }
   }, [text, refreshOnboarding]);
 
-  const canSave = loading === 'loaded' && !saving && !isBlank(text) && text.trim() !== saved;
+  const draft = useCallback(async () => {
+    setDrafting(true);
+    setError(null);
+    setTextRefused(false);
+    setJustDrafted(false);
+    try {
+      const drafted = await positioningService.draft();
+      setCanDraft(drafted.canDraft);
+      if (drafted.text === null) {
+        setError(drafted.reason ?? NOT_DRAFTED);
+      } else {
+        setText(drafted.text);
+        latestText.current = drafted.text;
+        setJustSaved(false);
+        setJustDrafted(true);
+      }
+    } catch (e) {
+      if (isSubscriptionNeeded(e)) void refreshOnboarding();
+      // The only 429 this request gets is the daily limit, which the button's own line explains.
+      else if (errorStatus(e) === 429) setCanDraft(false);
+      else setError(errorMessage(e, NOT_DRAFTED));
+    } finally {
+      setDrafting(false);
+    }
+  }, [refreshOnboarding]);
+
+  const idle = loading === 'loaded' && !saving && !drafting;
+  const canSave = idle && !isBlank(text) && text.trim() !== saved;
   /** Counted in code points, as the backend's limit counts, so an emoji is one character. */
   const length = [...text].length;
 
@@ -112,5 +151,10 @@ export function usePositioning() {
     error,
     textRefused,
     justSaved,
+    draft,
+    drafting,
+    canDraft,
+    canRequestDraft: idle && canDraft,
+    justDrafted,
   };
 }

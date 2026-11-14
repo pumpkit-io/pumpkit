@@ -14,10 +14,10 @@ from typing import Callable, Optional, Sequence
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
+from pumpkit.core.llm import LLM, LLMError
+from pumpkit.core.llm_schemas import StructuredResult
 from pumpkit.core.logging import logger
 from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
-from pumpkit.posts.llm import LLM, LLMError
-from pumpkit.posts.llm_schemas import StructuredResult
 from pumpkit.posts.writing.constants import (
     CACHE_TTL,
     MAX_TOKENS,

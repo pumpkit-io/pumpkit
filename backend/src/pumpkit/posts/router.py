@@ -8,11 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.auth.models import User
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.llm import LLM, get_llm
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts import mediator
-from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.schemas import WRITE_RATE, PostResponse, PostStartRequest
 
 # Feedback on a Post is served from scheduling, which knows whether the Post takes it.

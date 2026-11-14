@@ -88,13 +88,14 @@ class FetchedProfile:
 @dataclass(frozen=True)
 class RecentPosts:
     """
-    One page of a handle's kept posts, and the author's name and photo as the page shows them:
-    the photo is X's small (48px) variant. Each is None when no post carried one.
+    One page of an account's kept posts, and the author's name, photo and handle as the page
+    shows them: the photo is X's small (48px) variant. Each is None when no post carried one.
     """
 
     posts: list[FetchedPost]
     photo_url: Optional[str] = None
     name: Optional[str] = None
+    handle: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +105,10 @@ class FetchedCommunity:
 
 
 class XReader(Protocol):
+    def is_configured(self) -> bool:
+        """Whether X can be read at all; False makes every read raise `XReaderNotConfiguredError`."""
+        ...
+
     async def look_up_profile(self, handle: str) -> FetchedProfile:
         """
         The handle's profile. Raises `HandleSuspendedError` for a suspended account,
@@ -118,6 +123,13 @@ class XReader(Protocol):
         """
         ...
 
+    async def fetch_recent_posts_by_user_id(self, user_id: str) -> RecentPosts:
+        """
+        `fetch_recent_posts` for the account with this X ID, which a renamed account keeps.
+        Raises `HandleNotFoundError` for an unknown ID, else `XReaderError`.
+        """
+        ...
+
     async def fetch_community(self, community_id: str) -> FetchedCommunity:
         """Raises `CommunityNotFoundError` for an unknown Community, else `XReaderError`."""
         ...
@@ -126,6 +138,9 @@ class XReader(Protocol):
 class TwitterApiIoReader:
     """Reads X through twitterapi.io. The key is checked on use, so the app boots without it."""
 
+    def is_configured(self) -> bool:
+        return bool(settings.TWITTERAPI_IO_API_KEY)
+
     async def look_up_profile(self, handle: str) -> FetchedProfile:
         response = await _get(TWITTERAPI_IO_USER_INFO_URL, {"userName": handle})
         return parse_user_info(response.status_code, _json_or_none(response))
@@ -133,6 +148,12 @@ class TwitterApiIoReader:
     async def fetch_recent_posts(self, handle: str) -> RecentPosts:
         response = await _get(
             TWITTERAPI_IO_LAST_TWEETS_URL, {"userName": handle, "includeReplies": "false"}
+        )
+        return parse_last_tweets(response.status_code, _json_or_none(response))
+
+    async def fetch_recent_posts_by_user_id(self, user_id: str) -> RecentPosts:
+        response = await _get(
+            TWITTERAPI_IO_LAST_TWEETS_URL, {"userId": user_id, "includeReplies": "false"}
         )
         return parse_last_tweets(response.status_code, _json_or_none(response))
 
@@ -179,7 +200,12 @@ def parse_last_tweets(status_code: int, payload: Any) -> RecentPosts:
         post = _kept_post(tweet)
         if post is not None:
             posts.append(post)
-    return RecentPosts(posts=posts, photo_url=_author_photo_url(tweets), name=_author_name(tweets))
+    return RecentPosts(
+        posts=posts,
+        photo_url=_author_photo_url(tweets),
+        name=_author_name(tweets),
+        handle=_first_author_field(tweets, "userName", _text_or_none),
+    )
 
 
 def parse_user_info(status_code: int, payload: Any) -> FetchedProfile:
@@ -314,9 +340,10 @@ class FakeXReader:
     X in memory: answers a handle's posts with `posts[handle]`, `photos.get(handle)` and
     `names.get(handle)`; its profile with `profiles[handle]`, a suspension for a handle in
     `suspended`, or a public profile for a handle with `posts`; and a Community ID with
-    `communities[id]`, its name. Anything else is a not-found error. Records each handle read in `calls`, each profile looked up in
-    `profile_calls` and each Community ID in `community_calls`. Set `fail` or `not_configured`
-    to raise.
+    `communities[id]`, its name. An X ID in `user_ids` answers the posts of the handle it maps
+    to. Anything else is a not-found error. Records each handle read in `calls`, each X ID read
+    in `user_id_calls`, each profile looked up in `profile_calls` and each Community ID in
+    `community_calls`. Set `fail` or `not_configured` to raise.
     """
 
     posts: dict[str, list[FetchedPost]] = field(default_factory=dict)
@@ -325,11 +352,16 @@ class FakeXReader:
     profiles: dict[str, FetchedProfile] = field(default_factory=dict)
     suspended: set[str] = field(default_factory=set)
     communities: dict[str, str] = field(default_factory=dict)
+    user_ids: dict[str, str] = field(default_factory=dict)
     calls: list[str] = field(default_factory=list)
+    user_id_calls: list[str] = field(default_factory=list)
     profile_calls: list[str] = field(default_factory=list)
     community_calls: list[str] = field(default_factory=list)
     fail: bool = False
     not_configured: bool = False
+
+    def is_configured(self) -> bool:
+        return not self.not_configured
 
     async def look_up_profile(self, handle: str) -> FetchedProfile:
         self.profile_calls.append(handle)
@@ -352,16 +384,25 @@ class FakeXReader:
 
     async def fetch_recent_posts(self, handle: str) -> RecentPosts:
         self.calls.append(handle)
+        return self._recent_posts(handle)
+
+    async def fetch_recent_posts_by_user_id(self, user_id: str) -> RecentPosts:
+        self.user_id_calls.append(user_id)
+        return self._recent_posts(self.user_ids.get(user_id))
+
+    def _recent_posts(self, handle: Optional[str]) -> RecentPosts:
         if self.not_configured:
             raise XReaderNotConfiguredError()
         if self.fail:
             raise XReaderError("Fake X reader is set to fail")
-        if handle not in self.posts:
+        if handle is None or handle not in self.posts:
             raise HandleNotFoundError(f"Fake X reader has no {handle}")
+        # A page carries its author's handle only on a post, as twitterapi.io's does.
         return RecentPosts(
             posts=list(self.posts[handle]),
             photo_url=self.photos.get(handle),
             name=self.names.get(handle),
+            handle=handle if self.posts[handle] else None,
         )
 
     async def fetch_community(self, community_id: str) -> FetchedCommunity:

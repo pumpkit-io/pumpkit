@@ -15,8 +15,8 @@ from openai import OpenAIError
 from pydantic import BaseModel
 
 from pumpkit.core.errors import AppError
-from pumpkit.posts.llm_client import LLMClient, llm_client
-from pumpkit.posts.llm_schemas import ModelUsage, StructuredResult
+from pumpkit.core.llm_client import LLMClient, llm_client
+from pumpkit.core.llm_schemas import ModelUsage, StructuredResult
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -30,6 +30,10 @@ class LLMError(AppError):
 
 
 class LLM(Protocol):
+    def is_configured(self) -> bool:
+        """Whether a model can be called at all; False makes every call raise the client's error."""
+        ...
+
     async def structured(
         self,
         *,
@@ -43,6 +47,9 @@ class LLM(Protocol):
 class OpenAICompatibleLLM:
     def __init__(self, client: LLMClient) -> None:
         self._client = client
+
+    def is_configured(self) -> bool:
+        return self._client.is_configured()
 
     async def structured(
         self,
@@ -66,17 +73,23 @@ class LLMCall:
     model: str
     messages: list[dict]
     response_model: type[BaseModel]
+    max_tokens: Optional[int] = None
 
 
 @dataclass
 class FakeLLM:
     """
     A scripted model: each call takes the next of `replies`, a dict of the response model's
-    fields or an exception to raise, and is recorded in `calls`.
+    fields or an exception to raise, and is recorded in `calls`. Clear `configured` to stand
+    for a missing key.
     """
 
     replies: list[Union[dict[str, Any], Exception]] = field(default_factory=list)
     calls: list[LLMCall] = field(default_factory=list)
+    configured: bool = True
+
+    def is_configured(self) -> bool:
+        return self.configured
 
     async def structured(
         self,
@@ -86,7 +99,14 @@ class FakeLLM:
         response_model: type[T],
         max_tokens: Optional[int] = None,
     ) -> StructuredResult[T]:
-        self.calls.append(LLMCall(model=model, messages=messages, response_model=response_model))
+        self.calls.append(
+            LLMCall(
+                model=model,
+                messages=messages,
+                response_model=response_model,
+                max_tokens=max_tokens,
+            )
+        )
         if not self.replies:
             raise LLMError("Fake LLM has no reply left")
         reply = self.replies.pop(0)

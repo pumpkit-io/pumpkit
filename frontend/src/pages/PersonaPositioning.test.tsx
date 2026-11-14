@@ -26,7 +26,7 @@ vi.mock('@/services/billingService', () => ({
 }));
 vi.mock('@/services/positioningService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/positioningService')>()),
-  positioningService: { get: vi.fn(), save: vi.fn() },
+  positioningService: { get: vi.fn(), save: vi.fn(), draft: vi.fn() },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
@@ -70,6 +70,10 @@ import {
 
 const SAVED =
   "I'm a solo founder. I post about bootstrapping for people starting their first SaaS.";
+const DRAFTED = "I'm a solo founder building a pricing tool. I post about pricing for founders.";
+/** What a User who saved no Positioning and has drafts left reads. */
+const NONE = { text: null, canDraft: true };
+const DRAFT_AGAIN = 'Draft again from my X profile';
 
 /** The 422 FastAPI answers when `PositioningSaveRequest` refuses the text: `detail` is a list. */
 function textRefused() {
@@ -103,13 +107,14 @@ async function field() {
 describe('Persona: the Positioning panel', () => {
   beforeEach(() => {
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
-    vi.mocked(positioningService.get).mockReset().mockResolvedValue(null);
+    vi.mocked(positioningService.get).mockReset().mockResolvedValue(NONE);
+    vi.mocked(positioningService.draft).mockReset();
     vi.mocked(positioningService.save).mockReset();
     vi.mocked(track).mockClear();
   });
 
   it("shows the User's saved Positioning in the textarea, above the Inspiration authors", async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
     renderSignedIn('/persona');
 
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
@@ -147,7 +152,7 @@ describe('Persona: the Positioning panel', () => {
   it("says the Positioning couldn't be loaded, and Try again loads it", async () => {
     vi.mocked(positioningService.get)
       .mockRejectedValueOnce(apiError(500, 'boom'))
-      .mockResolvedValue({ text: SAVED });
+      .mockResolvedValue({ text: SAVED, canDraft: true });
     renderSignedIn('/persona');
 
     const region = await panel();
@@ -182,7 +187,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it('keeps Save disabled while the text is blank or the same as what is saved', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
     renderSignedIn('/persona');
 
     const textarea = await field();
@@ -278,7 +283,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it('marks the textarea invalid when the server refuses the text, until the next edit', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
     vi.mocked(positioningService.save).mockRejectedValue(textRefused());
     renderSignedIn('/persona');
 
@@ -332,7 +337,7 @@ describe('Persona: the Positioning panel', () => {
 
   it('counts an emoji as one character, as the backend does, and leaves room to edit', async () => {
     const emoji = '🎃'.repeat(4000);
-    vi.mocked(positioningService.get).mockResolvedValue({ text: emoji });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: emoji, canDraft: true });
     renderSignedIn('/persona');
 
     const textarea = await field();
@@ -355,6 +360,181 @@ describe('Persona: the Positioning panel', () => {
     await waitFor(() => expect(textarea).toBeEnabled());
     fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
     fireEvent.click((await panel()).getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => expect(currentPath()).toBe('/subscribe'));
+  });
+
+  it('fills the textarea with a draft from the X profile and saves nothing', async () => {
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.draft).mockResolvedValue({
+      text: DRAFTED,
+      reason: null,
+      canDraft: true,
+    });
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toHaveValue(SAVED));
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
+
+    await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
+    expect(region.getByRole('status')).toHaveTextContent(
+      'Drafted from your X profile. Save to keep it.',
+    );
+    expect(positioningService.save).not.toHaveBeenCalled();
+    expect(region.getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
+  });
+
+  it('drops the note about the draft once the User edits it', async () => {
+    vi.mocked(positioningService.draft).mockResolvedValue({
+      text: DRAFTED,
+      reason: null,
+      canDraft: true,
+    });
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
+    await region.findByText('Drafted from your X profile. Save to keep it.');
+
+    fireEvent.change(textarea, { target: { value: `${DRAFTED} I sell a course.` } });
+
+    expect(region.queryByText(/Drafted from your X profile/)).not.toBeInTheDocument();
+  });
+
+  it('shows "Reading your X profile…" and disables the panel while a draft is on its way', async () => {
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.draft).mockReturnValue(new Promise(() => {}));
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toHaveValue(SAVED));
+    fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
+
+    await waitFor(() => expect(textarea).toBeDisabled());
+    expect(textarea).toHaveValue('');
+    expect(textarea).toHaveAttribute('placeholder', 'Reading your X profile…');
+    expect(region.getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeDisabled();
+  });
+
+  it('keeps the text and says why when no draft could be made', async () => {
+    const reason = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.draft).mockResolvedValue({ text: null, reason, canDraft: true });
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toHaveValue(SAVED));
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
+
+    expect(await region.findByRole('alert')).toHaveTextContent(reason);
+    expect(textarea).toHaveAccessibleDescription(new RegExp(`^${reason}`));
+    expect(textarea).toHaveValue(SAVED);
+    expect(textarea).toBeEnabled();
+    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
+  });
+
+  it.each([
+    {
+      failure: apiError(500, 'Something went wrong. Please try again later.'),
+      message: 'Something went wrong. Please try again later.',
+    },
+    {
+      failure: Object.assign(new Error('Network Error'), { isAxiosError: true }),
+      message: "We couldn't draft your positioning. Write it yourself, a few sentences is enough.",
+    },
+  ])('keeps the text and says so when the draft request fails', async ({ failure, message }) => {
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.draft).mockRejectedValue(failure);
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toHaveValue(SAVED));
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
+
+    expect(await region.findByRole('alert')).toHaveTextContent(message);
+    expect(textarea).toHaveValue(SAVED);
+    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
+  });
+
+  it('disables the draft button with "You can draft again tomorrow." for a User at the limit', async () => {
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: false });
+    renderSignedIn('/persona');
+
+    await waitFor(async () => expect(await field()).toHaveValue(SAVED));
+    const button = (await panel()).getByRole('button', { name: DRAFT_AGAIN });
+
+    expect(button).toBeDisabled();
+    expect(button).toHaveAccessibleDescription('You can draft again tomorrow.');
+  });
+
+  it('says nothing about tomorrow while the User has drafts left', async () => {
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    const region = await panel();
+
+    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
+    expect(region.queryByText('You can draft again tomorrow.')).not.toBeInTheDocument();
+  });
+
+  it('disables the draft button once the last draft of the day is used', async () => {
+    vi.mocked(positioningService.draft).mockResolvedValue({
+      text: DRAFTED,
+      reason: null,
+      canDraft: false,
+    });
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
+
+    await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
+    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeDisabled();
+    expect(region.getByText('You can draft again tomorrow.')).toBeInTheDocument();
+  });
+
+  it('disables the draft button when the server says the limit is reached', async () => {
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.draft).mockRejectedValue(
+      apiError(429, 'You can draft again tomorrow.'),
+    );
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toHaveValue(SAVED));
+    const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
+
+    expect(await region.findByText('You can draft again tomorrow.')).toBeInTheDocument();
+    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeDisabled();
+    expect(textarea).toHaveValue(SAVED);
+  });
+
+  it('sends the User to the Paywall when a draft is refused for want of a Subscription', async () => {
+    vi.mocked(billingService.fetchBillingMe)
+      .mockResolvedValueOnce(SUBSCRIBED)
+      .mockResolvedValue(NOT_SUBSCRIBED);
+    vi.mocked(positioningService.draft).mockRejectedValue(
+      apiError(403, 'This needs a subscription. Subscribe to continue.'),
+    );
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    fireEvent.click((await panel()).getByRole('button', { name: DRAFT_AGAIN }));
 
     await waitFor(() => expect(currentPath()).toBe('/subscribe'));
   });

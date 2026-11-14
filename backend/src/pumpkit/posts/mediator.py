@@ -7,11 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
 from pumpkit.core.errors import NotFoundError, RefusedError
+from pumpkit.core.llm import LLM
 from pumpkit.core.storage import FileStorage
 from pumpkit.posts import media as media_service
 from pumpkit.posts import service
 from pumpkit.posts.formats import Format
-from pumpkit.posts.llm import LLM
 from pumpkit.posts.media_files import PREVIEW_CONTENT_TYPE
 from pumpkit.posts.schemas import PostResponse
 from pumpkit.posts.version_writing import (

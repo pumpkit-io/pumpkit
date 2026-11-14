@@ -155,12 +155,14 @@ class Settings(BaseSettings):
 
     # Any OpenAI-compatible chat completions endpoint; OpenRouter by default.
     LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
-    # Optional: when unset, pumpkit.posts.llm_client raises LLMNotConfiguredError on use, not at boot.
+    # Optional: when unset, pumpkit.core.llm_client raises LLMNotConfiguredError on use, not at boot.
     LLM_API_KEY: Optional[str] = None
     # The models the writing prompts were tuned against; each call can be re-pointed on its own.
     LLM_SKETCHING_MODEL: str = "openai/gpt-5.6-luna"
     LLM_HUMANIZING_MODEL: str = "openai/gpt-5.6-luna"
     LLM_REVISING_MODEL: str = "openai/gpt-5.6-luna"
+    # The model that drafts a Positioning from the User's X profile and posts.
+    LLM_POSITIONING_MODEL: str = "openai/gpt-6-luna"
 
     # Optional: when unset, pumpkit.authors.x_reader raises XReaderNotConfiguredError on use, not at boot.
     TWITTERAPI_IO_API_KEY: Optional[str] = None

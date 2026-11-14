@@ -8,11 +8,11 @@ from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import XReader, get_x_reader
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.core.db.session import get_async_db
+from pumpkit.core.llm import LLM, get_llm
 from pumpkit.core.photos import PhotoFetcher, get_photo_fetcher
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
-from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.media_upload import ReceivedMedia, receive_media
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
 from pumpkit.posts.schemas import AltTextRequest, MediaResponse, TextResponse, VersionResponse

@@ -1,17 +1,15 @@
-import re
 from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+from pumpkit.core.text import drop_unstorable
 
 # Per caller, for the route and the MCP tool that save a Positioning.
 WRITE_RATE = "20/minute"
 
 # A Positioning is a few sentences; this leaves room for a User who writes several paragraphs.
 POSITIONING_MAX_CHARS = 4000
-
-# Postgres can't store a NUL or an unpaired surrogate in TEXT, and no one types one on purpose.
-_UNSTORABLE = re.compile(r"[\x00\ud800-\udfff]")
 
 
 class PositioningSaveRequest(BaseModel):
@@ -24,7 +22,7 @@ class PositioningSaveRequest(BaseModel):
     @classmethod
     def _drop_unstorable(cls, data: object) -> object:
         if isinstance(data, dict) and isinstance(data.get("text"), str):
-            return {**data, "text": _UNSTORABLE.sub("", data["text"])}
+            return {**data, "text": drop_unstorable(data["text"])}
         return data
 
     @field_validator("text")
@@ -43,3 +41,18 @@ class PositioningResponse(BaseModel):
 
     text: Optional[str]
     saved_at: Optional[datetime]
+
+
+class PositioningPageResponse(PositioningResponse):
+    """The User's Positioning as the web app's panel reads it."""
+
+    # False once the User has used up today's drafts.
+    can_draft: bool
+
+
+class PositioningDraftResponse(BaseModel):
+    """A draft of the User's Positioning, or `reason`: why none could be made, in words for them."""
+
+    text: Optional[str]
+    reason: Optional[str]
+    can_draft: bool
