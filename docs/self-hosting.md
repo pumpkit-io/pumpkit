@@ -147,7 +147,7 @@ curl -sI http://pumpkit.example.org/ | head -1
 
 ### 6. Sign in
 
-Open `PUBLIC_URL`, choose **Get started**, then **Continue with X**. X must return a confirmed email and all requested sign-in and publishing permissions. With plans configured, the paywall comes first; otherwise you go directly to **Persona**. Choose your inspiration authors and Continue to finish onboarding, then write a brief on **New post**.
+Open `PUBLIC_URL`, choose **Get started**, then **Continue with X**. X must return a confirmed email and all requested sign-in and publishing permissions. With plans configured, the paywall comes first; otherwise you go directly to **Persona**. Edit the positioning Pumpkit drafts from your X profile, or write one, and Continue to finish onboarding, then write a brief on **New post**.
 
 **Check:** metadata at `PUBLIC_URL/api/v1/instance` lists only `"sign_in_methods":["x"]`; returning with the same X account opens the same Pumpkit account. Changing its email or handle does not create another account. Confirm an email on X and retry if the sign-in page says one is missing.
 
