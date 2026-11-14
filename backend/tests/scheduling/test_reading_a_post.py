@@ -16,7 +16,7 @@ from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import PLAN, start_thread, written_thread
+from tests.posts.writing_replies import PLAN, start_thread
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -88,7 +88,7 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
 
 
 async def test_feedback_makes_the_new_version_the_text(client, post, fake_llm):
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["Part one.", "Part two."]}]
+    fake_llm.replies = [{"parts": ["Part one.", "Part two."]}]
     given = await client.post(
         f"{POSTS}/{post['id']}/versions", json={"feedback": "expand it", "format": "thread"}
     )

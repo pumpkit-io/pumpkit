@@ -3,14 +3,11 @@ Feedback on a single post written from its Plan: v5's revise call, the scrub and
 humanizer, with Pumpkit's Feedback framings and hand-written sentences message (ADR 0016, 0026).
 """
 
-from datetime import datetime, timedelta, timezone
-
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
 from pumpkit.core.llm import LLMCall, LLMError
 from pumpkit.core.time import as_utc
@@ -23,15 +20,12 @@ from tests.posts.writing_replies import (
     POST_IDEAS,
     REVISED_POST,
     SKETCHED_POST,
+    humanizer_calls,
     merged,
     revised,
     sketched,
-    writing_calls,
-    written,
-    written_thread,
 )
 
-AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
 USAGE = "/api/v1/usage"
 # The revise call's default, the model v5's revise prompt was tuned against.
@@ -59,16 +53,6 @@ def _text_url(post_id: str) -> str:
 
 def _restore_url(post_id: str, number: int) -> str:
     return f"{POSTS}/{post_id}/versions/{number}/restore"
-
-
-def _posts(handle: str, count: int) -> list[FetchedPost]:
-    start = datetime(2026, 10, 1, tzinfo=timezone.utc)
-    return [
-        FetchedPost(
-            post_id=f"{handle}-{n}", text=f"{handle} post {n}", posted_at=start - timedelta(hours=n)
-        )
-        for n in range(count)
-    ]
 
 
 @pytest.fixture
@@ -497,7 +481,7 @@ async def test_feedback_on_a_post_with_no_version_returns_409(client, db, subscr
     response = await _feedback(client, failed_post_id, "shorter")
 
     assert response.status_code == 409
-    assert len(writing_calls(fake_llm)) == 1
+    assert len(humanizer_calls(fake_llm)) == 1
 
 
 async def test_a_failed_revision_humanizer_is_stored_as_a_failed_attempt_and_returns_502(
@@ -742,53 +726,17 @@ async def test_feedback_sent_with_the_saved_text_is_written(client, post_id, fak
     assert response.status_code == 201
 
 
-async def test_feedback_asking_a_post_written_without_inspiration_authors_for_a_thread_is_refused(
+async def test_feedback_after_switching_to_a_thread_and_back_reads_both_switches(
     client, post_id, fake_llm
 ):
-    used = await _generations_used(client)
-
-    response = await _feedback(client, post_id, "expand it", format="thread")
-
-    assert response.status_code == 409
-    assert response.json()["detail"] == (
-        "Feedback can't turn a post written without inspiration authors into a thread yet. "
-        "Send it without switching to a thread, or start a new post."
-    )
-    assert fake_llm.calls == []
-    assert await _generations_used(client) == used
-
-
-@pytest.fixture
-async def written_with_a_corpus(client, subscribed, fake_x_reader, fake_llm) -> str:
-    """The `post_id` Post, written while the User had an Inspiration author with posts."""
-    fake_x_reader.posts["levelsio"] = _posts("levelsio", 1)
-    await save_positioning(client)
-    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
-    fake_llm.replies = [{"post": "final 1"}]
-    response = await client.post(POSTS, json={"brief": "ship small things"})
-    assert response.status_code == 201, response.text
-    fake_llm.calls.clear()
-    return response.json()["id"]
-
-
-async def test_feedback_after_switching_to_a_thread_and_back_reads_both_switches(
-    client, written_with_a_corpus, fake_llm
-):
-    """The switches run the pumpkit-v6 way; the Feedback after them is revised from the Plan."""
-    post_id = written_with_a_corpus
-    fake_llm.replies = [
-        written_thread(["a", "b"]),
-        {"parts": ["final a", "final b"]},
-        written("one post"),
-        {"post": "final 3"},
-        {"post": "final 4"},
-    ]
+    fake_llm.replies = [{"parts": ["final a", "final b"]}, {"post": "final 3"}, {"post": "final 4"}]
     assert (await _feedback(client, post_id, "expand it", format="thread")).is_success
     assert (await _feedback(client, post_id, "condense it", format="post")).is_success
+    _revise_with(fake_llm, "revised 4")
 
     await _feedback(client, post_id, "warmer")
 
-    [revise] = _calls(fake_llm, REVISED_POST)
+    [*_, revise] = _calls(fake_llm, REVISED_POST)
     assert revise.messages[2:] == [
         _assistant("final 1"),
         _user(
@@ -803,7 +751,8 @@ async def test_feedback_after_switching_to_a_thread_and_back_reads_both_switches
             "That was Version 2.\n\n"
             "Rewrite the thread you just wrote as a single post, according to this feedback. "
             "Keep what it says and how it says it wherever the feedback does not ask for a "
-            "change and one post has room for it, and return the whole post.\n\n"
+            "change and one post has room for it, and return the whole post. An external "
+            "link in the thread, or its [link], goes in the first reply, not in the post.\n\n"
             "The feedback:\ncondense it"
         ),
         _assistant("final 3"),
@@ -811,26 +760,28 @@ async def test_feedback_after_switching_to_a_thread_and_back_reads_both_switches
     ]
 
 
-async def test_feedback_on_a_post_planned_before_plans_existed_is_written_from_the_corpus(
-    client, db, written_with_a_corpus, fake_llm
+@pytest.mark.parametrize("format", [None, "post", "thread"])
+async def test_feedback_on_a_post_written_before_plans_existed_is_refused(
+    client, db, post_id, fake_llm, format
 ):
-    post_id = written_with_a_corpus
     post = await _stored_post(db, post_id)
     idea = await db.get(Idea, post.idea_id)
     assert idea is not None
     idea.core_idea = None
     await db.commit()
-    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+    used = await _generations_used(client)
 
-    response = await _feedback(client, post_id, "shorter")
+    response = await _feedback(client, post_id, "shorter", **({"format": format} if format else {}))
 
-    assert response.status_code == 201, response.text
-    assert _calls(fake_llm, REVISED_POST) == []
-    assert [call.response_model.__name__ for call in fake_llm.calls] == [
-        "revised_post",
-        "refined_post",
-    ]
-    assert '<creator handle="levelsio">' in fake_llm.calls[0].messages[1]["content"]
+    assert response.status_code == 409
+    assert response.json()["detail"] == (
+        "This post was written before plans existed, so it can't take feedback. "
+        "Edit the text by hand, or start a new post."
+    )
+    assert fake_llm.calls == []
+    assert await _generations_used(client) == used
+    read = (await client.get(f"{POSTS}/{post_id}")).json()
+    assert [version["number"] for version in read["versions"]] == [1]
 
 
 async def test_feedback_makes_no_plan_call(client, post_id, fake_llm):

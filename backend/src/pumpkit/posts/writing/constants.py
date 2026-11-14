@@ -10,9 +10,6 @@ from pumpkit.posts.writing.post_replies import HookType
 THREAD_MIN_PARTS = 2
 THREAD_MAX_PARTS = 10
 
-# How many of each Inspiration author's newest stored posts make a Post's corpus.
-CORPUS_POSTS_PER_AUTHOR = 20
-
 # Sent as max_tokens on every call, as in pumpkit-v6.
 MAX_TOKENS = 20000
 

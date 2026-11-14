@@ -7,12 +7,10 @@ import pytest
 
 import pumpkit.x_connection.service as x_connections_service
 from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
-from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import start_thread, writing_calls, written_thread
+from tests.posts.writing_replies import start_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -112,14 +110,13 @@ async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit
         now=datetime.now(timezone.utc),
     )
     await db.commit()
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["one", "two"]}]
+    fake_llm.calls.clear()
+    fake_llm.replies = [{"parts": ["one", "two"]}]
 
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "longer"})
 
     assert _limits(response.json()) == [X_LONG_POST_MAX_CHARS, X_LONG_POST_MAX_CHARS]
-    assert _system_text(writing_calls(fake_llm)[1]) == sketch_thread_prompt(X_LONG_POST_MAX_CHARS)
-    assert _system_text(writing_calls(fake_llm)[2]) == humanizer_thread_prompt(
-        X_LONG_POST_MAX_CHARS
-    )
+    assert _thread_limits(fake_llm) == [X_LONG_POST_MAX_CHARS]
+    assert "at most 25,000 characters as X counts them" in _system_text(fake_llm.calls[0])
     read = (await client.get(f"{POSTS}/{post_id}")).json()
     assert [_limits(v) for v in read["versions"]] == [[X_LONG_POST_MAX_CHARS] * 2] * 2
