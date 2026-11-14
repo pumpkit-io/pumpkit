@@ -14,6 +14,7 @@ from pumpkit.posts.models import VersionAttempt
 from pumpkit.posts.writing.constants import THREAD_MAX_PARTS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import TEXT, save_positioning
+from tests.posts.feedback import written_version
 from tests.posts.writing_replies import (
     HUMANIZED_THREAD,
     MERGED_THREAD,
@@ -607,9 +608,7 @@ async def _thread_with_feedback(client, fake_llm, feedback: str = "shorter", **p
     post_id = (await _write_thread(client, fake_llm, **plan)).json()["id"]
     fake_llm.calls.clear()
     fake_llm.replies = [{"parts": ["Fridays.", "Changelog."]}]
-    response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": feedback})
-    assert response.status_code == 201, response.text
-    return post_id, response.json()
+    return post_id, await written_version(client, post_id, feedback)
 
 
 async def test_feedback_on_a_thread_runs_the_thread_revise_call_then_the_thread_humanizer(

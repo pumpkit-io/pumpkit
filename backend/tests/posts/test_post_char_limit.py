@@ -9,6 +9,7 @@ import pumpkit.x_connection.service as x_connections_service
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import save_positioning
+from tests.posts.feedback import written_version
 from tests.posts.writing_replies import start_thread, written_post
 
 POSTS = "/api/v1/posts"
@@ -103,9 +104,9 @@ async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit
     fake_llm.calls.clear()
     fake_llm.replies = [{"parts": ["one", "two"]}]
 
-    response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "longer"})
+    version = await written_version(client, post_id, "longer")
 
-    assert _limits(response.json()) == [X_LONG_POST_MAX_CHARS, X_LONG_POST_MAX_CHARS]
+    assert _limits(version) == [X_LONG_POST_MAX_CHARS, X_LONG_POST_MAX_CHARS]
     assert _thread_limits(fake_llm) == [X_LONG_POST_MAX_CHARS]
     assert "at most 25,000 characters as X counts them" in _system_text(fake_llm.calls[0])
     read = (await client.get(f"{POSTS}/{post_id}")).json()

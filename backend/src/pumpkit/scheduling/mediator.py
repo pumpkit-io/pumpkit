@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
@@ -26,8 +26,16 @@ from pumpkit.authors.x_reader import (
 from pumpkit.billing.allowance import COUNT_NOUNS, check_publishes_before_end
 from pumpkit.billing.dependencies import SUBSCRIPTION_NEEDED
 from pumpkit.billing.models import AllowanceCount
+from pumpkit.core.background import TaskRegistry
 from pumpkit.core.config import settings
-from pumpkit.core.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
+from pumpkit.core.errors import (
+    AppError,
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    report_background_exception,
+)
 from pumpkit.core.llm import LLM
 from pumpkit.core.logging import logger
 from pumpkit.core.photos import PhotoFetcher
@@ -39,8 +47,9 @@ from pumpkit.posts.media_fetcher import MediaUrlFetcher
 from pumpkit.posts.media_upload import ReceivedMedia
 from pumpkit.posts.media_upload_links import NewUploadLink
 from pumpkit.posts.models import Media, Post
-from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
+from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse
 from pumpkit.posts.writing.post_writing import revise_version
+from pumpkit.posts.writing.versions import WrittenVersion
 from pumpkit.posts.writing_state import writing_state
 from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
@@ -334,6 +343,7 @@ async def create_scheduled_post(
     # Serializes the User's checks and charges of X posts until the commit.
     await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=new.post_id)
+    posts_service.check_not_writing(post, now=now)
     if await service.get_for_post(db, post_id=post.id) is not None:
         raise _already_scheduled()
     parts = _text_of(post)
@@ -510,8 +520,13 @@ async def edit_scheduled_post(
     parts = edit.parts
     post = None
     first_reply = scheduled_post.first_reply
-    if edit.copy_text:
-        post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
+    if edit.copy_text or edit.reschedules:
+        text_post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
+        # A Failed Post may be taking Feedback, whose Version replaces the Text.
+        posts_service.check_not_writing(text_post, now=now)
+        if edit.copy_text:
+            post = text_post
+    if post is not None:
         # The Text's Parts in the places of the live ones are already on X as they were.
         parts = live + _text_of(post)[len(live) :]
         first_reply = post.text_first_reply
@@ -683,6 +698,7 @@ async def get_post(
             for v in version_writing.versions_of(post)
         ],
         writing_state=writing_state(post, now=now),
+        failed_feedback=version_writing.failed_feedback_response(post, now=now),
         status=post_status(scheduled_post.state if scheduled_post else None) if written else None,
         scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
     )
@@ -758,71 +774,151 @@ async def list_posts(
 async def give_feedback(
     db: AsyncSession,
     llm: LLM,
+    tasks: TaskRegistry,
+    sessions: async_sessionmaker[AsyncSession],
     user: User,
     post_id: str,
     feedback: str,
     format: Optional[Format],
-    now: datetime,
+    clock: Clock,
     sent_text: Optional[list[str]] = None,
-) -> VersionResponse:
+) -> PostDetailResponse:
     """
-    Write the Post's next Version from Feedback on its Text; `sent_text` must be the saved Text.
-    Takes-Feedback and Media checks run again after the model calls, under the Post's lock.
+    Start writing the Post's next Version from Feedback on its Text in the background, and answer
+    with the Post being written; `sent_text` must be the saved Text. The Text stays as it is until
+    the Version replaces it, and a write that fails leaves it so.
     """
+    now = clock()
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
     next_version = await version_writing.prepare_next_version(
-        db, user=user, post=post, format=format, sent_text=sent_text, now=now
+        db, user=user, post=post, feedback=feedback, format=format, sent_text=sent_text, now=now
     )
-    # Holds the Text and ends the transaction before the calls, which can take minutes.
+    response = await get_post(db, user, post_id, now=now)
+    write = _FeedbackWrite(
+        user_id=user.id,
+        post_id=post_id,
+        started_at=now,
+        feedback=feedback,
+        next_version=next_version,
+    )
     await db.commit()
+    await tasks.start(
+        _feedback_task_name(post_id), _write_feedback_version(write, llm, sessions, clock)
+    )
+    return response
 
+
+def _feedback_task_name(post_id: str) -> str:
+    return f"write a version of {post_id} from feedback"
+
+
+@dataclass(frozen=True)
+class _FeedbackWrite:
+    """What writing a Version from Feedback needs, read before the request answers."""
+
+    user_id: str
+    post_id: str
+    # The Post's `writing_since` for this write: a later change to the Text drops this write.
+    started_at: datetime
+    feedback: str
+    next_version: version_writing.NextVersion
+
+
+async def _write_feedback_version(
+    write: _FeedbackWrite,
+    llm: LLM,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+) -> None:
+    """
+    The background task: the model calls with no session open, then the Version and its charge in
+    a session of its own, or else the failed attempt in a fresh one.
+    """
+    next_version = write.next_version
     try:
         written = await revise_version(
             llm,
             next_version.inputs,
             next_version.earlier,
             next_version.starting_text,
-            feedback,
+            write.feedback,
         )
-        # The Post may have been scheduled, or its Media changed, during the calls. User before
-        # Post, as every path that takes both locks them, since the charge below locks the User.
-        await users_service.lock_user_id(db, user_id=user.id)
-        post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
-        scheduled_post = await _check_takes_feedback(db, post_id=post_id)
+        await _record_feedback_version(write, written, sessions, clock)
+    except Exception as error:
+        try:
+            await _record_failed_feedback(write, sessions, clock, error)
+        finally:
+            if not isinstance(error, AppError) or error.reported:
+                report_background_exception(_feedback_task_name(write.post_id), error)
+            else:
+                logger.info("Feedback on post %s recorded as failed: %s", write.post_id, error)
+
+
+async def _record_feedback_version(
+    write: _FeedbackWrite,
+    written: WrittenVersion,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+) -> None:
+    """
+    Takes-Feedback and Media checks run again, since the Post may have been scheduled or its Media
+    changed during the calls; a refusal raises, and nothing here is committed.
+    """
+    next_version = write.next_version
+    async with sessions() as db:
+        # User before Post, as every path that takes both locks them, since the charge locks the User.
+        await users_service.lock_user_id(db, user_id=write.user_id)
+        now = clock()
+        post = await version_writing.post_still_writing(
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now
+        )
+        if post is None:
+            return
+        scheduled_post = await _check_takes_feedback(db, post_id=write.post_id)
         media_service.check_dropped_parts_media_movable(
             post,
             part_count=len(written.parts),
             first_reply=written.first_reply,
             live_count=_live_count(scheduled_post),
         )
-    except Exception as error:
-        await version_writing.record_failed_attempt(
+        version = await posts_service.record_version(
             db,
             post=post,
             sequence=next_version.sequence,
-            feedback=feedback,
-            format=next_version.format,
+            version_number=next_version.number,
+            feedback=write.feedback,
+            written=written,
+            now=now,
+            starting_text=next_version.starting_text,
+        )
+        await version_writing.charge_generation(db, user_id=write.user_id, version=version, now=now)
+        await db.commit()
+
+
+async def _record_failed_feedback(
+    write: _FeedbackWrite,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+    error: Exception,
+) -> None:
+    async with sessions() as db:
+        now = clock()
+        post = await version_writing.post_still_writing(
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now
+        )
+        if post is None:
+            return
+        await version_writing.record_failed_attempt(
+            db,
+            post=post,
+            sequence=write.next_version.sequence,
+            feedback=write.feedback,
+            format=write.next_version.format,
             error=error,
             now=now,
         )
-        # Commit before re-raising, or the request session rolls the failed attempt back.
         await db.commit()
-        raise
-
-    version = await posts_service.record_version(
-        db,
-        post=post,
-        sequence=next_version.sequence,
-        version_number=next_version.number,
-        feedback=feedback,
-        written=written,
-        now=now,
-        starting_text=next_version.starting_text,
-    )
-    await version_writing.charge_generation(db, user_id=user.id, version=version, now=now)
-    await db.commit()
-    return version_writing.version_response(version, next_version.char_limit)
 
 
 async def restore_version(
@@ -1365,7 +1461,7 @@ async def _post_whose_text_changes(
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
-    posts_service.check_not_writing(post, now=now)
+    posts_service.take_text(post, now=now)
     return post, scheduled_post
 
 

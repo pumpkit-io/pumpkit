@@ -109,7 +109,12 @@ async def post_id(with_positioning, mcp, fake_llm) -> str:
     return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]
 
 
-async def test_giving_feedback_returns_the_next_versions_final_and_character_count(
+async def _latest_version(mcp, post_id: str) -> dict:
+    """The Post's latest Version over MCP, which a Feedback the tool call wrote has made by now."""
+    return (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"][-1]
+
+
+async def test_giving_feedback_writes_the_next_versions_final_and_character_count(
     post_id, mcp, fake_llm, fixed_clock
 ):
     fake_llm.replies = [{"post": "shorter final"}]
@@ -117,7 +122,8 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback=" shorter\n")
 
     assert result["isError"] is False
-    version = result["structuredContent"]
+    assert result["structuredContent"]["writing_state"] == "writing"
+    version = await _latest_version(mcp, post_id)
     assert version == {
         "id": version["id"],
         "number": 2,
@@ -154,7 +160,8 @@ async def test_giving_feedback_rewrites_the_text_as_restored_and_edited_on_the_w
         "first_reply": False,
         "version_number": 1,
     }
-    assert result["structuredContent"]["starting_text"] == starting_text
+    assert result["isError"] is False
+    assert (await _latest_version(mcp, post_id))["starting_text"] == starting_text
     post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
     assert [v["starting_text"] for v in post["versions"]] == [None, None, starting_text]
     assert (post["text"]["version_number"], post["text"]["edited"]) == (3, False)
@@ -192,7 +199,7 @@ async def test_feedback_with_a_format_switches_the_post_and_keeps_earlier_versio
     )
 
     assert result["isError"] is False
-    assert result["structuredContent"]["format"] == "thread"
+    assert (await _latest_version(mcp, post_id))["format"] == "thread"
     versions = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"]
     assert [(v["format"], [p["text"] for p in v["parts"]]) for v in versions] == [
         ("post", ["final 1"]),
@@ -205,9 +212,9 @@ async def test_feedback_without_a_format_keeps_the_latest_versions_thread(post_i
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="expand it", format="thread")
     fake_llm.replies = [{"parts": ["final one", "final 2"]}]
 
-    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter Part 2")
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter Part 2")
 
-    version = result["structuredContent"]
+    version = await _latest_version(mcp, post_id)
     assert (version["format"], [p["text"] for p in version["parts"]]) == (
         "thread",
         ["final one", "final 2"],
@@ -232,7 +239,9 @@ async def test_feedback_through_the_tools_is_revised_from_the_posts_plan_as_on_t
         "<positioning>\nI post about bootstrapping.\n</positioning>"
     )
     version = await db.scalar(
-        select(VersionAttempt).where(VersionAttempt.id == result["structuredContent"]["id"])
+        select(VersionAttempt).where(
+            VersionAttempt.id == (await _latest_version(mcp, post_id))["id"]
+        )
     )
     assert version is not None
     assert (version.sketch_parts, version.parts, version.hook_reasoning) == (
@@ -311,17 +320,30 @@ def _writing_call(tool: str, post_id: str) -> dict[str, str]:
 WRITING_TOOLS = ["start_post", "give_feedback"]
 
 
-@pytest.mark.parametrize("tool", WRITING_TOOLS)
-async def test_a_model_failure_is_a_reported_tool_error(post_id, mcp, fake_llm, fake_posthog, tool):
+async def test_a_failed_plan_is_a_reported_tool_error(post_id, mcp, fake_llm, fake_posthog):
     # Starting a Post answers once the Brief is planned, so only the plan call fails it.
     fake_llm.standing[POST_IDEAS] = LLMError("provider down")
-    fake_llm.replies = [LLMError("provider down")]
 
-    result = await mcp.call_tool(tool, **_writing_call(tool, post_id))
+    result = await mcp.call_tool("start_post", brief="ship")
 
     assert error_text(result) == "Writing the post failed. Please try again."
     error_id = result["structuredContent"]["error_id"]
     assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
+
+
+async def test_a_feedback_the_model_failed_leaves_the_text_and_is_reported(
+    post_id, mcp, fake_llm, fake_posthog
+):
+    fake_llm.replies = [LLMError("provider down")]
+
+    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
+
+    assert result["isError"] is False
+    post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
+    assert post["writing_state"] is None
+    assert [version["number"] for version in post["versions"]] == [1]
+    assert post["text"]["parts"][0]["text"] == "final 1"
+    fake_posthog.capture_exception.assert_called_once()
 
 
 @pytest.mark.parametrize("tool", WRITING_TOOLS)

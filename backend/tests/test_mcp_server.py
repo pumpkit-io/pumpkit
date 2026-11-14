@@ -72,6 +72,7 @@ async def test_the_instructions_and_give_feedback_rewrite_the_post_s_text(subscr
     description = (await mcp.list_tools())["give_feedback"]["description"]
 
     assert "Feedback rewrites the post's text" in instructions
+    assert '`give_feedback` answers with `writing_state` "writing"' in instructions
     assert "starting text" in instructions
     assert "latest version" not in instructions.lower()
     assert "the post's text" in description

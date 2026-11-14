@@ -6,7 +6,13 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 from pumpkit.billing.allowance import WayOut
 from pumpkit.posts.formats import Format
 from pumpkit.posts.media_files import cleaned_alt_text
-from pumpkit.posts.schemas import MediaResponse, PlanResponse, TextResponse, VersionResponse
+from pumpkit.posts.schemas import (
+    FailedFeedbackResponse,
+    MediaResponse,
+    PlanResponse,
+    TextResponse,
+    VersionResponse,
+)
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.posts.writing_state import WritingState
 from pumpkit.scheduling.models import ScheduledPostState
@@ -113,6 +119,9 @@ class PostDetailResponse(BaseModel):
     # "writing" while a Version is being written; "not_written" for a Post with no Text and no
     # write in progress, whose first Version failed or was lost and may be retried; else None.
     writing_state: Optional[WritingState]
+    # The last Feedback when Pumpkit couldn't write its Version, until the User sends Feedback again,
+    # changes the Text or dismisses it; None otherwise, and always while a Version is being written.
+    failed_feedback: Optional[FailedFeedbackResponse]
     # None until the Post's first Version is written: a Post being written is not a Draft.
     status: Optional[PostStatus]
     # None while the Post is a Draft.

@@ -7,6 +7,7 @@ import pytest
 
 from tests.media_files import png
 from tests.positioning.positioning import save_positioning
+from tests.posts.feedback import written_version
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     HUMANIZED_THREAD,
@@ -66,12 +67,6 @@ async def test_a_first_reply_the_humanizer_adds_to_a_post_that_had_none_is_dropp
     assert humanizer.messages[2]["content"] == "The post."
 
 
-async def _feedback(client, post_id: str, feedback: str, **body) -> dict:
-    response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": feedback, **body})
-    assert response.status_code == 201, response.text
-    return response.json()
-
-
 async def _text(client, post_id: str) -> dict:
     return (await client.get(f"{POSTS}/{post_id}")).json()["text"]
 
@@ -96,7 +91,7 @@ async def test_feedback_can_add_a_first_reply(client, without_reply, fake_llm):
     fake_llm.standing[REVISED_POST] = revised("The post.", first_reply="Sign up: [link]")
     fake_llm.replies = [{"post": "The post.", "first_reply": "Sign up here: [link]"}]
 
-    version = await _feedback(client, without_reply, "Ask them to sign up, link in a reply")
+    version = await written_version(client, without_reply, "Ask them to sign up, link in a reply")
 
     assert version["format"] == "post"
     assert version["first_reply"] is True
@@ -110,7 +105,7 @@ async def test_feedback_reads_the_first_reply_and_can_change_it(client, with_rep
     fake_llm.standing[REVISED_POST] = revised("The post.", first_reply="Get it: pumpkit.io/calc")
     fake_llm.replies = [{"post": "The post.", "first_reply": "Get it: pumpkit.io/calc"}]
 
-    version = await _feedback(client, with_reply, "The link is pumpkit.io/calc")
+    version = await written_version(client, with_reply, "The link is pumpkit.io/calc")
 
     assert _texts(version["parts"]) == ["The post.", "Get it: pumpkit.io/calc"]
     [revise] = [c for c in fake_llm.calls if c.response_model is REVISED_POST]
@@ -133,7 +128,7 @@ async def test_feedback_can_remove_the_first_reply(client, with_reply, fake_llm)
     fake_llm.standing[REVISED_POST] = revised("The post.")
     fake_llm.replies = [{"post": "The post.", "first_reply": "Try it: [link]"}]
 
-    version = await _feedback(client, with_reply, "No reply, please")
+    version = await written_version(client, with_reply, "No reply, please")
 
     assert version["first_reply"] is False
     assert _texts(version["parts"]) == ["The post."]
@@ -206,7 +201,7 @@ async def test_feedback_on_a_hand_edited_first_reply_shows_the_text_as_changed(
     fake_llm.standing[REVISED_POST] = revised("The post.", first_reply="Try it: pumpkit.io/calc")
     fake_llm.replies = [{"post": "The post.", "first_reply": "Try it: pumpkit.io/calc"}]
 
-    await _feedback(client, with_reply, "Shorter")
+    await written_version(client, with_reply, "Shorter")
 
     [revise] = [c for c in fake_llm.calls if c.response_model is REVISED_POST]
     assert revise.messages[-1]["content"].startswith(
@@ -253,7 +248,7 @@ async def _switched_to_a_thread(client, fake_llm, reply: str, parts: list[str]) 
     post = await _written(client, fake_llm, "Try it: [link]", reply)
     fake_llm.calls.clear()
     fake_llm.replies = [{"parts": parts}]
-    return await _feedback(client, post["id"], "expand it", format="thread")
+    return await written_version(client, post["id"], "expand it", format="thread")
 
 
 async def test_a_switch_to_a_thread_shows_the_revise_call_the_post_and_its_first_reply(
@@ -303,12 +298,12 @@ async def test_a_switch_to_a_thread_adds_back_no_first_reply_the_writing_left_ou
 async def test_a_thread_switched_back_to_a_post_is_revised_from_the_thread(client, ready, fake_llm):
     post = await _written(client, fake_llm, "Try it: [link]", "Try it: [link]")
     fake_llm.replies = [{"parts": ["One.", "Two. Try it: [link]"]}]
-    await _feedback(client, post["id"], "expand it", format="thread")
+    await written_version(client, post["id"], "expand it", format="thread")
     fake_llm.calls.clear()
     fake_llm.standing[REVISED_POST] = revised("Back to one.", first_reply="Try it: [link]")
     fake_llm.replies = [{"post": "Back to one.", "first_reply": "Try it: [link]"}]
 
-    version = await _feedback(client, post["id"], "condense it", format="post")
+    version = await written_version(client, post["id"], "condense it", format="post")
 
     assert (version["format"], version["first_reply"]) == ("post", True)
     assert _texts(version["parts"]) == ["Back to one.", "Try it: [link]"]
@@ -323,11 +318,11 @@ async def test_a_thread_switched_to_a_post_is_told_an_external_link_goes_in_the_
 ):
     post = await _written(client, fake_llm, "Try it: [link]", "Try it: [link]")
     fake_llm.replies = [{"parts": ["One.", "Two. Get it: pumpkit.io/calc"]}]
-    await _feedback(client, post["id"], "expand it", format="thread")
+    await written_version(client, post["id"], "expand it", format="thread")
     fake_llm.calls.clear()
     fake_llm.replies = [{"post": "Back to one.", "first_reply": "Get it: pumpkit.io/calc"}]
 
-    await _feedback(client, post["id"], "condense it", format="post")
+    await written_version(client, post["id"], "condense it", format="post")
 
     [revise] = [c for c in fake_llm.calls if c.response_model is REVISED_POST]
     assert revise.messages[-1]["content"] == (
@@ -351,7 +346,7 @@ async def test_a_switch_to_a_thread_moves_no_blank_first_reply(client, without_r
     post_id = await _with_a_blank_first_reply(client, without_reply)
     fake_llm.replies = [{"parts": ["One.", "x" * 279]}]
 
-    version = await _feedback(client, post_id, "expand it", format="thread")
+    version = await written_version(client, post_id, "expand it", format="thread")
 
     assert _texts(version["parts"]) == ["One.", "x" * 279]
     assert "<first_reply>" not in _texts_of(fake_llm, REVISED_THREAD)
@@ -364,7 +359,7 @@ async def test_feedback_on_a_post_with_a_blank_first_reply_drops_it(
     post_id = await _with_a_blank_first_reply(client, without_reply)
     fake_llm.replies = [{"post": "One shorter post.", "first_reply": "Made up."}]
 
-    version = await _feedback(client, post_id, "shorter")
+    version = await written_version(client, post_id, "shorter")
 
     assert version["first_reply"] is False
     assert _texts(version["parts"]) == ["One shorter post."]

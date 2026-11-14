@@ -1,3 +1,4 @@
+import { errorStatus } from './apiErrors';
 import { apiService } from './apiService';
 import { toMedia, type Media, type MediaApi } from './mediaService';
 import {
@@ -97,6 +98,41 @@ export interface Plan {
  */
 export type WritingState = 'writing' | 'not_written';
 
+/** How often a page reads a Post again while one of its Versions is being written. */
+export const WRITING_POLL_MS = 3_000;
+/** The longest wait between reads, which doubles after each read that fails. */
+export const WRITING_POLL_MAX_MS = 60_000;
+
+/** Feedback whose Version Pumpkit couldn't write, as it was sent, to send again. */
+export interface FailedFeedback {
+  feedback: string;
+  format: Format;
+}
+
+/** Feedback's write failed or outlived the backend's timeout: the Text is as it was. */
+export class VersionNotWritten extends Error {
+  constructor(readonly failedFeedback: FailedFeedback | null = null) {
+    super("Pumpkit couldn't write the next version, so your text hasn't changed. Try again.");
+    this.name = 'VersionNotWritten';
+  }
+}
+
+/** Resolves after `ms`, or rejects once `signal` aborts. */
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', stop);
+      resolve();
+    }, ms);
+    const stop = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    signal?.addEventListener('abort', stop, { once: true });
+  });
+}
+
 /** A Post with no Text yet: no Draft, no status, only its Brief, Plan and writing state. */
 export interface UnwrittenPost {
   id: string;
@@ -116,6 +152,10 @@ export interface PostDetail extends Post {
   /** Never null from `get`: a Post with no Text reads as an `UnwrittenPost`. */
   text: PostText | null;
   status: PostStatus;
+  /** True while Feedback's Version is being written: the Text can't change until it is. */
+  writing: boolean;
+  /** The last Feedback when its Version couldn't be written, until the User moves on. */
+  failedFeedback: FailedFeedback | null;
   /** Null while the Post is a Draft. */
   scheduledPost: ScheduledPost | null;
   /**
@@ -258,6 +298,7 @@ interface PostDetailApi extends PostApi {
   plan: PlanApi | null;
   text: PostTextApi | null;
   writing_state: WritingState | null;
+  failed_feedback: FailedFeedback | null;
   /** Null until the first Version is written. */
   status: PostStatus | null;
   scheduled_post: ScheduledPostApi | null;
@@ -363,6 +404,8 @@ export const postService = {
       text: data.text ? toText(data.text) : null,
       versions: data.versions.map(toVersion),
       status: data.status,
+      writing: data.writing_state === 'writing',
+      failedFeedback: data.failed_feedback,
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
     };
@@ -383,21 +426,54 @@ export const postService = {
     return startedPost(data);
   },
   /**
-   * Writes the next Version from Feedback on the Text before answering, which can take a minute
-   * or two. `text` is every Part on screen: the server refuses it while an edit isn't saved yet.
+   * Writes the next Version from Feedback on the Text, in the background, and resolves with it
+   * once it is the Text: a minute or two. `text` is every Part on screen: the server refuses it
+   * while an edit isn't saved yet.
    */
   addVersion: async (
     postId: string,
     feedback: string,
     format: Format,
     text: string[],
+    signal?: AbortSignal,
   ): Promise<Version> => {
-    const { data } = await apiService.post<VersionApi>(`/posts/${postId}/versions`, {
+    const { data } = await apiService.post<PostDetailApi>(`/posts/${postId}/versions`, {
       feedback,
       format,
       text,
     });
-    return toVersion(data);
+    const after = Math.max(0, ...data.versions.map((v) => v.number));
+    return postService.awaitVersion(postId, after, signal);
+  },
+  /**
+   * Reads the Post until no Version is being written, and resolves with the Version written after
+   * Version `after`. Rejects with `VersionNotWritten` when the write failed or timed out, which
+   * leaves the Text as it was, and with the read's error on a 404 or 403.
+   */
+  awaitVersion: async (postId: string, after: number, signal?: AbortSignal): Promise<Version> => {
+    let failures = 0;
+    for (;;) {
+      await pause(Math.min(WRITING_POLL_MS * 2 ** failures, WRITING_POLL_MAX_MS), signal);
+      let post: PostDetail | UnwrittenPost;
+      try {
+        post = await postService.get(postId);
+      } catch (e) {
+        const status = errorStatus(e);
+        if (status === 404 || status === 403) throw e;
+        failures += 1;
+        continue;
+      }
+      failures = 0;
+      if (!isUnwritten(post) && post.writing) continue;
+      const versions = isUnwritten(post) ? [] : post.versions.filter((v) => v.number > after);
+      const written = versions[versions.length - 1];
+      if (written) return written;
+      throw new VersionNotWritten(isUnwritten(post) ? null : post.failedFeedback);
+    }
+  },
+  /** Stops showing the Post's last Feedback as one Pumpkit couldn't write. */
+  dismissFailedFeedback: async (postId: string): Promise<void> => {
+    await apiService.delete(`/posts/${postId}/failed-feedback`);
   },
   /**
    * Stores the User's edit of the Post's Text, every Part in order, as typed, and whether the

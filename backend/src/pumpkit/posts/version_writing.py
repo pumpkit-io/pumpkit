@@ -15,6 +15,7 @@ import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.billing.allowance import Draw
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
+from pumpkit.core.logging import logger
 from pumpkit.core.text import drop_unstorable
 from pumpkit.core.time import as_utc
 from pumpkit.posts import media as media_service
@@ -23,6 +24,7 @@ from pumpkit.posts.formats import Format
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.plans import Plan
 from pumpkit.posts.schemas import (
+    FailedFeedbackResponse,
     PartResponse,
     PlanResponse,
     StartingTextResponse,
@@ -219,6 +221,14 @@ def post_text(post: Post) -> Optional[StartingText]:
     )
 
 
+def failed_feedback_response(post: Post, *, now: datetime) -> Optional[FailedFeedbackResponse]:
+    """The Feedback whose write failed or timed out, until the User moves on; None while writing."""
+    feedback, format = post.unwritten_feedback, post.unwritten_feedback_format
+    if feedback is None or format is None or is_writing(post, now=now):
+        return None
+    return FailedFeedbackResponse(feedback=feedback, format=format)
+
+
 def text_response(post: Post, char_limit: int) -> Optional[TextResponse]:
     """The Post's Text, or None while it has no Version."""
     text = post_text(post)
@@ -248,6 +258,32 @@ async def user_post(
     return post
 
 
+async def post_still_writing(
+    db: AsyncSession, *, user_id: str, post_id: str, started_at: datetime, now: datetime
+) -> Optional[Post]:
+    """
+    The Post, locked, for the write that started at `started_at` to record its outcome. None, and
+    the write records nothing, when the Post was deleted or moved on: the write outlived the
+    timeout, so the User was told it failed, or a Retry or another Feedback started another write.
+    """
+    post = await service.get_user_post(db, user_id=user_id, post_id=post_id, for_update=True)
+    if post is None:
+        logger.info("Write of post %s recorded nothing: the post was deleted", post_id)
+        return None
+    if (
+        post.writing_since is None
+        or as_utc(post.writing_since) != started_at
+        or not is_writing(post, now=now)
+    ):
+        logger.info(
+            "Write of post %s started at %s recorded nothing: the post moved on",
+            post_id,
+            started_at.isoformat(),
+        )
+        return None
+    return post
+
+
 def versions_of(post: Post) -> list[VersionAttempt]:
     return [attempt for attempt in post.attempts if attempt.status == ATTEMPT_SUCCEEDED]
 
@@ -272,6 +308,7 @@ async def prepare_next_version(
     *,
     user: User,
     post: Post,
+    feedback: str,
     format: Optional[Format],
     sent_text: Optional[list[str]],
     now: datetime,
@@ -311,7 +348,7 @@ async def prepare_next_version(
     await check_attempt_limit(db, user_id=user.id, now=now)
     await check_generation_left(db, user_id=user.id, now=now)
     latest = versions[-1]
-    service.start_writing(post, now=now)
+    service.start_writing(post, now=now, feedback=feedback, format=format or text.format)
     return NextVersion(
         inputs=inputs,
         earlier=[

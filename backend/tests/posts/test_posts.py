@@ -12,6 +12,7 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
+from tests.posts.feedback import written_version
 from tests.posts.writing_replies import start_thread, written_post
 
 POSTS = "/api/v1/posts"
@@ -71,9 +72,7 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
     post = await written_post(client, await client.post(POSTS, json={"brief": "ship"}))
     [first] = post["versions"]
 
-    second = (
-        await client.post(f"{POSTS}/{post['id']}/versions", json={"feedback": "shorter"})
-    ).json()
+    second = await written_version(client, post["id"], "shorter")
 
     for version in (first, second):
         assert set(version) == {
@@ -102,7 +101,7 @@ async def test_no_version_is_written_from_the_inspiration_authors_posts(
     fake_llm.replies = [{"parts": ["c", "d"]}, {"post": "one"}, {"post": "two"}]
     for body in ({"feedback": "shorter"}, {"feedback": "condense", "format": "post"}):
         response = await client.post(f"{POSTS}/{post_id}/versions", json=body)
-        assert response.status_code == 201, response.text
+        assert response.status_code == 202, response.text
     fake_llm.replies = [{"post": "a post"}]
     assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
 

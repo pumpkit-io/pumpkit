@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiService } from './apiService';
 import {
   isUnwritten,
@@ -6,6 +6,8 @@ import {
   type Plan,
   type PostDetail,
   type UnwrittenPost,
+  VersionNotWritten,
+  WRITING_POLL_MS,
 } from './postService';
 
 const PLAN = {
@@ -381,5 +383,147 @@ describe('postService', () => {
     });
     expect(text.firstReply).toBe(true);
     expect(text.format).toBe('post');
+  });
+  describe('Feedback, written in the background', () => {
+    const VERSION_TWO = {
+      ...VERSION,
+      id: 'version_attempt_02',
+      number: 2,
+      feedback: 'shorter',
+      parts: [{ text: 'shorter', char_count: 7, char_limit: 280 }],
+    };
+
+    /** The Post as `GET /posts/{id}` answers it, with `versions` and its writing state. */
+    function read(
+      versions: object[],
+      writingState: 'writing' | null,
+      failedFeedback: { feedback: string; format: string } | null = null,
+    ) {
+      const latest = versions[versions.length - 1] as typeof VERSION;
+      return {
+        data: {
+          id: 'post_01',
+          brief: 'ship',
+          plan: PLAN,
+          text: {
+            format: 'post',
+            first_reply: false,
+            parts: latest.parts.map((p) => ({ ...p, media: [] })),
+            version_number: latest.number,
+            edited: false,
+          },
+          versions,
+          writing_state: writingState,
+          failed_feedback: failedFeedback,
+          status: 'draft',
+          scheduled_post: null,
+        },
+      };
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(apiService, 'post').mockResolvedValue(read([VERSION], 'writing') as never);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('reads a Post that Feedback is rewriting as writing', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(read([VERSION], 'writing') as never);
+
+      const post = written(await postService.get('post_01'));
+
+      expect(post.writing).toBe(true);
+    });
+
+    it('starts the write, then reads the Post until the new Version is its Text', async () => {
+      vi.spyOn(apiService, 'get')
+        .mockResolvedValueOnce(read([VERSION], 'writing') as never)
+        .mockResolvedValueOnce(read([VERSION, VERSION_TWO], null) as never);
+
+      const adding = postService.addVersion('post_01', 'shorter', 'post', ['the final']);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+      expect(apiService.get).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      const version = await adding;
+      expect(apiService.post).toHaveBeenCalledWith('/posts/post_01/versions', {
+        feedback: 'shorter',
+        format: 'post',
+        text: ['the final'],
+      });
+      expect(version.number).toBe(2);
+      expect(version.parts).toEqual([{ text: 'shorter', charCount: 7, charLimit: 280 }]);
+    });
+
+    it('rejects when the write ends with no new Version, which leaves the Text', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(read([VERSION], null) as never);
+
+      const adding = postService.addVersion('post_01', 'shorter', 'post', ['the final']);
+      const failed = expect(adding).rejects.toBeInstanceOf(VersionNotWritten);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      await failed;
+    });
+
+    it('reads the Feedback Pumpkit could not write, to send again', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(
+        read([VERSION], null, { feedback: 'shorter', format: 'thread' }) as never,
+      );
+
+      const post = written(await postService.get('post_01'));
+
+      expect(post.failedFeedback).toEqual({ feedback: 'shorter', format: 'thread' });
+    });
+
+    it('rejects with the Feedback that could not be written', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(
+        read([VERSION], null, { feedback: 'warmer', format: 'post' }) as never,
+      );
+
+      const waiting = postService.awaitVersion('post_01', 1);
+      const failed = expect(waiting).rejects.toMatchObject({
+        failedFeedback: { feedback: 'warmer', format: 'post' },
+      });
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      await failed;
+    });
+
+    it('dismisses the failed Feedback', async () => {
+      vi.spyOn(apiService, 'delete').mockResolvedValue({ data: undefined } as never);
+
+      await postService.dismissFailedFeedback('post_01');
+
+      expect(apiService.delete).toHaveBeenCalledWith('/posts/post_01/failed-feedback');
+    });
+
+    it('waits longer after a read that fails, and stops on a 404', async () => {
+      const down = Object.assign(new Error('down'), { response: { status: 502 } });
+      const gone = Object.assign(new Error('gone'), { response: { status: 404 } });
+      vi.spyOn(apiService, 'get').mockRejectedValueOnce(down).mockRejectedValueOnce(gone);
+
+      const waiting = postService.awaitVersion('post_01', 1);
+      const failed = expect(waiting).rejects.toBe(gone);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+      expect(apiService.get).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      await failed;
+    });
+
+    it('stops reading once the wait is aborted', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(read([VERSION], 'writing') as never);
+      const stop = new AbortController();
+
+      const waiting = postService.awaitVersion('post_01', 1, stop.signal);
+      const stopped = expect(waiting).rejects.toBeDefined();
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+      stop.abort();
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS * 4);
+
+      await stopped;
+      expect(apiService.get).toHaveBeenCalledTimes(1);
+    });
   });
 });

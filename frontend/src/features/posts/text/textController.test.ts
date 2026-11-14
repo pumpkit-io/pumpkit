@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { textOf, type PostDetail, type Version } from '@/services/postService';
+import { textOf, VersionNotWritten, type PostDetail, type Version } from '@/services/postService';
 import { TextController } from './textController';
 import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from './textSaver';
 import { httpError, ManualClock, MemoryBackend, settled } from './testing';
@@ -24,6 +24,8 @@ function draft(versions: Version[]): PostDetail {
     versions,
     text: textOf(versions[versions.length - 1]!),
     status: 'draft',
+    writing: false,
+    failedFeedback: null,
     scheduledPost: null,
     textMedia: [],
   };
@@ -528,6 +530,74 @@ describe('TextController', () => {
       });
       expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
       expect(texts()).toEqual(['the first text']);
+    });
+
+    it('holds the Text while a Version read as being written lands, then shows it', async () => {
+      const { server, controller, texts } = open(draft(ONE));
+      server.versions = TWO;
+      const landing = server.hold('awaitVersion');
+
+      const resuming = controller.resumeWriting();
+      expect(controller.snapshot()).toMatchObject({
+        writing: true,
+        can: { edit: false, sendFeedback: false, restore: false, postTo: false },
+      });
+      await landing.release();
+
+      expect(await resuming).toBe('sent');
+      expect(server.callsOf('awaitVersion')).toEqual([[1]]);
+      expect(texts()).toEqual(['the second text']);
+      expect(controller.snapshot()).toMatchObject({ writing: false, textVersion: { number: 2 } });
+    });
+
+    it('keeps the Text when the Version being written never lands', async () => {
+      const { controller, texts } = open(draft(ONE));
+
+      const outcome = await controller.resumeWriting();
+
+      expect(outcome).toEqual({ failed: expect.any(VersionNotWritten) });
+      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'feedback' });
+      expect(texts()).toEqual(['the first text']);
+      expect(controller.snapshot().writing).toBe(false);
+    });
+
+    it('stops waiting quietly when the page goes away', async () => {
+      const { server, controller } = open(draft(ONE));
+      server.hold('awaitVersion');
+
+      const resuming = controller.resumeWriting();
+      controller.dispose();
+
+      expect(await resuming).toBe('stopped');
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+    });
+
+    it('takes over from a wait that was stopped, and shows the Version once it lands', async () => {
+      const { server, controller, texts } = open(draft(ONE));
+      server.versions = TWO;
+      server.hold('awaitVersion');
+      const first = controller.resumeWriting();
+      controller.stopWaiting();
+
+      const second = controller.resumeWriting();
+
+      expect(await first).toBe('stopped');
+      expect(controller.snapshot().writing).toBe(true);
+      expect(await second).toBe('sent');
+      expect(texts()).toEqual(['the second text']);
+      expect(controller.snapshot()).toMatchObject({ writing: false, textVersion: { number: 2 } });
+    });
+
+    it('waits once when asked to resume while already waiting', async () => {
+      const { server, controller } = open(draft(ONE));
+      server.versions = TWO;
+      const landing = server.hold('awaitVersion');
+      const first = controller.resumeWriting();
+
+      expect(await controller.resumeWriting()).toBe('alreadyWriting');
+      await landing.release();
+      expect(await first).toBe('sent');
+      expect(server.callsOf('awaitVersion')).toEqual([[1]]);
     });
 
     it('clears the last restore error', async () => {

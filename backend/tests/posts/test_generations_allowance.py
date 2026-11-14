@@ -275,7 +275,7 @@ async def test_restoring_a_version_and_editing_the_text_use_no_generation(
 
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "shorter"})
 
-    assert response.status_code == 201
+    assert response.status_code == 202
 
 
 async def test_an_instance_that_sells_no_plans_has_no_generation_limit(

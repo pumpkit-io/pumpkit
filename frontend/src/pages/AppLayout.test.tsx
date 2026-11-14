@@ -111,6 +111,8 @@ const POST: PostDetail = {
     },
   ],
   status: 'draft',
+  writing: false,
+  failedFeedback: null,
   scheduledPost: null,
   textMedia: [],
 };

@@ -21,7 +21,7 @@ from pumpkit.posts.models import (
 from pumpkit.posts.writing.planning import PlannedBrief
 from pumpkit.posts.writing.starting_text import StartingText
 from pumpkit.posts.writing.versions import WrittenVersion
-from pumpkit.posts.writing_state import FEEDBACK_WRITING_TIMEOUT, is_writing
+from pumpkit.posts.writing_state import WRITING_TIMEOUT, is_writing
 
 
 async def get_user_post(
@@ -67,16 +67,13 @@ async def writes_started_since(
 
 
 async def count_writes_in_flight(db: AsyncSession, *, user_id: str, now: datetime) -> int:
-    """
-    The User's writes still within their timeout, each charged a Generation if it succeeds: a
-    write holds its Generation as long as it holds the Post's Text.
-    """
-    rows = await db.execute(
-        select(Post).where(
-            Post.user_id == user_id, Post.writing_since > now - FEEDBACK_WRITING_TIMEOUT
-        )
+    """The User's writes still within the timeout, each charged a Generation if it succeeds."""
+    result = await db.execute(
+        select(func.count())
+        .select_from(Post)
+        .where(Post.user_id == user_id, Post.writing_since > now - WRITING_TIMEOUT)
     )
-    return sum(is_writing(post, now=now) for post in rows.scalars())
+    return result.scalar_one()
 
 
 async def count_versions_between(
@@ -188,6 +185,7 @@ async def record_version(
     db.add(attempt)
     set_text_from_version(post, attempt)
     post.writing_since = None
+    _drop_unwritten_feedback(post)
     await db.flush()
     return attempt
 
@@ -220,10 +218,42 @@ def check_not_writing(post: Post, *, now: datetime) -> None:
         )
 
 
-def start_writing(post: Post, *, now: datetime) -> None:
-    """Holds the Text until the Version is recorded, or its attempt fails. Not flushed."""
+def take_text(post: Post, *, now: datetime) -> None:
+    """
+    Refuses while a Version is being written; otherwise drops any write that outlived the timeout,
+    which then records nothing over the change about to be made. Not flushed.
+    """
+    check_not_writing(post, now=now)
+    post.writing_since = None
+    _drop_unwritten_feedback(post)
+
+
+def start_writing(
+    post: Post,
+    *,
+    now: datetime,
+    feedback: Optional[str] = None,
+    format: Optional[Format] = None,
+) -> None:
+    """
+    Holds the Text until the Version is recorded, or its attempt fails, and keeps the `feedback` it
+    is written from, in `format`, until then or until the User moves on. Not flushed.
+    """
     check_not_writing(post, now=now)
     post.writing_since = now
+    post.unwritten_feedback = feedback
+    post.unwritten_feedback_format = format if feedback is not None else None
+
+
+def dismiss_failed_feedback(post: Post, *, now: datetime) -> None:
+    """Forgets a Feedback whose write failed or timed out; one being written stays. Not flushed."""
+    if not is_writing(post, now=now):
+        _drop_unwritten_feedback(post)
+
+
+def _drop_unwritten_feedback(post: Post) -> None:
+    post.unwritten_feedback = None
+    post.unwritten_feedback_format = None
 
 
 class TextShapeKept(ConflictError):

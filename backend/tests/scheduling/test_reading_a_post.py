@@ -71,6 +71,7 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
             }
         ],
         "writing_state": None,
+        "failed_feedback": None,
         "status": "draft",
         "scheduled_post": None,
     }
@@ -81,7 +82,7 @@ async def test_feedback_makes_the_new_version_the_text(client, post, fake_llm):
     given = await client.post(
         f"{POSTS}/{post['id']}/versions", json={"feedback": "expand it", "format": "thread"}
     )
-    assert given.status_code == 201, given.text
+    assert given.status_code == 202, given.text
 
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 
@@ -221,6 +222,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
             }
         ],
         "writing_state": None,
+        "failed_feedback": None,
         "status": "failed",
         "scheduled_post": failed,
     }

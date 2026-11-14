@@ -520,7 +520,7 @@ async def test_scheduling_a_post_copies_its_text_from_the_latest_feedback(
     rewritten = await client.post(
         f"/api/v1/posts/{post['id']}/versions", json={"feedback": "punchier"}
     )
-    assert rewritten.status_code == 201, rewritten.text
+    assert rewritten.status_code == 202, rewritten.text
 
     response = await client.post(
         SCHEDULED_POSTS, json={"publish_at": "2026-10-10T14:00:00Z", "post_id": post["id"]}

@@ -65,6 +65,13 @@ class VersionResponse(BaseModel):
     created_at: datetime
 
 
+class FailedFeedbackResponse(BaseModel):
+    """Feedback whose Version Pumpkit couldn't write, as it was sent, to send again."""
+
+    feedback: str
+    format: Format
+
+
 class MediaResponse(BaseModel):
     """One Media on a Part, as the web app and AI apps read it."""
 
