@@ -10,9 +10,8 @@ import { usePositioning } from './usePositioning';
 const COUNT_SHOWN_WITHIN = 400;
 
 /**
- * The Positioning: one textarea the User writes, or has drafted, and saves. The Persona page
- * shows it as a section with Save. Onboarding's Persona step shows it as the page: it drafts on
- * open, and Continue saves, then calls `onContinue`, which resolves with why it couldn't go on.
+ * With `onContinue`, Continue saves and then calls it; it resolves with why the User couldn't go
+ * on, or null once they do.
  */
 export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<string | null> }) {
   const step = onContinue !== undefined;
@@ -51,12 +50,17 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
   // Continue goes on with unchanged text too: the step needs a Positioning, not a change.
   const canSubmit = step ? idle && hasText && !continuing : canSave;
 
-  const goOn = async () => {
+  const saveAndContinue = async (continueOn: () => Promise<string | null>) => {
     setContinuing(true);
-    const problem = (await save()) ? await onContinue?.() : undefined;
-    // On success the gate moves the User on, so the step stays locked until it unmounts.
-    if (problem !== null) setContinuing(false);
-    if (problem) fail(problem);
+    if (!(await save())) {
+      setContinuing(false);
+      return;
+    }
+    const notContinued = await continueOn();
+    // Once the User goes on, the gate unmounts the step, so it stays locked until then.
+    if (notContinued === null) return;
+    setContinuing(false);
+    fail(notContinued);
   };
 
   return (
@@ -66,7 +70,7 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
           id={headingId}
           className={cn(
             'font-sans font-semibold tracking-[-0.015em] text-foreground',
-            step ? 'text-2xl/[30px]' : 'text-xl',
+            step ? 'text-2xl leading-tight' : 'text-xl',
           )}
         >
           Who you are on X
@@ -84,7 +88,7 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
           onSubmit={(event) => {
             event.preventDefault();
             if (!canSubmit) return;
-            if (step) void goOn();
+            if (onContinue) void saveAndContinue(onContinue);
             else void save();
           }}
         >

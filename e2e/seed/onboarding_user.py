@@ -2,7 +2,7 @@
 
 The user has no X connection, no Positioning, no draft requests and hasn't finished Onboarding,
 so it starts at the Persona step, where a draft finds no X connection and reads nothing.
-`connect_x.py` with its email gives it one. Run it like `seed_user.py`.
+Run it like `seed_user.py`.
 """
 
 import asyncio

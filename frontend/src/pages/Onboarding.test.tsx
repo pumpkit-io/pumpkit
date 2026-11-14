@@ -77,8 +77,9 @@ function continueButton() {
 
 /** Renders the step and waits for the draft to fill the textarea. */
 async function drafted() {
-  renderOnboarding();
+  const rendered = renderOnboarding();
   await waitFor(async () => expect(await field()).toHaveValue(DRAFTED));
+  return rendered;
 }
 
 describe('Onboarding', () => {
@@ -200,13 +201,40 @@ describe('Onboarding', () => {
     });
 
     it('opens an empty textarea with the note when the draft request fails', async () => {
-      vi.mocked(positioningService.draft).mockRejectedValue(apiError(502, 'Bad gateway'));
+      vi.mocked(positioningService.draft).mockRejectedValue(
+        Object.assign(new Error('Network Error'), { isAxiosError: true }),
+      );
       renderOnboarding();
 
       const textarea = await field();
       await waitFor(() => expect(textarea).toBeEnabled());
       expect(textarea).toHaveValue('');
-      expect((await step()).getByRole('alert')).toBeInTheDocument();
+      expect((await step()).getByRole('alert')).toHaveTextContent(
+        "We couldn't draft your positioning. Write it yourself, a few sentences is enough.",
+      );
+    });
+
+    it('shows the draft it made again when the step reopens, without drafting again', async () => {
+      const { unmount } = await drafted();
+      unmount();
+
+      renderOnboarding();
+
+      await waitFor(async () => expect(await field()).toHaveValue(DRAFTED));
+      expect(await field()).toBeEnabled();
+      expect(positioningService.draft).toHaveBeenCalledTimes(1);
+    });
+
+    it('drafts again on reopen once Continue has saved the Positioning', async () => {
+      const { unmount } = await drafted();
+      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+      fireEvent.click(continueButton());
+      await waitFor(() => expect(currentPath()).toBe('/new'));
+      unmount();
+
+      await drafted();
+
+      expect(positioningService.draft).toHaveBeenCalledTimes(2);
     });
 
     it('asks for no draft when the User has used up the day’s drafts, and says when they can again', async () => {
@@ -283,6 +311,45 @@ describe('Onboarding', () => {
       expect(continueButton()).toBeEnabled();
       expect(track).not.toHaveBeenCalledWith('onboarding_finished');
     });
+
+    it('sends the User to the Paywall when finishing is refused for want of a Subscription', async () => {
+      vi.mocked(onboardingService.finish).mockRejectedValue(
+        apiError(403, 'This needs a subscription. Subscribe to continue.', {
+          code: 'subscription_required',
+        }),
+      );
+      await drafted();
+      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('paywall');
+
+      fireEvent.click(continueButton());
+
+      await waitFor(() => expect(currentPath()).toBe('/subscribe'));
+    });
+
+    it.each([
+      ['the check that follows fails', () => Promise.reject(new Error('offline'))],
+      ['the check still answers the Persona step', () => Promise.resolve('persona' as const)],
+    ])(
+      'says Continue failed and unlocks the step when finishing is refused and %s',
+      async (_case, answer) => {
+        vi.mocked(onboardingService.finish).mockRejectedValue(
+          apiError(403, 'This needs a subscription. Subscribe to continue.', {
+            code: 'subscription_required',
+          }),
+        );
+        await drafted();
+        vi.mocked(onboardingService.fetchNextStep).mockImplementation(answer);
+
+        fireEvent.click(continueButton());
+
+        expect(
+          await (await step()).findByText("Couldn't continue. Try again."),
+        ).toBeInTheDocument();
+        expect(currentPath()).toBe('/onboarding');
+        expect(continueButton()).toBeEnabled();
+        expect(await field()).toBeEnabled();
+      },
+    );
 
     it('sends a User whose Subscription ended to the Paywall when Continue is refused for it', async () => {
       vi.mocked(positioningService.save).mockRejectedValue(

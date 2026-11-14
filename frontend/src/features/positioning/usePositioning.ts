@@ -4,6 +4,7 @@ import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
 import { positioningService } from '@/services/positioningService';
+import { forgetDraft, keepDraft, keptDraft } from './keptDraft';
 
 type Loading = 'loading' | 'failed' | 'loaded';
 
@@ -19,7 +20,7 @@ function isBlank(text: string): boolean {
 
 /**
  * The User's Positioning as they are editing it, loaded on mount, with save and draft. With
- * `draftOnOpen`, a User with no Positioning and drafts left gets a draft as soon as it loads.
+ * `draftOnOpen`, a User with no Positioning gets the kept draft, else a fresh one, as it loads.
  */
 export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean } = {}) {
   const { refresh: refreshOnboarding } = useOnboarding();
@@ -59,6 +60,7 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
         latestText.current = drafted.text;
         setJustSaved(false);
         setJustDrafted(true);
+        if (draftOnOpen) keepDraft(drafted.text);
       }
     } catch (e) {
       if (isSubscriptionNeeded(e)) void refreshOnboarding();
@@ -68,7 +70,7 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
     } finally {
       setDrafting(false);
     }
-  }, [refreshOnboarding]);
+  }, [draftOnOpen, refreshOnboarding]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,8 +83,16 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
         latestText.current = positioning.text ?? '';
         setCanDraft(positioning.canDraft);
         setLoading('loaded');
-        // Same tick as the load, so the textarea never renders editable before the draft starts.
-        if (draftOnOpen && positioning.text === null && positioning.canDraft) void draft();
+        if (!draftOnOpen || positioning.text !== null) return;
+        const kept = keptDraft();
+        if (kept !== null) {
+          setText(kept);
+          latestText.current = kept;
+          setJustDrafted(true);
+        } else if (positioning.canDraft) {
+          // Same tick as the load, so the textarea never renders editable before the draft starts.
+          void draft();
+        }
       })
       .catch(() => !cancelled && setLoading('failed'));
     return () => {
@@ -120,6 +130,7 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
         setJustSaved(true);
       }
       track('positioning_saved');
+      if (draftOnOpen) forgetDraft();
       return latestText.current === positioning.text;
     } catch (e) {
       // A refusal for want of a Subscription sends the User to the Paywall, not to an error.
@@ -141,7 +152,7 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
     } finally {
       setSaving(false);
     }
-  }, [text, refreshOnboarding]);
+  }, [text, draftOnOpen, refreshOnboarding]);
 
   /** Shows `message` where a failed save's reason goes. */
   const fail = useCallback((message: string) => setError(message), []);
