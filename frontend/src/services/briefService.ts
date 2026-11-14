@@ -142,11 +142,12 @@ export function briefPosts(brief: Brief): { idea: Idea; post: BriefPost }[] {
  * The Ideas the Brief's page offers to write (ADR 0025). The single-post Idea and the split Ideas
  * are alternatives, so once a kind has a Post only Ideas of that kind are offered, the split ones
  * when both have; while none has, every split Idea in posting order and then the single-post one.
+ * An Idea with no Plan, which a Post from before Plans got, is never offered: it can't be written.
  * `posts/brief_reading.offered_ideas` counts them the same way for the recent Briefs; both run the
  * cases in `backend/tests/posts/offered_ideas_cases.json`.
  */
 export function notWrittenIdeas(brief: Brief): Idea[] {
-  const unwritten = brief.ideas.filter((idea) => !idea.post);
+  const unwritten = brief.ideas.filter((idea) => !idea.post && idea.plan);
   const split = unwritten.filter((idea) => !idea.wholeBrief);
   const written = briefPosts(brief);
   if (written.some(({ idea }) => !idea.wholeBrief)) return split;

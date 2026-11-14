@@ -350,7 +350,8 @@ async def create_scheduled_post(
     # Serializes the User's checks and charges of X posts until the commit.
     await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=new.post_id)
-    posts_service.check_not_writing(post, now=now)
+    # A failed Feedback goes too: a Scheduled post's Text takes no Feedback, so Resend would fail.
+    posts_service.take_text(post, now=now)
     if await service.get_for_post(db, post_id=post.id) is not None:
         raise _already_scheduled()
     parts = _text_of(post)
@@ -859,6 +860,8 @@ async def give_feedback(
     the Version replaces it, and a write that fails leaves it so.
     """
     now = clock()
+    # User then Post, as every write does, so two writes can't both take the last Generation.
+    await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
     next_version = await version_writing.prepare_next_version(

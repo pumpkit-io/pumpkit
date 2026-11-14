@@ -616,6 +616,26 @@ describe('Brief page', () => {
     expect(posts.getByRole('listitem', { name: B2B })).toHaveTextContent('Writing…');
   });
 
+  it("shows a write's answer over a read answered before the write was", async () => {
+    let answerWrite: (brief: Brief) => void = () => {};
+    vi.mocked(briefService.get).mockResolvedValue(brief({ 1: beingWritten('post_1') }));
+    vi.mocked(briefService.write).mockReturnValue(
+      new Promise((resolve) => (answerWrite = resolve)),
+    );
+    renderSignedIn('/briefs/brief_01');
+    await screen.findByText('Writing…');
+
+    const notWrittenList = within(await screen.findByRole('list', { name: 'Not written' }));
+    fireEvent.click(notWrittenList.getByRole('button', { name: `Write “${B2B}”` }));
+    await poll();
+    expect(briefService.get).toHaveBeenCalledTimes(2);
+    await act(async () =>
+      answerWrite(brief({ 1: beingWritten('post_1'), 2: beingWritten('post_2') })),
+    );
+
+    expect(await (await postCard(B2B)).findByText('Writing…')).toBeInTheDocument();
+  });
+
   it('keeps the page when the brief cannot be read after a write', async () => {
     vi.mocked(briefService.get)
       .mockResolvedValueOnce(brief({ 1: written('post_1', 'First.') }))

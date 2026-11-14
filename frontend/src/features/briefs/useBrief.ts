@@ -51,7 +51,8 @@ export function useBrief(briefId: string) {
   // A read after an action failed: the page keeps what it shows and reads again until one lands.
   const [stale, setStale] = useState(false);
   const { refresh: refreshSubscribed } = useSubscribed();
-  // Each read and action is numbered as it starts, so an answer older than the one shown is dropped.
+  // A read is numbered as it starts and an action's answer as it arrives, so a read that started
+  // before an action answered can't replace that answer.
   const started = useRef(0);
   const shown = useRef(0);
 
@@ -120,7 +121,7 @@ export function useBrief(briefId: string) {
     [refreshSubscribed],
   );
 
-  const act = useCallback(async (ideaId: string, request: (number: number) => Promise<void>) => {
+  const act = useCallback(async (ideaId: string, request: () => Promise<void>) => {
     setFailures((all) => {
       const others = { ...all };
       delete others[ideaId];
@@ -128,7 +129,7 @@ export function useBrief(briefId: string) {
     });
     setBusy((ids) => new Set(ids).add(ideaId));
     try {
-      await request(++started.current);
+      await request();
     } finally {
       setBusy((ids) => {
         const left = new Set(ids);
@@ -142,9 +143,10 @@ export function useBrief(briefId: string) {
   const write = useCallback(
     (ideaId: string) => {
       track('post_version_requested', { kind: 'brief' });
-      return act(ideaId, async (number) => {
+      return act(ideaId, async () => {
         try {
-          show({ number, brief: await briefService.write(briefId, [ideaId]) });
+          const brief = await briefService.write(briefId, [ideaId]);
+          show({ number: ++started.current, brief });
         } catch (e) {
           // An earlier request wrote it and its answer was lost: the Brief now shows its Post.
           if (errorCode(e) === 'IDEAS_ALREADY_WRITTEN' && (await refresh())) return;
@@ -159,11 +161,10 @@ export function useBrief(briefId: string) {
   const retry = useCallback(
     (ideaId: string, postId: string) => {
       track('post_version_requested', { kind: 'retry' });
-      return act(ideaId, async (number) => {
+      return act(ideaId, async () => {
         try {
           await postService.retry(postId);
-          if (number < shown.current) return;
-          shown.current = number;
+          shown.current = ++started.current;
           setLoad((now) =>
             now.kind === 'loaded'
               ? { kind: 'loaded', brief: withPostWriting(now.brief, postId) }

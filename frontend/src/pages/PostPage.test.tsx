@@ -6409,7 +6409,23 @@ describe('Discarding a draft from its page', () => {
     id: 'brief_01',
     text: 'ship small things',
     createdAt: '2026-10-10T12:00:30Z',
-    ideas: [{ id: 'idea_01', postingOrder: 1, wholeBrief: true, plan: null, post: null }],
+    ideas: [
+      {
+        id: 'idea_01',
+        postingOrder: 1,
+        wholeBrief: true,
+        plan: {
+          coreIdea: 'Ship small things.',
+          takeaway: 'Ship this week.',
+          funnel: 'middle',
+          desiredAction: 'bookmark',
+          format: 'post',
+          length: 'short',
+          structure: 'few_lines',
+        },
+        post: null,
+      },
+    ],
     generationsLeft: null,
   };
 
