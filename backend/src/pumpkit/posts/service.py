@@ -13,6 +13,7 @@ from pumpkit.posts.formats import FORMAT_POST, Format
 from pumpkit.posts.models import (
     ATTEMPT_FAILED,
     ATTEMPT_SUCCEEDED,
+    IDEA_ORDER,
     Brief,
     Idea,
     PlanCall,
@@ -156,7 +157,7 @@ async def post_ids_of_briefs(db: AsyncSession, *, brief_ids: set[str]) -> dict[s
         select(Idea.brief_id, Post.id)
         .join(Post, Post.idea_id == Idea.id)
         .where(Idea.brief_id.in_(brief_ids))
-        .order_by(Idea.whole_brief.desc(), Idea.posting_order, Idea.id)
+        .order_by(*IDEA_ORDER)
     )
     post_ids: dict[str, list[str]] = {}
     for brief_id, post_id in result.tuples():
