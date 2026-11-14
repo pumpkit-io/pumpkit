@@ -1,5 +1,5 @@
 import { mediaService, type Media, type UploadOptions } from '@/services/mediaService';
-import { postService } from '@/services/postService';
+import { isUnwritten, postService } from '@/services/postService';
 
 /** Where a Part's Media lives on the server: the Post's Text, or a Scheduled post's own copy. */
 export interface MediaPlace {
@@ -18,7 +18,10 @@ export function textMediaPlace(postId: string): MediaPlace {
     attach: (partNumber, file, options) => mediaService.attach(postId, partNumber, file, options),
     remove: (mediaId) => mediaService.remove(postId, mediaId),
     setAltText: (mediaId, altText) => mediaService.setAltText(postId, mediaId, altText),
-    read: async () => (await postService.get(postId)).textMedia,
+    read: async () => {
+      const post = await postService.get(postId);
+      return isUnwritten(post) ? [] : post.textMedia;
+    },
   };
 }
 
@@ -30,7 +33,10 @@ export function scheduledPostMediaPlace(postId: string, scheduledPostId: string)
     remove: (mediaId) => mediaService.removeFromScheduledPost(scheduledPostId, mediaId),
     setAltText: (mediaId, altText) =>
       mediaService.setScheduledPostAltText(scheduledPostId, mediaId, altText),
-    read: async () =>
-      (await postService.get(postId)).scheduledPost?.parts.map((part) => part.media) ?? [],
+    read: async () => {
+      const post = await postService.get(postId);
+      if (isUnwritten(post)) return [];
+      return post.scheduledPost?.parts.map((part) => part.media) ?? [];
+    },
   };
 }

@@ -3,11 +3,12 @@ from typing import BinaryIO
 
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pumpkit.auth.models import User
 from pumpkit.billing.dependencies import require_subscribed_user
-from pumpkit.core.db.session import get_async_db
+from pumpkit.core.background import TaskRegistry, get_background_tasks
+from pumpkit.core.db.session import get_async_db, get_session_maker
 from pumpkit.core.llm import LLM, get_llm
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.storage import FileStorage, get_file_storage
@@ -27,15 +28,48 @@ async def start_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     llm: LLM = Depends(get_llm),
+    tasks: TaskRegistry = Depends(get_background_tasks),
+    sessions: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
     clock: Clock = Depends(get_clock),
 ) -> PostResponse:
-    """Plans the Brief and writes the first Version before answering, which takes a few minutes."""
+    """
+    Plans the Brief and answers with the Post in its writing state: its first Version is written
+    in the background, which `GET /posts/{post_id}` shows when it ends.
+    """
     return await mediator.start_post(
         db=db,
         llm=llm,
+        tasks=tasks,
+        sessions=sessions,
         user=current_user,
         brief=start_request.brief,
-        now=clock(),
+        clock=clock,
+    )
+
+
+@router.post(
+    "/posts/{post_id}/retry", response_model=PostResponse, status_code=status.HTTP_202_ACCEPTED
+)
+@limiter.limit(WRITE_RATE)
+async def retry_post(
+    request: Request,
+    post_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    llm: LLM = Depends(get_llm),
+    tasks: TaskRegistry = Depends(get_background_tasks),
+    sessions: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
+    clock: Clock = Depends(get_clock),
+) -> PostResponse:
+    """Writes the first Version of a Post Pumpkit couldn't write again, in the background."""
+    return await mediator.retry_post(
+        db=db,
+        llm=llm,
+        tasks=tasks,
+        sessions=sessions,
+        user=current_user,
+        post_id=post_id,
+        clock=clock,
     )
 
 

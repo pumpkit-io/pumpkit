@@ -19,6 +19,7 @@ from pumpkit.connected_apps.router import (
     rate_limit_exceeded_handler,
 )
 from pumpkit.core.analytics import posthog_client
+from pumpkit.core.background import get_background_tasks
 from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
 from pumpkit.core.logging import logger, redact_access_log_paths
@@ -38,6 +39,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up application...")
     yield
     logger.info("Shutting down application...")
+    # Posts being written stay in their writing state, which the timeout reports as not written.
+    await get_background_tasks().cancel()
     # Flush any pending PostHog events before the process exits.
     posthog_client.shutdown()
 

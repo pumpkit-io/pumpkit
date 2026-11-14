@@ -25,6 +25,7 @@ from tests.posts.writing_replies import (
     merged,
     planned_post,
     sketched,
+    written_post,
 )
 
 POSTS = "/api/v1/posts"
@@ -109,8 +110,7 @@ async def test_a_user_with_a_positioning_and_no_inspiration_authors_writes_a_sin
 ):
     response = await _write(client, fake_llm, final="Trials went 12 → 31—in a week.")
 
-    assert response.status_code == 201, response.text
-    [version] = response.json()["versions"]
+    [version] = (await written_post(client, response))["versions"]
     assert [part["text"] for part in version["parts"]] == ["Trials went 12 -> 31 - in a week."]
     assert [call.response_model.__name__ for call in fake_llm.calls] == [
         POST_IDEAS,
@@ -300,13 +300,14 @@ async def test_a_failed_sketch_is_skipped_and_the_merge_reads_the_others(
 
 
 async def test_when_every_sketch_fails_the_attempt_fails_and_uses_no_generation(
-    client, db, ready, fake_llm, assert_reported_502
+    client, db, ready, fake_llm, fake_posthog
 ):
     fake_llm.standing[SKETCHED_POST] = LLMError("acme: APIConnectionError: down")
 
     response = await _write(client, fake_llm)
 
-    assert_reported_502(response)
+    assert (await written_post(client, response))["writing_state"] == "not_written"
+    fake_posthog.capture_exception.assert_called_once()
     assert _calls(fake_llm, MERGED_SKETCH) == []
     attempt = await _version(db)
     assert (attempt.status, attempt.parts) == ("failed", None)
@@ -315,13 +316,14 @@ async def test_when_every_sketch_fails_the_attempt_fails_and_uses_no_generation(
 
 
 async def test_a_merged_sketch_blank_after_the_scrub_fails_the_attempt_before_the_humanizer(
-    client, db, ready, fake_llm, assert_reported_502
+    client, db, ready, fake_llm, fake_posthog
 ):
     fake_llm.standing[MERGED_SKETCH] = merged("\u200b \n ")
 
     response = await _write(client, fake_llm)
 
-    assert_reported_502(response)
+    assert (await written_post(client, response))["writing_state"] == "not_written"
+    fake_posthog.capture_exception.assert_called_once()
     assert _calls(fake_llm, HUMANIZED_POST) == []
     attempt = await _version(db)
     assert attempt.status == "failed"
@@ -330,13 +332,14 @@ async def test_a_merged_sketch_blank_after_the_scrub_fails_the_attempt_before_th
 
 
 async def test_a_failed_humanizer_call_fails_the_attempt_and_uses_no_generation(
-    client, db, ready, fake_llm, assert_reported_502
+    client, db, ready, fake_llm, fake_posthog
 ):
     fake_llm.replies = [LLMError("acme: APIConnectionError: down")]
 
     response = await client.post(POSTS, json={"brief": BRIEF})
 
-    assert_reported_502(response)
+    assert (await written_post(client, response))["writing_state"] == "not_written"
+    fake_posthog.capture_exception.assert_called_once()
     assert (await _version(db)).status == "failed"
     assert await _generations_used(client) == 0
 
@@ -373,7 +376,8 @@ async def test_starting_a_single_post_over_mcp_needs_no_inspiration_author(
     result = await mcp.call_tool("start_post", brief=BRIEF)
 
     assert result["isError"] is False, result
-    [version] = result["structuredContent"]["versions"]
+    post = await mcp.call_tool("get_post", post_id=result["structuredContent"]["id"])
+    [version] = post["structuredContent"]["versions"]
     assert version["parts"][0]["text"] == "The final."
     assert len(_calls(fake_llm, SKETCHED_POST)) == 5
 

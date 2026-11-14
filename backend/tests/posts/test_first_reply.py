@@ -15,6 +15,7 @@ from tests.posts.writing_replies import (
     REVISED_THREAD,
     merged,
     revised,
+    written_post,
 )
 
 POSTS = "/api/v1/posts"
@@ -33,9 +34,7 @@ def _texts(parts: list[dict]) -> list[str]:
 async def _written(client, fake_llm, merged_reply, humanized_reply) -> dict:
     fake_llm.standing[MERGED_SKETCH] = merged("The post.", first_reply=merged_reply)
     fake_llm.replies = [{"post": "The post.", "first_reply": humanized_reply}]
-    response = await client.post(POSTS, json={"brief": BRIEF})
-    assert response.status_code == 201, response.text
-    return response.json()
+    return await written_post(client, await client.post(POSTS, json={"brief": BRIEF}))
 
 
 async def test_a_written_first_reply_is_the_last_part_of_a_single_post(client, ready, fake_llm):

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { postService, type PostListItem } from '@/services/postService';
+import { isUnwritten, postService, type PostListItem } from '@/services/postService';
 import { draftListItem, recentDraftIds } from './recentDrafts';
 
 /**
@@ -15,8 +15,10 @@ export function useRecentDrafts(): PostListItem[] | null {
       if (!live) return;
       setDrafts(
         answers.flatMap((answer) => {
-          if (answer.status !== 'fulfilled' || answer.value.status !== 'draft') return [];
-          const item = draftListItem(answer.value);
+          if (answer.status !== 'fulfilled') return [];
+          const post = answer.value;
+          if (isUnwritten(post) || post.status !== 'draft') return [];
+          const item = draftListItem(post);
           return item ? [item] : [];
         }),
       );

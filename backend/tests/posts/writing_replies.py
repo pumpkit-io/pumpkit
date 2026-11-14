@@ -163,3 +163,14 @@ async def start_thread(client, fake_llm, parts: list[str], brief: str = "ship sm
         return await client.post(POSTS, json={"brief": brief})
     finally:
         fake_llm.standing[POST_IDEAS] = before
+
+
+async def written_post(client, response) -> dict:
+    """
+    The Post a start `response` named, read once its first Version's write has ended, as
+    `GET /posts/{id}` answers it. The suite runs the write inside the request.
+    """
+    assert response.status_code == 201, response.text
+    read = await client.get(f"{POSTS}/{response.json()['id']}")
+    assert read.status_code == 200, read.text
+    return read.json()
