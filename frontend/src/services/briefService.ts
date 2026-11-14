@@ -59,8 +59,8 @@ export interface RecentBrief {
   id: string;
   /** The text on one line, cut with "…" when longer. */
   textStart: string;
-  createdAt: string;
   postsWritten: number;
+  /** Posts whose first Version is being written; one rewritten from Feedback counts as written. */
   postsWriting: number;
   /** Posts whose first Version failed or was lost. */
   postsNotWritten: number;
@@ -73,7 +73,6 @@ export interface RecentBrief {
 interface RecentBriefApi {
   id: string;
   text_start: string;
-  created_at: string;
   posts_written: number;
   posts_writing: number;
   posts_not_written: number;
@@ -143,7 +142,8 @@ export function briefPosts(brief: Brief): { idea: Idea; post: BriefPost }[] {
  * The Ideas the Brief's page offers to write (ADR 0025). The single-post Idea and the split Ideas
  * are alternatives, so once a kind has a Post only Ideas of that kind are offered, the split ones
  * when both have; while none has, every split Idea in posting order and then the single-post one.
- * `posts/brief_reading.offered_ideas` counts them the same way for the recent Briefs.
+ * `posts/brief_reading.offered_ideas` counts them the same way for the recent Briefs; both run the
+ * cases in `backend/tests/posts/offered_ideas_cases.json`.
  */
 export function notWrittenIdeas(brief: Brief): Idea[] {
   const unwritten = brief.ideas.filter((idea) => !idea.post);
@@ -173,13 +173,12 @@ export const briefService = {
     const { data } = await apiService.post<BriefApi>('/briefs', { brief });
     return toBrief(data);
   },
-  /** The User's latest ten Briefs, newest first. */
+  /** The User's latest Briefs, newest first. */
   recent: async (): Promise<RecentBrief[]> => {
     const { data } = await apiService.get<{ data: RecentBriefApi[] }>('/briefs');
     return data.data.map((brief) => ({
       id: brief.id,
       textStart: brief.text_start,
-      createdAt: brief.created_at,
       postsWritten: brief.posts_written,
       postsWriting: brief.posts_writing,
       postsNotWritten: brief.posts_not_written,

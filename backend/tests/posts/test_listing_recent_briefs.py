@@ -4,7 +4,7 @@ counts of its Posts by writing state and of the Ideas its page offers (ADR 0025)
 """
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import event
@@ -13,14 +13,17 @@ from pumpkit.core.config import settings
 from pumpkit.core.db.session import get_session_maker
 from pumpkit.core.llm import LLMCall, LLMError
 from pumpkit.main import app
-from pumpkit.posts.models import Post, VersionAttempt
+from pumpkit.posts.writing_state import WRITING_TIMEOUT
 from tests.positioning.positioning import save_positioning
+from tests.posts.generations import use_a_generation
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     POST_IDEAS,
+    REVISED_POST,
     SKETCHED_POST,
     ideas,
     planned_post,
+    revised,
 )
 
 BRIEFS = "/api/v1/briefs"
@@ -108,7 +111,6 @@ async def test_a_split_brief_counts_its_posts_by_state_and_the_ideas_still_offer
         {
             "id": planned["id"],
             "text_start": "Three things I learned from my SaaS.",
-            "created_at": "2026-10-10T12:00:30Z",
             "posts_written": 1,
             "posts_writing": 0,
             "posts_not_written": 1,
@@ -136,6 +138,25 @@ async def test_a_post_being_written_counts_as_writing(
     assert (brief["posts_written"], brief["posts_writing"]) == (1, 0)
 
 
+async def test_a_post_rewritten_from_feedback_counts_as_written(
+    client, ready, fake_llm, one_idea, background_tasks
+):
+    planned = await _plan(client)
+    await background_tasks.wait()
+    held = asyncio.Event()
+    fake_llm.held[REVISED_POST] = held
+    fake_llm.standing[REVISED_POST] = revised()
+    post_id = planned["ideas"][0]["post"]["id"]
+    given = await client.post(f"/api/v1/posts/{post_id}/versions", json={"feedback": "shorter"})
+    assert given.status_code == 202, given.text
+
+    [brief] = await _recent(client)
+
+    assert (brief["posts_written"], brief["posts_writing"]) == (1, 0)
+    held.set()
+    await background_tasks.wait()
+
+
 async def test_a_write_past_the_timeout_counts_as_not_written(
     client, ready, fake_llm, one_idea, background_tasks
 ):
@@ -143,7 +164,7 @@ async def test_a_write_past_the_timeout_counts_as_not_written(
     fake_llm.held[SKETCHED_POST] = held
     await _plan(client)
 
-    ready.advance(timedelta(minutes=16))
+    ready.advance(WRITING_TIMEOUT + timedelta(minutes=1))
 
     [brief] = await _recent(client)
     assert (brief["posts_writing"], brief["posts_not_written"]) == (0, 1)
@@ -186,30 +207,11 @@ async def test_once_the_whole_brief_is_written_no_split_idea_is_offered(client, 
     assert brief["ideas_offered"] == 0
 
 
-async def _use_a_generation(db, user_id: str) -> None:
-    moment = datetime(2026, 10, 2, tzinfo=timezone.utc)
-    post = Post(user_id=user_id, brief="earlier", corpus_post_ids=[], created_at=moment)
-    db.add(post)
-    await db.flush()
-    db.add(
-        VersionAttempt(
-            post_id=post.id,
-            sequence=1,
-            version_number=1,
-            format="post",
-            status="succeeded",
-            parts=["earlier"],
-            created_at=moment,
-        )
-    )
-    await db.commit()
-
-
 async def test_a_brief_stored_unwritten_for_want_of_generations_offers_its_idea(
     client, db, user, ready, one_idea, monkeypatch
 ):
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 1)
-    await _use_a_generation(db, user.id)
+    await use_a_generation(db, user.id)
     planned = await _plan(client)
 
     briefs = await _recent(client)
@@ -239,6 +241,40 @@ async def test_the_start_of_a_long_brief_is_cut_at_a_word_on_one_line(client, re
     assert brief["text_start"].startswith("so I've been testing something this week word")
     assert brief["text_start"].endswith("word…")
     assert len(brief["text_start"]) <= 101
+
+
+async def test_a_start_ending_with_a_whole_word_keeps_that_word(client, ready, split):
+    start = f"{'x' * 95} last"
+    await _plan(client, f"{start} more words follow")
+
+    [brief] = await _recent(client)
+
+    assert brief["text_start"] == f"{start}…"
+
+
+async def test_a_start_read_with_much_whitespace_leaves_out_a_word_cut_by_the_read(
+    client, ready, split
+):
+    await _plan(client, f"start{' ' * 390}abcdefghij more")
+
+    [brief] = await _recent(client)
+
+    assert brief["text_start"] == "start…"
+
+
+@pytest.mark.parametrize(
+    "joined",
+    ["\U0001f469\u200d\U0001f4bb", "e\u0301", "\U0001f44d\U0001f3fd", "\U0001f1ee\U0001f1f9"],
+    ids=["an emoji sequence", "a combining mark", "a skin tone", "a flag"],
+)
+async def test_a_first_word_too_long_is_cut_between_characters_as_read(
+    client, ready, split, joined
+):
+    await _plan(client, f"{'a' * 99}{joined}{'b' * 20}")
+
+    [brief] = await _recent(client)
+
+    assert brief["text_start"] == f"{'a' * 99}…"
 
 
 async def test_another_users_briefs_are_not_listed(

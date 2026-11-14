@@ -976,7 +976,6 @@ function recentBrief(changes: Partial<RecentBrief>): RecentBrief {
   return {
     id: 'brief_recent',
     textStart: 'so I have been testing something this week…',
-    createdAt: '2026-10-10T12:00:30Z',
     postsWritten: 0,
     postsWriting: 0,
     postsNotWritten: 0,
@@ -1063,13 +1062,14 @@ describe('Recent briefs on New post', () => {
 
     const list = await recentBriefs();
     expect(list.getByRole('heading', { level: 2, name: 'Recent briefs' })).toBeVisible();
-    const rows = list.getAllByRole('link').map((row) => row.textContent);
-    expect(rows).toEqual([
-      'so I have been testing something this week…3 of 4 written',
-      'I want to write about my SaaS failures…5 written',
-      'a brief planned with no room leftNot written yet',
-      "three things about pricing1 post couldn't be written",
-    ]);
+    const rows = list.getAllByRole('link');
+    expect(rows).toHaveLength(4);
+    expect(rows[0]).toHaveAccessibleName(
+      'so I have been testing something this week…, 3 of 4 written',
+    );
+    expect(rows[1]).toHaveAccessibleName('I want to write about my SaaS failures…, 5 written');
+    expect(rows[2]).toHaveAccessibleName('a brief planned with no room left, Not written yet');
+    expect(rows[3]).toHaveAccessibleName("three things about pricing, 1 post couldn't be written");
   });
 
   it('shows a brief with a post being written as writing', async () => {
@@ -1078,7 +1078,7 @@ describe('Recent briefs on New post', () => {
 
     const list = await recentBriefs();
     expect(
-      list.getByRole('link', { name: /^two separate things I learned this month….*Writing…$/ }),
+      list.getByRole('link', { name: 'two separate things I learned this month…, Writing…' }),
     ).toBeVisible();
   });
 

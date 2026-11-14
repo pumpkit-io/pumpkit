@@ -1,5 +1,9 @@
-"""A Brief with its Ideas and their Posts as its page reads it (ADR 0025)."""
+"""
+Reading Briefs (ADR 0025): one with its Ideas and their Posts as its page reads it, and the
+User's latest as New post lists them.
+"""
 
+import unicodedata
 from datetime import datetime
 from typing import Optional, Sequence
 
@@ -23,13 +27,19 @@ from pumpkit.posts.version_writing import (
     plan_response,
     text_response,
 )
-from pumpkit.posts.writing_state import NOT_WRITTEN, WRITING, writing_state
+from pumpkit.posts.writing_state import NOT_WRITTEN, WRITING, WritingState, writing_state
 
 # New post lists this many of the User's latest Briefs.
 RECENT_BRIEFS = 10
 TEXT_START_CHARS = 100
-# Read from the database, enough for whitespace collapsed away to leave a full start.
+# Briefs run to 200,000 characters, so only this much is read. Four times the start still fills it
+# unless whitespace takes three quarters of what is read; then the start is shorter, at a whole word.
 TEXT_START_READ = TEXT_START_CHARS * 4
+_MARKS = {"Mn", "Mc", "Me"}
+_ZWJ = "\u200d"
+_EMOJI_MODIFIERS = ("\U0001f3fb", "\U0001f3ff")
+_TAGS = ("\U000e0020", "\U000e007f")
+_REGIONAL_INDICATORS = ("\U0001f1e6", "\U0001f1ff")
 
 
 async def user_brief(db: AsyncSession, *, user: User, brief_id: str) -> Brief:
@@ -83,7 +93,8 @@ def offered_ideas(ideas: Sequence[tuple[Idea, Optional[Post]]]) -> list[Idea]:
     """
     The Ideas a Brief's page offers under "Not written" (ADR 0025): only the kind that has a Post,
     the split Ideas when both have; while none has, every split Idea and then the single-post one.
-    The web app's `notWrittenIdeas` applies the same rule to the Brief it reads.
+    The web app's `notWrittenIdeas` applies the same rule to the Brief it reads; both run the cases in
+    `tests/posts/offered_ideas_cases.json`.
     """
     unwritten = [idea for idea, post in ideas if post is None]
     split = [idea for idea in unwritten if not idea.whole_brief]
@@ -95,17 +106,53 @@ def offered_ideas(ideas: Sequence[tuple[Idea, Optional[Post]]]) -> list[Idea]:
     return [*split, *(idea for idea in unwritten if idea.whole_brief)]
 
 
-def text_start(text: str, *, runs_on: bool = False) -> str:
+def _continues(line: str, at: int) -> bool:
+    """Whether the character at `at` joins the one before it into what a reader sees as one."""
+    char = line[at]
+    if unicodedata.category(char) in _MARKS or line[at - 1] == _ZWJ or char == _ZWJ:
+        return True
+    if _EMOJI_MODIFIERS[0] <= char <= _EMOJI_MODIFIERS[1] or _TAGS[0] <= char <= _TAGS[1]:
+        return True
+    if not _is_regional_indicator(char):
+        return False
+    # Flags are pairs of regional indicators, so an odd run before `at` is half a flag.
+    run = 0
+    while at - run - 1 >= 0 and _is_regional_indicator(line[at - run - 1]):
+        run += 1
+    return run % 2 == 1
+
+
+def _is_regional_indicator(char: str) -> bool:
+    return _REGIONAL_INDICATORS[0] <= char <= _REGIONAL_INDICATORS[1]
+
+
+def _cut(line: str, at: int) -> str:
+    """`line` up to `at`, at the last space when one ends a word before it, else between characters."""
+    if line[at] == " ":
+        return line[:at]
+    space = line.rfind(" ", 0, at)
+    if space > 0:
+        return line[:space]
+    while at > 1 and _continues(line, at):
+        at -= 1
+    return line[:at]
+
+
+def text_start(read: str) -> str:
     """
-    The text on one line, cut at the last word that fits with "…" when it runs longer, or when
-    `runs_on` says the text given is only its beginning.
+    The text on one line, cut at the last word that fits with "…" when it runs longer. `read` is the
+    text's first `TEXT_START_READ` characters and one more when there are more, as Briefs are read.
     """
-    line = " ".join(text.split())
+    runs_on = len(read) > TEXT_START_READ
+    window = read[:TEXT_START_READ]
+    if runs_on and not read[TEXT_START_READ].isspace():
+        # The read stopped inside a word, which is left out unless it is all that was read.
+        last_space = max((i for i, c in enumerate(window) if c.isspace()), default=0)
+        window = window[:last_space] if last_space else window
+    line = " ".join(window.split())
     if len(line) <= TEXT_START_CHARS:
         return f"{line}…" if runs_on else line
-    cut = line[:TEXT_START_CHARS]
-    space = cut.rfind(" ")
-    return f"{(cut[:space] if space > 0 else cut).rstrip()}…"
+    return f"{_cut(line, TEXT_START_CHARS)}…"
 
 
 async def recent_briefs(db: AsyncSession, *, user: User, now: datetime) -> RecentBriefsResponse:
@@ -114,16 +161,20 @@ async def recent_briefs(db: AsyncSession, *, user: User, now: datetime) -> Recen
     latest = await service.latest_briefs(
         db, user_id=user.id, limit=RECENT_BRIEFS, text_chars=TEXT_START_READ + 1
     )
-    ideas = await service.ideas_and_posts_of_briefs(db, brief_ids=[id_ for id_, _, _ in latest])
+    ideas = await service.ideas_and_posts_of_briefs(db, brief_ids=[id_ for id_, _ in latest])
 
-    def recent(brief_id: str, text: str, created_at: datetime) -> RecentBriefResponse:
+    def listed_state(post: Post) -> Optional[WritingState]:
+        # "Writing…" means a Post the User hasn't seen, so one rewritten from Feedback is written.
+        state = writing_state(post, now=now)
+        return None if state == WRITING and post.text_version_number is not None else state
+
+    def recent(brief_id: str, text: str) -> RecentBriefResponse:
         of_brief = ideas.get(brief_id, [])
         posts = [post for _, post in of_brief if post is not None]
-        states = [writing_state(post, now=now) for post in posts]
+        states = [listed_state(post) for post in posts]
         return RecentBriefResponse(
             id=brief_id,
-            text_start=text_start(text[:TEXT_START_READ], runs_on=len(text) > TEXT_START_READ),
-            created_at=as_utc(created_at),
+            text_start=text_start(text),
             posts_written=states.count(None),
             posts_writing=states.count(WRITING),
             posts_not_written=states.count(NOT_WRITTEN),

@@ -10,19 +10,15 @@ export const RECENT_BRIEFS_POLL_MS = 10_000;
 const recentBriefsDelay = (failures: number) =>
   Math.min(RECENT_BRIEFS_POLL_MS * 2 ** failures, WRITING_POLL_MAX_MS);
 
-/**
- * A Brief's state in one label (ADR 0025): "Writing…" while any of its Posts is written, then any
- * Post that couldn't be written, then "Not written yet" with no Post, otherwise its page header's
- * "n of m written", or "n written" when no Idea is left to offer.
- */
+/** A Brief's state in one label, by ADR 0025's order. */
 export function recentBriefLabel(brief: RecentBrief): string {
   if (brief.postsWriting > 0) return 'Writing…';
   if (brief.postsNotWritten === 1) return "1 post couldn't be written";
   if (brief.postsNotWritten > 1) return `${brief.postsNotWritten} posts couldn't be written`;
-  const posts = brief.postIds.length;
-  if (posts === 0) return 'Not written yet';
-  if (brief.ideasOffered > 0) return `${posts} of ${posts + brief.ideasOffered} written`;
-  return `${posts} written`;
+  const written = brief.postsWritten;
+  if (written === 0) return 'Not written yet';
+  if (brief.ideasOffered > 0) return `${written} of ${written + brief.ideasOffered} written`;
+  return `${written} written`;
 }
 
 /** Where a row opens: the Brief's page, or its Post when the page would open that instead. */
@@ -70,21 +66,25 @@ export function RecentBriefs() {
         Recent briefs
       </h2>
       <ul className="divide-y divide-border border-y border-border">
-        {briefs.map((brief) => (
-          <li key={brief.id}>
-            <Link
-              to={pathOf(brief)}
-              className="group flex min-h-11 items-baseline justify-between gap-4 rounded-sm py-2.5 font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <span className="min-w-0 truncate text-sm text-foreground underline-offset-2 group-hover:underline">
-                {brief.textStart}
-              </span>
-              <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
-                {recentBriefLabel(brief)}
-              </span>
-            </Link>
-          </li>
-        ))}
+        {briefs.map((brief) => {
+          const label = recentBriefLabel(brief);
+          return (
+            <li key={brief.id}>
+              <Link
+                to={pathOf(brief)}
+                aria-label={`${brief.textStart}, ${label}`}
+                className="group flex min-h-11 items-baseline justify-between gap-4 rounded-sm py-2.5 font-sans focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="min-w-0 truncate text-sm text-foreground underline-offset-2 group-hover:underline">
+                  {brief.textStart}
+                </span>
+                <span className="shrink-0 text-[13px] tabular-nums text-muted-foreground">
+                  {label}
+                </span>
+              </Link>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );

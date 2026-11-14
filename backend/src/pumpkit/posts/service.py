@@ -167,15 +167,15 @@ async def post_ids_of_briefs(db: AsyncSession, *, brief_ids: set[str]) -> dict[s
 
 async def latest_briefs(
     db: AsyncSession, *, user_id: str, limit: int, text_chars: int
-) -> list[tuple[str, str, datetime]]:
-    """The User's latest Briefs, newest first, as id, the first `text_chars` of the text and time."""
+) -> list[tuple[str, str]]:
+    """The User's latest Briefs, newest first, as id and the first `text_chars` of the text."""
     result = await db.execute(
-        select(Brief.id, func.substr(Brief.text, 1, text_chars), Brief.created_at)
+        select(Brief.id, func.substr(Brief.text, 1, text_chars))
         .where(Brief.user_id == user_id)
         .order_by(Brief.created_at.desc(), Brief.id.desc())
         .limit(limit)
     )
-    return [(brief_id, text, created_at) for brief_id, text, created_at in result.tuples()]
+    return [(brief_id, text) for brief_id, text in result.tuples()]
 
 
 async def ideas_and_posts_of_briefs(

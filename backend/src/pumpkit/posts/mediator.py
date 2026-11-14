@@ -22,12 +22,12 @@ from pumpkit.core.time import Clock
 from pumpkit.positioning import service as positioning_service
 from pumpkit.posts import media as media_service
 from pumpkit.posts import service
-from pumpkit.posts.brief_reading import brief_response, user_brief
+from pumpkit.posts.brief_reading import brief_response, recent_briefs, user_brief
 from pumpkit.posts.media_files import PREVIEW_CONTENT_TYPE
 from pumpkit.posts.models import Brief, Idea, Post
 from pumpkit.posts.plan_calls import count_plan_call
 from pumpkit.posts.plans import Plan
-from pumpkit.posts.schemas import BriefResponse, PostResponse
+from pumpkit.posts.schemas import BriefResponse, PostResponse, RecentBriefsResponse
 from pumpkit.posts.version_writing import (
     char_limit_for,
     charge_generation,
@@ -45,6 +45,10 @@ from pumpkit.posts.writing_state import WRITING, writing_state
 
 # Where the User saves their Positioning.
 PERSONA_PAGE = "/persona"
+
+
+async def list_recent_briefs(db: AsyncSession, user: User, clock: Clock) -> RecentBriefsResponse:
+    return await recent_briefs(db, user=user, now=clock())
 
 
 async def plan_brief(

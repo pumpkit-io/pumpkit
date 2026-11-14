@@ -1,0 +1,37 @@
+[
+  {
+    "note": "with no post, every split idea and then the whole brief",
+    "ideas": [["whole", null], ["split_1", null], ["split_2", null]],
+    "offered": ["split_1", "split_2", "whole"]
+  },
+  {
+    "note": "a one-idea brief with no post offers its idea",
+    "ideas": [["whole", null]],
+    "offered": ["whole"]
+  },
+  {
+    "note": "once the whole brief has a post, nothing",
+    "ideas": [["whole", "written"], ["split_1", null], ["split_2", null]],
+    "offered": []
+  },
+  {
+    "note": "once a split idea has a post, the split ideas left",
+    "ideas": [["whole", null], ["split_1", "written"], ["split_2", null]],
+    "offered": ["split_2"]
+  },
+  {
+    "note": "with posts of both kinds, the split ideas left",
+    "ideas": [["whole", "written"], ["split_1", "written"], ["split_2", null]],
+    "offered": ["split_2"]
+  },
+  {
+    "note": "a post not written still counts as the idea's post",
+    "ideas": [["whole", null], ["split_1", "not_written"], ["split_2", null]],
+    "offered": ["split_2"]
+  },
+  {
+    "note": "a post being written still counts as the idea's post",
+    "ideas": [["whole", null], ["split_1", "writing"], ["split_2", null]],
+    "offered": ["split_2"]
+  }
+]

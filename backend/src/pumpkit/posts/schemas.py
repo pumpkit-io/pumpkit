@@ -216,8 +216,8 @@ class RecentBriefResponse(BaseModel):
     id: str
     # The text on one line, cut at a word with "…" when longer.
     text_start: str
-    created_at: datetime
-    # Its Posts by writing state: written, being written, and not written (failed or lost).
+    # Its Posts by writing state: written, first Version being written, and not written (failed
+    # or lost). A Post rewritten from Feedback counts as written.
     posts_written: int
     posts_writing: int
     posts_not_written: int

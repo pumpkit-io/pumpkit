@@ -13,7 +13,7 @@ from pumpkit.core.llm import LLM, get_llm
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
-from pumpkit.posts import brief_reading, mediator
+from pumpkit.posts import mediator
 from pumpkit.posts.schemas import (
     WRITE_RATE,
     BriefRequest,
@@ -60,8 +60,8 @@ async def list_recent_briefs(
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
 ) -> RecentBriefsResponse:
-    """The User's latest ten Briefs, newest first, with their Posts counted by writing state."""
-    return await brief_reading.recent_briefs(db, user=current_user, now=clock())
+    """The User's latest Briefs, newest first, with their Posts counted by writing state."""
+    return await mediator.list_recent_briefs(db, current_user, clock)
 
 
 @router.post(
