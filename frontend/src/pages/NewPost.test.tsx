@@ -54,9 +54,12 @@ vi.mock('@/services/postService', async (importOriginal) => ({
       nextOffset: null,
     }),
     get: vi.fn(),
-    start: vi.fn(),
     addVersion: vi.fn(),
   },
+}));
+vi.mock('@/services/briefService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/briefService')>()),
+  briefService: { plan: vi.fn(), get: vi.fn(), write: vi.fn() },
 }));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
@@ -89,7 +92,8 @@ import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { positioningService } from '@/services/positioningService';
-import { postService, type PostDetail, type UnwrittenPost } from '@/services/postService';
+import { briefService, type Brief } from '@/services/briefService';
+import { postService, type PostDetail } from '@/services/postService';
 import { usageService } from '@/services/usageService';
 import { xConnectionService } from '@/services/xConnectionService';
 import {
@@ -99,6 +103,7 @@ import {
   SUBSCRIBED,
   allowanceUsedUp,
   apiError,
+  currentPath,
   renderSignedIn,
   usageWith,
 } from './testing/signedInApp';
@@ -142,26 +147,93 @@ function postWith(final: string): PostDetail {
   };
 }
 
-/** A Subscribed User, ready to write. */
-/** What starting a Post answers: the Post, its first Version being written. */
-const STARTED: UnwrittenPost = {
-  id: 'post_01',
-  brief: 'ship small things',
-  plan: null,
-  writingState: 'writing',
+const CORE_IDEAS = [
+  'Make sure the pain is real before you build',
+  "B2B demand doesn't prove B2C demand",
+  "Don't make OAuth integrations your core value",
+];
+
+function ideaOf(id: string, coreIdea: string, postingOrder: number, wholeBrief = false) {
+  return {
+    id,
+    postingOrder,
+    wholeBrief,
+    plan: {
+      coreIdea,
+      takeaway: 'Ship it.',
+      funnel: 'middle' as const,
+      desiredAction: 'bookmark' as const,
+      format: 'post' as const,
+      length: 'short' as const,
+      structure: 'few_lines',
+    },
+    post: null,
+  };
+}
+
+/** What planning a Brief of three separate ideas answers: its Ideas, nothing written yet. */
+const SPLIT: Brief = {
+  id: 'brief_02',
+  text: 'three things I learned from my failed SaaS',
+  createdAt: '2026-10-10T12:00:30Z',
+  ideas: [
+    ideaOf('idea_whole', 'Three lessons from a failed SaaS', 1, true),
+    ...CORE_IDEAS.map((coreIdea, index) => ideaOf(`idea_${index + 1}`, coreIdea, index + 1)),
+  ],
+  generationsLeft: 382,
 };
+
+/** The Brief as writing `ideaIds` answers it, each one's Post being written. */
+function writing(brief: Brief, ideaIds: string[]): Brief {
+  return {
+    ...brief,
+    ideas: brief.ideas.map((idea) =>
+      ideaIds.includes(idea.id)
+        ? { ...idea, post: { id: `post_${idea.id}`, writingState: 'writing', text: null } }
+        : idea,
+    ),
+  };
+}
+
+/** What planning a Brief of one idea answers: its Post, its first Version being written. */
+const STARTED: Brief = {
+  id: 'brief_01',
+  text: 'ship small things',
+  createdAt: '2026-10-10T12:00:30Z',
+  ideas: [
+    {
+      id: 'idea_01',
+      postingOrder: 1,
+      wholeBrief: true,
+      plan: null,
+      post: { id: 'post_01', writingState: 'writing', text: null },
+    },
+  ],
+  generationsLeft: 381,
+};
+
+/** A Brief of one idea planned when there was no room to write it: its Post isn't started. */
+function unwritten(generationsLeft: number): Brief {
+  return {
+    id: 'brief_03',
+    text: 'ship small things',
+    createdAt: '2026-10-10T12:00:30Z',
+    ideas: [ideaOf('idea_only', 'Ship small things, often', 1, true)],
+    generationsLeft,
+  };
+}
 
 async function readyToWrite() {
   vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
   renderNewPost();
   const area = await writer();
-  await area.findByRole('button', { name: 'Write the post' });
+  await area.findByRole('button', { name: 'Plan posts' });
   return area;
 }
 
 async function writeBrief(area: Awaited<ReturnType<typeof writer>>, brief: string) {
   fireEvent.change(area.getByLabelText('Brief'), { target: { value: brief } });
-  fireEvent.click(area.getByRole('button', { name: 'Write the post' }));
+  fireEvent.click(area.getByRole('button', { name: 'Plan posts' }));
 }
 
 /** Make billing offer a €10 Top-up, behind Terms of `termsVersion`, for this test only. */
@@ -185,7 +257,7 @@ describe('New post', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(NOT_SUBSCRIBED);
-    vi.mocked(postService.start).mockReset();
+    vi.mocked(briefService.plan).mockReset();
     vi.mocked(positioningService.get)
       .mockReset()
       .mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true });
@@ -246,15 +318,13 @@ describe('New post', () => {
       const area = await writer();
       fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
 
-      await waitFor(() =>
-        expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled(),
-      );
+      await waitFor(() => expect(area.getByRole('button', { name: 'Plan posts' })).toBeEnabled());
       expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
     });
 
     it('lets a User with no Inspiration author write, since the planner chooses a single post or a thread', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(postService.start).mockResolvedValue(STARTED);
+      vi.mocked(briefService.plan).mockResolvedValue(STARTED);
       renderNewPost();
 
       const area = await writer();
@@ -263,12 +333,10 @@ describe('New post', () => {
       fireEvent.change(area.getByLabelText('Brief'), {
         target: { value: 'five lessons from shipping weekly, as a thread' },
       });
-      await waitFor(() =>
-        expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled(),
-      );
-      fireEvent.click(area.getByRole('button', { name: 'Write the post' }));
+      await waitFor(() => expect(area.getByRole('button', { name: 'Plan posts' })).toBeEnabled());
+      fireEvent.click(area.getByRole('button', { name: 'Plan posts' }));
 
-      expect(postService.start).toHaveBeenCalledWith(
+      expect(briefService.plan).toHaveBeenCalledWith(
         'five lessons from shipping weekly, as a thread',
       );
       expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
@@ -282,7 +350,7 @@ describe('New post', () => {
       const area = await writer();
       const setUp = await area.findByRole('link', { name: 'Set up your persona' });
       expect(setUp).toHaveAttribute('href', '/persona');
-      expect(area.queryByRole('button', { name: 'Write the post' })).not.toBeInTheDocument();
+      expect(area.queryByRole('button', { name: 'Plan posts' })).not.toBeInTheDocument();
     });
 
     it('keeps the write button when the Positioning could not be read, so the refusal can say why', async () => {
@@ -291,35 +359,33 @@ describe('New post', () => {
 
       fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
 
-      await waitFor(() =>
-        expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled(),
-      );
+      await waitFor(() => expect(area.getByRole('button', { name: 'Plan posts' })).toBeEnabled());
       expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
     });
 
     it('greys out the send arrow until something is typed', async () => {
       const area = await readyToWrite();
-      expect(area.getByRole('button', { name: 'Write the post' })).toBeDisabled();
+      expect(area.getByRole('button', { name: 'Plan posts' })).toBeDisabled();
 
       fireEvent.change(area.getByLabelText('Brief'), { target: { value: '   ' } });
-      expect(area.getByRole('button', { name: 'Write the post' })).toBeDisabled();
+      expect(area.getByRole('button', { name: 'Plan posts' })).toBeDisabled();
 
       fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
-      expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled();
+      expect(area.getByRole('button', { name: 'Plan posts' })).toBeEnabled();
     });
 
     it.each([
       ['⌘Enter', { metaKey: true }],
       ['Ctrl+Enter', { ctrlKey: true }],
     ])('sends the Brief with %s', async (_, modifier) => {
-      vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
+      vi.mocked(briefService.plan).mockReturnValue(new Promise(() => {}));
       const area = await readyToWrite();
       const brief = area.getByLabelText('Brief');
       fireEvent.change(brief, { target: { value: 'ship small things' } });
 
       fireEvent.keyDown(brief, { key: 'Enter', ...modifier });
 
-      expect(postService.start).toHaveBeenCalledWith('ship small things');
+      expect(briefService.plan).toHaveBeenCalledWith('ship small things');
     });
 
     it('leaves Enter alone, so it adds a newline instead of sending', async () => {
@@ -330,22 +396,22 @@ describe('New post', () => {
       const enter = fireEvent.keyDown(brief, { key: 'Enter' });
 
       expect(enter).toBe(true);
-      expect(postService.start).not.toHaveBeenCalled();
+      expect(briefService.plan).not.toHaveBeenCalled();
     });
 
     it("plans the Brief, locking the composer while it waits, then opens the Post's page", async () => {
-      let answer: (post: UnwrittenPost) => void = () => {};
-      vi.mocked(postService.start).mockReturnValue(new Promise((resolve) => (answer = resolve)));
+      let answer: (brief: Brief) => void = () => {};
+      vi.mocked(briefService.plan).mockReturnValue(new Promise((resolve) => (answer = resolve)));
       const area = await readyToWrite();
 
       await writeBrief(area, 'ship small things');
 
       expect(area.getByLabelText('Brief')).toBeDisabled();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
-      expect(area.getByRole('button', { name: /writing/i })).toBeDisabled();
+      expect(area.getByRole('button', { name: 'Reading your brief…' })).toBeDisabled();
       expect(area.getByRole('status')).toHaveTextContent('Reading your brief…');
-      expect(postService.start).toHaveBeenCalledWith('ship small things');
-      expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'brief' });
+      expect(briefService.plan).toHaveBeenCalledWith('ship small things');
+      expect(track).not.toHaveBeenCalledWith('post_version_requested', expect.anything());
 
       answer(STARTED);
 
@@ -357,6 +423,9 @@ describe('New post', () => {
       const card = within(await screen.findByRole('article', { name: 'Text' }));
       expect(card.getByText('the final text')).toBeInTheDocument();
       expect(postService.get).toHaveBeenCalledWith('post_01');
+      expect(vi.mocked(track).mock.calls.filter(([e]) => e === 'post_version_requested')).toEqual([
+        ['post_version_requested', { kind: 'brief' }],
+      ]);
     });
 
     it('empties the form on New post', async () => {
@@ -375,7 +444,7 @@ describe('New post', () => {
     });
 
     it('shows a failure, keeps the Brief and retries it as a new Post', async () => {
-      vi.mocked(postService.start)
+      vi.mocked(briefService.plan)
         .mockRejectedValueOnce(apiError(502, 'Writing the post failed. Please try again.'))
         .mockResolvedValueOnce(STARTED);
       const area = await readyToWrite();
@@ -389,17 +458,18 @@ describe('New post', () => {
           Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
-      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+      expect(track).toHaveBeenCalledWith('brief_plan_failed');
+      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
 
       fireEvent.click(area.getByRole('button', { name: 'Try again' }));
 
       expect(await screen.findByRole('article', { name: 'Text' })).toBeInTheDocument();
-      expect(postService.start).toHaveBeenCalledTimes(2);
-      expect(postService.start).toHaveBeenNthCalledWith(2, 'ship small things');
+      expect(briefService.plan).toHaveBeenCalledTimes(2);
+      expect(briefService.plan).toHaveBeenNthCalledWith(2, 'ship small things');
     });
 
     it('says when the User can write again once they reach the hourly limit', async () => {
-      vi.mocked(postService.start).mockRejectedValue(
+      vi.mocked(briefService.plan).mockRejectedValue(
         apiError(429, "You've made 30 attempts at a version in the last hour.", {
           retry_at: new Date(2026, 9, 6, 15, 42).toISOString(),
         }),
@@ -419,7 +489,7 @@ describe('New post', () => {
     });
 
     it('shows the Allowance refusal in place of the error banner', async () => {
-      vi.mocked(postService.start).mockRejectedValue(
+      vi.mocked(briefService.plan).mockRejectedValue(
         allowanceUsedUp(
           "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
         ),
@@ -437,7 +507,7 @@ describe('New post', () => {
       expect(area.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
       expect(area.getByLabelText('Brief')).toHaveValue('ship small things');
       expect(track).toHaveBeenCalledWith('allowance_used_up', { ran_out: 'generations' });
-      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+      expect(track).not.toHaveBeenCalledWith('brief_plan_failed');
     });
 
     it('says how many generations are left once less than 10% is left', async () => {
@@ -460,7 +530,7 @@ describe('New post', () => {
     });
 
     it('offers to update the payment method to a User behind on payment at the limit', async () => {
-      vi.mocked(postService.start).mockRejectedValue(
+      vi.mocked(briefService.plan).mockRejectedValue(
         allowanceUsedUp(
           "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
           { way_out: 'update_payment' },
@@ -477,7 +547,7 @@ describe('New post', () => {
 
     it('offers a paid-up User at the limit to buy a top-up, behind the Terms', async () => {
       sellingTopUps('2026-10-11');
-      vi.mocked(postService.start).mockRejectedValue(
+      vi.mocked(briefService.plan).mockRejectedValue(
         allowanceUsedUp(
           "You've used this period's 500 generations. They reset on 14 November. Failed attempts don't count.",
           { way_out: 'top_up' },
@@ -516,7 +586,7 @@ describe('New post', () => {
 
     it("shows the API's refusal of a top-up checkout in the dialog", async () => {
       sellingTopUps(null);
-      vi.mocked(postService.start).mockRejectedValue(
+      vi.mocked(briefService.plan).mockRejectedValue(
         allowanceUsedUp("You've used this period's 500 generations.", { way_out: 'top_up' }),
       );
       vi.mocked(billingService.startTopUpCheckout).mockRejectedValue(
@@ -555,7 +625,7 @@ describe('New post', () => {
         topUp: null,
       });
       vi.mocked(billingService.subscribeNow).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(postService.start).mockRejectedValue(
+      vi.mocked(briefService.plan).mockRejectedValue(
         allowanceUsedUp(
           "You've used your trial's 125 generations. Your trial ends on 14 November. Failed attempts don't count.",
           { way_out: 'subscribe_now' },
@@ -582,7 +652,7 @@ describe('New post', () => {
     });
 
     it('asks for billing once when the subscribe now dialog fails to load it', async () => {
-      vi.mocked(postService.start).mockRejectedValue(
+      vi.mocked(briefService.plan).mockRejectedValue(
         allowanceUsedUp("You've used your trial's 125 generations.", {
           way_out: 'subscribe_now',
         }),
@@ -609,25 +679,25 @@ describe('New post', () => {
       [403, 'This needs a subscription. Subscribe to continue.'],
       [422, 'The Brief is too long.'],
       [429, "You've made 30 attempts at a version in the last hour."],
-    ])('does not count a refusal with a %i as a failed version', async (status, detail) => {
-      vi.mocked(postService.start).mockRejectedValue(apiError(status, detail));
+    ])('does not count a refusal with a %i as a failed plan', async (status, detail) => {
+      vi.mocked(briefService.plan).mockRejectedValue(apiError(status, detail));
       const area = await readyToWrite();
 
       await writeBrief(area, 'ship small things');
 
-      await waitFor(() => expect(postService.start).toHaveBeenCalled());
+      await waitFor(() => expect(briefService.plan).toHaveBeenCalled());
       await waitFor(() => expect(area.getByLabelText('Brief')).toBeEnabled());
-      expect(track).not.toHaveBeenCalledWith('post_version_failed', expect.anything());
+      expect(track).not.toHaveBeenCalledWith('brief_plan_failed');
     });
 
-    it('counts a failure without a response as a failed version', async () => {
-      vi.mocked(postService.start).mockRejectedValue(new Error('Network Error'));
+    it('counts a failure without a response as a failed plan', async () => {
+      vi.mocked(briefService.plan).mockRejectedValue(new Error('Network Error'));
       const area = await readyToWrite();
 
       await writeBrief(area, 'ship small things');
 
       expect(await area.findByRole('alert')).toBeInTheDocument();
-      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+      expect(track).toHaveBeenCalledWith('brief_plan_failed');
     });
 
     it('shows a length counter only near the Brief limit, and refuses a Brief over it', async () => {
@@ -639,11 +709,11 @@ describe('New post', () => {
 
       fireEvent.change(brief, { target: { value: 'a'.repeat(195_000) } });
       expect(area.getByText('195,000 / 200,000 characters')).toBeInTheDocument();
-      expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled();
+      expect(area.getByRole('button', { name: 'Plan posts' })).toBeEnabled();
 
       fireEvent.change(brief, { target: { value: 'a'.repeat(200_005) } });
       expect(area.getByText('5 characters over the 200,000 limit')).toBeInTheDocument();
-      expect(area.getByRole('button', { name: 'Write the post' })).toBeDisabled();
+      expect(area.getByRole('button', { name: 'Plan posts' })).toBeDisabled();
     });
 
     it('counts an emoji in the Brief as one character, as the backend does', async () => {
@@ -654,7 +724,205 @@ describe('New post', () => {
       });
 
       expect(area.getByText('200,000 / 200,000 characters')).toBeInTheDocument();
-      expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled();
+      expect(area.getByRole('button', { name: 'Plan posts' })).toBeEnabled();
+    });
+  });
+
+  describe('Ideas step', () => {
+    async function ideasStep(planned: Brief = SPLIT) {
+      vi.mocked(briefService.plan).mockResolvedValue(planned);
+      const area = await readyToWrite();
+      await writeBrief(area, planned.text);
+      return within(await screen.findByRole('region', { name: 'We found 3 ideas in your brief' }));
+    }
+
+    beforeEach(() => {
+      vi.mocked(briefService.write).mockReset();
+      vi.mocked(usageService.get).mockResolvedValue(usageWith());
+    });
+
+    it('lists the ideas as a numbered checklist in posting order, all ticked', async () => {
+      const step = await ideasStep();
+
+      const boxes = step.getAllByRole('checkbox');
+      expect(boxes.map((box) => box.closest('label')?.textContent)).toEqual(
+        CORE_IDEAS.map((coreIdea, index) => `${index + 1}${coreIdea}`),
+      );
+      expect(boxes.every((box) => (box as HTMLInputElement).checked)).toBe(true);
+      expect(step.getByRole('radio', { name: 'One post per idea' })).toBeChecked();
+      expect(await step.findByText('3 generations · 382 left')).toBeInTheDocument();
+      expect(step.getByRole('button', { name: 'Write 3 posts' })).toBeEnabled();
+      expect(screen.queryByLabelText('Brief')).not.toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('brief_planned', { split_ideas: 3 });
+      expect(track).not.toHaveBeenCalledWith('post_version_requested', expect.anything());
+    });
+
+    it('writes only the ticked ideas and opens the brief page', async () => {
+      vi.mocked(briefService.write).mockResolvedValue(writing(SPLIT, ['idea_1', 'idea_3']));
+      vi.mocked(briefService.get).mockResolvedValue(writing(SPLIT, ['idea_1', 'idea_3']));
+      const step = await ideasStep();
+
+      fireEvent.click(step.getByRole('checkbox', { name: /B2B/ }));
+      expect(await step.findByText('2 generations · 382 left')).toBeInTheDocument();
+      fireEvent.click(step.getByRole('button', { name: 'Write 2 posts' }));
+
+      expect(briefService.write).toHaveBeenCalledWith('brief_02', ['idea_1', 'idea_3']);
+      await waitFor(() => expect(currentPath()).toBe('/briefs/brief_02'));
+      expect(track).toHaveBeenCalledWith('ideas_write_requested', { count: 2, choice: 'each' });
+      expect(vi.mocked(track).mock.calls.filter(([e]) => e === 'post_version_requested')).toEqual([
+        ['post_version_requested', { kind: 'brief' }],
+        ['post_version_requested', { kind: 'brief' }],
+      ]);
+    });
+
+    it('writes one post covering everything, greying the list, and opens that post', async () => {
+      vi.mocked(briefService.write).mockResolvedValue(writing(SPLIT, ['idea_whole']));
+      const step = await ideasStep();
+
+      fireEvent.click(step.getByRole('radio', { name: 'One post covering everything' }));
+
+      for (const box of step.getAllByRole('checkbox')) expect(box).toBeDisabled();
+      expect(step.getByText(/^1 generation · /)).toBeInTheDocument();
+      fireEvent.click(step.getByRole('button', { name: 'Write 1 post' }));
+
+      expect(briefService.write).toHaveBeenCalledWith('brief_02', ['idea_whole']);
+      await waitFor(() => expect(currentPath()).toBe('/posts/post_idea_whole'));
+    });
+
+    it('disables the button while nothing is ticked', async () => {
+      const step = await ideasStep();
+
+      for (const box of step.getAllByRole('checkbox')) fireEvent.click(box);
+
+      expect(step.getByRole('button', { name: 'Write 0 posts' })).toBeDisabled();
+    });
+
+    it('counts the generations left as the server does, writes in progress taken out', async () => {
+      const step = await ideasStep({ ...SPLIT, generationsLeft: 2 });
+
+      expect(await step.findByText(/3 generations · 2 left/)).toBeInTheDocument();
+      expect(step.getByRole('button', { name: 'Write 3 posts' })).toBeDisabled();
+    });
+
+    it('with too few generations shows how many are left with a top-up link, until the ticks fit', async () => {
+      vi.mocked(usageService.get).mockResolvedValue(usageWith({ mayBuyTopUp: true }));
+      const step = await ideasStep({ ...SPLIT, generationsLeft: 1 });
+
+      expect(await step.findByText(/3 generations · 1 left/)).toBeInTheDocument();
+      expect(step.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/settings');
+      expect(step.getByRole('button', { name: 'Write 3 posts' })).toBeDisabled();
+
+      fireEvent.click(step.getAllByRole('checkbox')[0]!);
+      fireEvent.click(step.getAllByRole('checkbox')[1]!);
+
+      expect(step.getByText('1 generation · 1 left')).toBeInTheDocument();
+      expect(step.queryByRole('link', { name: 'Top up' })).not.toBeInTheDocument();
+      expect(step.getByRole('button', { name: 'Write 1 post' })).toBeEnabled();
+    });
+
+    it('shows a failure to start inline and keeps the ticks', async () => {
+      vi.mocked(briefService.write).mockRejectedValue(
+        apiError(502, 'Writing the posts failed. Please try again.'),
+      );
+      const step = await ideasStep();
+      fireEvent.click(step.getAllByRole('checkbox')[1]!);
+
+      fireEvent.click(step.getByRole('button', { name: 'Write 2 posts' }));
+
+      expect(await step.findByRole('alert')).toHaveTextContent(
+        'Writing the posts failed. Please try again.',
+      );
+      expect(track).toHaveBeenCalledWith('ideas_write_failed');
+      expect(track).not.toHaveBeenCalledWith('post_version_requested', expect.anything());
+      expect(step.getAllByRole('checkbox').map((box) => (box as HTMLInputElement).checked)).toEqual(
+        [true, false, true],
+      );
+      expect(currentPath()).toBe('/new');
+    });
+
+    it('does not count a refused write as a failed one', async () => {
+      vi.mocked(briefService.write).mockRejectedValue(
+        apiError(422, 'Write one post covering everything, or one post per idea, not both.'),
+      );
+      const step = await ideasStep();
+
+      fireEvent.click(step.getByRole('button', { name: 'Write 3 posts' }));
+
+      expect(await step.findByRole('alert')).toHaveTextContent(
+        'Write one post covering everything, or one post per idea, not both.',
+      );
+      expect(track).not.toHaveBeenCalledWith('ideas_write_failed');
+    });
+
+    it('opens the brief page when the ideas turn out to be written already', async () => {
+      vi.mocked(briefService.write).mockRejectedValue(
+        apiError(409, 'One of these ideas is already written.', {
+          code: 'IDEAS_ALREADY_WRITTEN',
+        }),
+      );
+      vi.mocked(briefService.get).mockResolvedValue(writing(SPLIT, ['idea_1', 'idea_2', 'idea_3']));
+      const step = await ideasStep();
+
+      fireEvent.click(step.getByRole('button', { name: 'Write 3 posts' }));
+
+      await waitFor(() => expect(currentPath()).toBe('/briefs/brief_02'));
+    });
+
+    it('goes back to the composer with the brief kept on "Edit brief"', async () => {
+      const step = await ideasStep();
+
+      fireEvent.click(step.getByRole('button', { name: 'Edit brief' }));
+
+      const area = await writer();
+      expect(area.getByLabelText('Brief')).toHaveValue(SPLIT.text);
+      expect(briefService.write).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('A brief of one idea planned with no room to write it', () => {
+    async function planned(brief: Brief) {
+      vi.mocked(briefService.plan).mockResolvedValue(brief);
+      const area = await readyToWrite();
+      await writeBrief(area, brief.text);
+      return within(
+        await screen.findByRole('region', { name: 'We planned one post from your brief' }),
+      );
+    }
+
+    beforeEach(() => {
+      vi.mocked(briefService.write).mockReset();
+      vi.mocked(usageService.get).mockResolvedValue(usageWith({ mayBuyTopUp: true }));
+    });
+
+    it('shows its idea with no generation left and a top-up link, and writes nothing', async () => {
+      const step = await planned(unwritten(0));
+
+      expect(step.getByText('Ship small things, often')).toBeInTheDocument();
+      expect(step.queryByRole('checkbox')).not.toBeInTheDocument();
+      expect(step.queryByRole('radiogroup')).not.toBeInTheDocument();
+      expect(await step.findByText(/1 generation · 0 left/)).toBeInTheDocument();
+      expect(step.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/settings');
+      expect(step.getByRole('button', { name: 'Write 1 post' })).toBeDisabled();
+      expect(currentPath()).toBe('/new');
+      expect(track).not.toHaveBeenCalledWith('post_version_requested', expect.anything());
+    });
+
+    it('writes it once there is room', async () => {
+      vi.mocked(briefService.write).mockResolvedValue({
+        ...unwritten(4),
+        ideas: [
+          {
+            ...ideaOf('idea_only', 'Ship small things, often', 1, true),
+            post: { id: 'post_only', writingState: 'writing', text: null },
+          },
+        ],
+      });
+      const step = await planned(unwritten(5));
+
+      fireEvent.click(step.getByRole('button', { name: 'Write 1 post' }));
+
+      expect(briefService.write).toHaveBeenCalledWith('brief_03', ['idea_only']);
+      await waitFor(() => expect(currentPath()).toBe('/posts/post_only'));
     });
   });
 
@@ -665,7 +933,7 @@ describe('New post', () => {
       renderNewPost(undefined, NO_PLANS);
 
       const area = await writer();
-      expect(await area.findByRole('button', { name: 'Write the post' })).toBeInTheDocument();
+      expect(await area.findByRole('button', { name: 'Plan posts' })).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /subscribe/i })).not.toBeInTheDocument();
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
     });

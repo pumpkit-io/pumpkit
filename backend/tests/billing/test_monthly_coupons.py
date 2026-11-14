@@ -222,7 +222,7 @@ async def test_month_end_paid_usage_and_accepted_caps_survive_webhooks_and_stack
     )
     await save_positioning(authed_client)
     fake_llm.replies = [{"post": "Paid allowance survives redemption"}]
-    assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
+    assert (await authed_client.post("/api/v1/briefs", json={"brief": "A note"})).status_code == 201
     offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
     assert offer["starts_at"] == "2028-02-29T12:00:00Z"
     assert offer["ends_at"] == "2028-03-31T12:00:00Z"

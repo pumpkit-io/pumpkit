@@ -17,9 +17,12 @@ from tests.posts.writing_replies import (
     ideas,
     merged,
     sketched,
+    start,
+    started_post_id,
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 SETTINGS_URL = "http://localhost:5173/settings"
 
 T = TypeVar("T")
@@ -84,7 +87,7 @@ async def test_starting_a_post_with_no_generations_left_is_refused_with_the_rese
     await _subscription(db, subscribed, billing_cycle_anchor=_utc(2026, 9, 14, 9))
     await _store_attempts(db, user.id, _times(_utc(2026, 9, 20), 500))
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.status_code == 409
     assert response.json() == {
@@ -100,7 +103,8 @@ async def test_starting_a_post_with_no_generations_left_is_refused_with_the_rese
         "resets_at": _iso(_utc(2026, 10, 14, 9)),
         "way_out": None,
     }
-    assert fake_llm.calls == []
+    # Only the plan call: the Brief is planned, and its Post refused.
+    assert len(fake_llm.calls) == 1
 
 
 async def test_versions_written_before_the_period_started_dont_count(
@@ -112,7 +116,7 @@ async def test_versions_written_before_the_period_started_dont_count(
     await _store_attempts(db, user.id, _times(_utc(2026, 9, 14, 9), 2))
     fake_llm.replies = [{"post": "final"}]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.status_code == 201
 
@@ -125,8 +129,8 @@ async def test_failed_attempts_dont_use_a_generation(
     await _store_attempts(db, user.id, _times(_utc(2026, 10, 3), 10), status="failed")
     fake_llm.replies = [{"post": "final"}]
 
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
-    response = await client.post(POSTS, json={"brief": "ship"})
+    assert (await start(client)).status_code == 201
+    response = await start(client)
 
     assert response.status_code == 409
     assert response.json()["left"] == 0
@@ -139,7 +143,7 @@ async def test_without_an_anchor_synced_periods_start_on_the_subscriptions_start
     cap(1)
     await _store_attempts(db, user.id, [_utc(2026, 10, 1, 0, 1)])
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.json()["resets_at"] == _iso(_utc(2026, 11, 1))
 
@@ -162,7 +166,7 @@ async def test_an_anchor_on_the_31st_resets_on_the_last_day_of_a_shorter_month(
     await _store_attempts(db, user.id, [period_start])
     fixed_clock._now = now
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.status_code == 409
     assert response.json()["resets_at"] == _iso(reset)
@@ -182,8 +186,8 @@ async def test_an_annual_plan_resets_every_month(
     await _store_attempts(db, user.id, [_utc(2026, 9, 14, 8, 59)])
     fake_llm.replies = [{"post": "final"}]
 
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
-    response = await client.post(POSTS, json={"brief": "ship"})
+    assert (await start(client)).status_code == 201
+    response = await start(client)
 
     assert response.json()["resets_at"] == _iso(_utc(2026, 10, 14, 9))
 
@@ -202,8 +206,8 @@ async def test_a_trial_gets_a_quarter_of_the_generations_for_the_whole_trial(
     await _store_attempts(db, user.id, _times(_utc(2026, 10, 7, 9), 124))
     fake_llm.replies = [{"post": "final"}]
 
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
-    response = await client.post(POSTS, json={"brief": "ship"})
+    assert (await start(client)).status_code == 201
+    response = await start(client)
 
     assert response.status_code == 409
     body = response.json()
@@ -228,7 +232,7 @@ async def test_the_trial_share_of_a_cap_is_rounded_down(
     )
     await _store_attempts(db, user.id, [_utc(2026, 10, 8)])
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.status_code == 409
 
@@ -240,7 +244,7 @@ async def test_a_user_behind_on_payment_is_told_to_update_their_payment_method(
     await _subscription(db, subscribed, status="past_due")
     await _store_attempts(db, user.id, [_utc(2026, 10, 2)])
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.json()["way_out"] == "update_payment"
 
@@ -250,7 +254,7 @@ async def test_feedback_with_no_generations_left_is_refused_the_same_way(
 ):
     cap(2)
     fake_llm.replies = [{"post": "final"}]
-    post_id = (await client.post(POSTS, json={"brief": "ship"})).json()["id"]
+    post_id = started_post_id(await start(client))
     await _store_attempts(db, user.id, [_utc(2026, 10, 2)])
     fake_llm.calls.clear()
 
@@ -269,7 +273,7 @@ async def test_restoring_a_version_and_editing_the_text_use_no_generation(
 ):
     cap(2)
     fake_llm.replies = [{"post": "final"}]
-    post_id = (await client.post(POSTS, json={"brief": "ship"})).json()["id"]
+    post_id = started_post_id(await start(client))
     await client.put(f"{POSTS}/{post_id}/text", json={"parts": ["edited by hand"]})
     fake_llm.replies = [{"post": "final 2"}]
 
@@ -285,7 +289,7 @@ async def test_an_instance_that_sells_no_plans_has_no_generation_limit(
     await _store_attempts(db, user.id, [_utc(2026, 10, 2)])
     fake_llm.replies = [{"post": "final"}]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.status_code == 201
 
@@ -297,19 +301,19 @@ async def test_an_empty_cap_means_no_generation_limit(
     await _store_attempts(db, user.id, _times(_utc(2026, 10, 2), 600))
     fake_llm.replies = [{"post": "final"}]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.status_code == 201
 
 
 @dataclass
 class _FillsTheAllowanceWhileWriting(FakeLLM):
-    """A model that, on its first call, lets a concurrent request use the last Generation."""
+    """A model that, on its first sketch call, lets a concurrent request use the last Generation."""
 
     fill: Any = None
 
     async def structured(self, **kwargs: Any) -> StructuredResult[Any]:
-        if self.fill is not None:
+        if self.fill is not None and kwargs["response_model"].__name__ == SKETCHED_POST:
             fill, self.fill = self.fill, None
             await fill()
         return await super().structured(**kwargs)
@@ -326,8 +330,8 @@ async def test_a_version_written_while_a_concurrent_request_filled_the_allowance
     llm.fill = lambda: _store_attempts(db, user.id, [_utc(2026, 10, 10, 12)])
     app.dependency_overrides[get_llm] = lambda: llm
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.status_code == 201
-    post_id = response.json()["id"]
+    post_id = started_post_id(response)
     assert (await client.get(f"{POSTS}/{post_id}")).json()["versions"][0]["number"] == 1

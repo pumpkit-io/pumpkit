@@ -12,9 +12,10 @@ from pumpkit.main import app
 from pumpkit.posts.writing_state import WRITING_TIMEOUT
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import REVISED_POST, revised
+from tests.posts.writing_replies import REVISED_POST, revised, started_post_id
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 BEING_WRITTEN = "Pumpkit is writing a new version of this post. Try again once it's written."
 
 
@@ -24,12 +25,14 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
     await connect_x()
     await save_positioning(client)
     fake_llm.replies = [{"post": "Version one."}]
-    started = await client.post(POSTS, json={"brief": "ship small things"})
+    started = await client.post(BRIEFS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     fake_llm.replies = [{"post": "Version two."}]
-    given = await client.post(f"{POSTS}/{started.json()['id']}/versions", json={"feedback": "more"})
+    given = await client.post(
+        f"{POSTS}/{started_post_id(started)}/versions", json={"feedback": "more"}
+    )
     assert given.status_code == 202, given.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 def _llm_that_meanwhile(change, *replies) -> list:

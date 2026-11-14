@@ -368,7 +368,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
     await db.commit()
     fixed_clock.advance(timedelta(minutes=10))
     fake_llm.replies = [{"post": "final"}]
-    assert (await client.post("/api/v1/posts", json={"brief": "ship"})).status_code == 201
+    assert (await client.post("/api/v1/briefs", json={"brief": "ship"})).status_code == 201
     fake_llm.calls.clear()
 
     result = await mcp.call_tool(tool, **_writing_call(tool, post_id))

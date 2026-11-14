@@ -45,30 +45,42 @@ VERSION_ATTEMPTS_PER_WINDOW = 30
 VERSION_ATTEMPT_WINDOW = timedelta(hours=1)
 
 
-def next_attempt_at(attempted_at: list[datetime]) -> Optional[datetime]:
+def next_attempt_at(attempted_at: list[datetime], count: int = 1) -> Optional[datetime]:
     """
-    When the User may make their next attempt, given when they made those in the last window,
-    or None if they may now. The window rolls: each attempt stops counting a window after it.
+    When the User may make their next `count` attempts, given when they made those in the last
+    window, or None if they may now. The window rolls: each attempt stops counting a window after it.
     """
-    if len(attempted_at) < VERSION_ATTEMPTS_PER_WINDOW:
+    if len(attempted_at) + count <= VERSION_ATTEMPTS_PER_WINDOW:
         return None
-    # Concurrent requests can store more than the limit, so skip past the surplus too.
-    surplus = len(attempted_at) - VERSION_ATTEMPTS_PER_WINDOW
+    # The attempts that must stop counting first; concurrent requests can store a surplus too.
+    surplus = len(attempted_at) + count - 1 - VERSION_ATTEMPTS_PER_WINDOW
     return sorted(attempted_at)[surplus] + VERSION_ATTEMPT_WINDOW
 
 
-async def check_attempt_limit(db: AsyncSession, *, user_id: str, now: datetime) -> None:
-    """Writes still in flight count from when they started, lost ones included."""
+async def check_attempt_limit(
+    db: AsyncSession, *, user_id: str, now: datetime, count: int = 1
+) -> None:
+    """
+    Room for `count` more attempts in the window. Writes still in flight count from when they
+    started, lost ones included.
+    """
     since = now - VERSION_ATTEMPT_WINDOW
     attempted_at = await service.attempt_times_since(db, user_id=user_id, since=since)
     attempted_at += await service.writes_started_since(db, user_id=user_id, since=since)
-    retry_at = next_attempt_at(attempted_at)
-    if retry_at is not None:
-        raise RetryLaterError(
-            f"You've made {VERSION_ATTEMPTS_PER_WINDOW} attempts at a version in the last hour.",
-            retry_at=retry_at,
-            now=now,
+    retry_at = next_attempt_at(attempted_at, count)
+    if retry_at is None:
+        return
+    if len(attempted_at) >= VERSION_ATTEMPTS_PER_WINDOW:
+        detail = (
+            f"You've made {VERSION_ATTEMPTS_PER_WINDOW} attempts at a version in the last hour."
         )
+    else:
+        left = VERSION_ATTEMPTS_PER_WINDOW - len(attempted_at)
+        detail = (
+            f"Writing {count} posts needs {count} attempts at a version, and you have {left} "
+            f"left of the {VERSION_ATTEMPTS_PER_WINDOW} an hour allows."
+        )
+    raise RetryLaterError(detail, retry_at=retry_at, now=now)
 
 
 async def _generation_draw(db: AsyncSession, *, user_id: str, now: datetime) -> Optional[Draw]:
@@ -82,18 +94,31 @@ async def _generation_draw(db: AsyncSession, *, user_id: str, now: datetime) -> 
     return Draw(allowance=allowance, count="generations", used=used, needed=1, moment=now)
 
 
-async def check_generation_left(db: AsyncSession, *, user_id: str, now: datetime) -> None:
+async def check_generation_left(
+    db: AsyncSession, *, user_id: str, now: datetime, count: int = 1
+) -> None:
     """
-    Room for one more Generation in the User's Allowance or, once it is used up, their Top-ups,
-    checked before the model calls. Writes in flight hold one each. A Version recorded after
-    concurrent requests filled both is kept, over the limit.
+    Room for `count` more Generations in the User's Allowance or, once it is used up, their
+    Top-ups, checked before the model calls. Writes in flight hold one each. A Version recorded
+    after concurrent requests filled both is kept, over the limit.
     """
     draw = await _generation_draw(db, user_id=user_id, now=now)
     if draw is not None:
         in_flight = await service.count_writes_in_flight(db, user_id=user_id, now=now)
         await billing_service.check_room_with_top_ups(
-            db, user_id=user_id, draw=replace(draw, used=draw.used + in_flight)
+            db, user_id=user_id, draw=replace(draw, used=draw.used + in_flight, needed=count)
         )
+
+
+async def generations_left(db: AsyncSession, *, user_id: str, now: datetime) -> Optional[int]:
+    """The most `count` `check_generation_left` allows now; None when the User has no cap."""
+    draw = await _generation_draw(db, user_id=user_id, now=now)
+    if draw is None:
+        return None
+    in_flight = await service.count_writes_in_flight(db, user_id=user_id, now=now)
+    return await billing_service.left_with_top_ups(
+        db, user_id=user_id, draw=replace(draw, used=draw.used + in_flight)
+    )
 
 
 async def charge_generation(

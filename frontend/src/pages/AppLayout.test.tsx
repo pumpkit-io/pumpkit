@@ -45,9 +45,12 @@ vi.mock('@/services/postService', async (importOriginal) => ({
       nextOffset: null,
     }),
     get: vi.fn(),
-    start: vi.fn(),
     addVersion: vi.fn(),
   },
+}));
+vi.mock('@/services/briefService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/briefService')>()),
+  briefService: { plan: vi.fn(), get: vi.fn(), write: vi.fn() },
 }));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
@@ -77,6 +80,7 @@ import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { inspirationAuthorService } from '@/services/inspirationAuthorService';
+import { briefService } from '@/services/briefService';
 import { postService, type PostDetail } from '@/services/postService';
 import { xConnectionService } from '@/services/xConnectionService';
 import {
@@ -155,7 +159,7 @@ describe('The signed-in shell', () => {
         termsVersion: '2026-10-11',
         ...NO_CAPS,
       });
-    vi.mocked(postService.start).mockReset();
+    vi.mocked(briefService.plan).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(track).mockClear();
@@ -464,12 +468,12 @@ describe('The signed-in shell', () => {
 
     it('keeps the Brief while it is being planned', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
+      vi.mocked(briefService.plan).mockReturnValue(new Promise(() => {}));
       renderSignedIn('/new');
       fireEvent.change(await screen.findByLabelText('Brief'), {
         target: { value: 'ship small things' },
       });
-      fireEvent.click(await screen.findByRole('button', { name: 'Write the post' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Plan posts' }));
 
       newPostShortcut();
       fireEvent.click((await sidebar()).getByRole('link', { name: 'New post' }));

@@ -14,35 +14,82 @@ from pumpkit.core.rate_limit import limiter
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts import mediator
-from pumpkit.posts.schemas import WRITE_RATE, PostResponse, PostStartRequest
+from pumpkit.posts.schemas import (
+    WRITE_RATE,
+    BriefRequest,
+    BriefResponse,
+    PostResponse,
+    WriteIdeasRequest,
+)
 
 # Feedback on a Post is served from scheduling, which knows whether the Post takes it.
 router = APIRouter(tags=["posts"])
 
 
-@router.post("/posts", response_model=PostResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/briefs", response_model=BriefResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(WRITE_RATE)
-async def start_post(
+async def plan_brief(
     request: Request,
-    start_request: PostStartRequest,
+    brief_request: BriefRequest,
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     llm: LLM = Depends(get_llm),
     tasks: TaskRegistry = Depends(get_background_tasks),
     sessions: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
     clock: Clock = Depends(get_clock),
-) -> PostResponse:
+) -> BriefResponse:
     """
-    Plans the Brief and answers with the Post in its writing state: its first Version is written
-    in the background, which `GET /posts/{post_id}` shows when it ends.
+    Plans the Brief and answers with it and its Ideas. With no split Ideas, the single-post Idea's
+    Post is already being written in the background, which `GET /posts/{post_id}` shows when it ends.
     """
-    return await mediator.start_post(
+    return await mediator.plan_brief(
         db=db,
         llm=llm,
         tasks=tasks,
         sessions=sessions,
         user=current_user,
-        brief=start_request.brief,
+        brief=brief_request.brief,
+        clock=clock,
+    )
+
+
+@router.get("/briefs/{brief_id}", response_model=BriefResponse)
+async def get_brief(
+    brief_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> BriefResponse:
+    """The Brief with its Ideas and their Posts, each Post's writing state included."""
+    return await mediator.get_brief(db, user=current_user, brief_id=brief_id, now=clock())
+
+
+@router.post(
+    "/briefs/{brief_id}/posts",
+    response_model=BriefResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+@limiter.limit(WRITE_RATE)
+async def write_ideas(
+    request: Request,
+    brief_id: str,
+    write_request: WriteIdeasRequest,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    llm: LLM = Depends(get_llm),
+    tasks: TaskRegistry = Depends(get_background_tasks),
+    sessions: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
+    clock: Clock = Depends(get_clock),
+) -> BriefResponse:
+    """Starts writing a Post of each Idea named, in the background, and answers with the Brief."""
+    return await mediator.write_ideas(
+        db=db,
+        llm=llm,
+        tasks=tasks,
+        sessions=sessions,
+        user=current_user,
+        brief_id=brief_id,
+        idea_ids=write_request.idea_ids,
         clock=clock,
     )
 

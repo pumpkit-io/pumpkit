@@ -65,18 +65,52 @@ test('Settings shows remaining usage directly below the Plan card', async ({ pag
   expect(usageBox!.y).toBeGreaterThanOrEqual(planBox!.y + planBox!.height);
 });
 
-test('New post shows the generations limit instead of an error banner', async ({ page }) => {
+test('New post shows a brief planned at the generations limit unwritten, with a top-up link', async ({
+  page,
+}) => {
   await seedUsage(page, 'limit');
+  // The plan call would reach the stack's real, paid model. The backend suite covers planning
+  // with no generation left (tests/posts/test_writing_the_ideas_of_a_brief.py), so the answer is
+  // the one it gives: the brief's one idea, unwritten, with none left.
+  await page.route('**/api/v1/briefs', (route) =>
+    route.request().method() === 'POST'
+      ? route.fulfill({
+          status: 201,
+          json: {
+            id: 'brief_limit',
+            text: 'A post that exceeds my allowance.',
+            created_at: '2026-10-10T12:00:30Z',
+            ideas: [
+              {
+                id: 'idea_limit',
+                posting_order: 1,
+                whole_brief: true,
+                plan: {
+                  core_idea: 'Know your limits before you write.',
+                  takeaway: 'Top up or wait.',
+                  funnel: 'middle',
+                  desired_action: 'bookmark',
+                  format: 'post',
+                  length: 'short',
+                  structure: 'few_lines',
+                },
+                post: null,
+              },
+            ],
+            generations_left: 0,
+          },
+        })
+      : route.fallback(),
+  );
   await page.goto('/new');
   await page.getByLabel('Brief', { exact: true }).fill('A post that exceeds my allowance.');
-  const response = page.waitForResponse(
-    (r) => r.url().endsWith('/api/v1/posts') && r.request().method() === 'POST',
-  );
-  await page.getByRole('button', { name: 'Write the post' }).click();
-  expect((await response).status()).toBe(409);
-  const notice = page.getByRole('status').filter({ hasText: /generations/ });
-  await expect(notice).toContainText(/used.*500.*generations/i);
-  await expect(notice.getByRole('button', { name: /Buy top-up/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Plan posts' }).click();
+
+  const step = page.getByRole('region', { name: 'We planned one post from your brief' });
+  await expect(step.getByText('Know your limits before you write.')).toBeVisible();
+  await expect(step.getByText(/1 generation · 0 left/)).toBeVisible();
+  await expect(step.getByRole('link', { name: 'Top up' })).toHaveAttribute('href', '/settings');
+  await expect(step.getByRole('button', { name: 'Write 1 post' })).toBeDisabled();
   await expect(page.getByRole('alert')).toHaveCount(0);
   await expect(page).toHaveURL(/\/new$/);
 });

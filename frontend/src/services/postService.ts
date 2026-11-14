@@ -103,6 +103,11 @@ export const WRITING_POLL_MS = 3_000;
 /** The longest wait between reads, which doubles after each read that fails. */
 export const WRITING_POLL_MAX_MS = 60_000;
 
+/** How long to wait before the next read while a Version is written, after `failures` in a row. */
+export function pollDelay(failures: number): number {
+  return Math.min(WRITING_POLL_MS * 2 ** failures, WRITING_POLL_MAX_MS);
+}
+
 /** Feedback whose Version Pumpkit couldn't write, as it was sent, to send again. */
 export interface FailedFeedback {
   feedback: string;
@@ -276,7 +281,7 @@ interface StartedPostApi extends PostApi {
   writing_state: 'writing';
 }
 
-interface PostTextApi {
+export interface PostTextApi {
   format: Format;
   parts: (PartApi & { media: MediaApi[] })[];
   first_reply: boolean;
@@ -284,7 +289,7 @@ interface PostTextApi {
   edited: boolean;
 }
 
-interface PlanApi {
+export interface PlanApi {
   core_idea: string;
   takeaway: string;
   funnel: Funnel;
@@ -304,7 +309,7 @@ interface PostDetailApi extends PostApi {
   scheduled_post: ScheduledPostApi | null;
 }
 
-const toPlan = (p: PlanApi): Plan => ({
+export const toPlan = (p: PlanApi): Plan => ({
   coreIdea: p.core_idea,
   takeaway: p.takeaway,
   funnel: p.funnel,
@@ -330,7 +335,7 @@ const toVersion = (v: VersionApi): Version => ({
   createdAt: v.created_at,
 });
 
-const toText = (t: PostTextApi): PostText => ({
+export const toText = (t: PostTextApi): PostText => ({
   format: t.format,
   parts: t.parts.map(toPart),
   firstReply: t.first_reply,
@@ -410,14 +415,6 @@ export const postService = {
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
     };
   },
-  /**
-   * Plans the Brief, which chooses the Format, and answers with the Post while its first Version
-   * is written in the background.
-   */
-  start: async (brief: string): Promise<UnwrittenPost> => {
-    const { data } = await apiService.post<StartedPostApi>('/posts', { brief });
-    return startedPost(data);
-  },
   /** Writes the first Version of a Post Pumpkit couldn't write again, from the same Plan. */
   retry: async (postId: string): Promise<UnwrittenPost> => {
     const { data } = await apiService.post<StartedPostApi>(
@@ -453,7 +450,7 @@ export const postService = {
   awaitVersion: async (postId: string, after: number, signal?: AbortSignal): Promise<Version> => {
     let failures = 0;
     for (;;) {
-      await pause(Math.min(WRITING_POLL_MS * 2 ** failures, WRITING_POLL_MAX_MS), signal);
+      await pause(pollDelay(failures), signal);
       let post: PostDetail | UnwrittenPost;
       try {
         post = await postService.get(postId);
