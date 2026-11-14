@@ -26,6 +26,7 @@ const BRIEF_API = {
       post: {
         id: 'post_01',
         writing_state: null,
+        status: 'draft',
         text: {
           format: 'post',
           parts: [{ text: 'Shipped.', char_count: 8, char_limit: 280, media: [] }],
@@ -75,6 +76,7 @@ const BRIEF: Brief = {
       post: {
         id: 'post_01',
         writingState: null,
+        status: 'draft',
         text: {
           format: 'post',
           parts: [{ text: 'Shipped.', charCount: 8, charLimit: 280 }],
@@ -82,6 +84,7 @@ const BRIEF: Brief = {
           versionNumber: 1,
           edited: false,
         },
+        textMedia: [[]],
       },
     },
   ],
@@ -96,6 +99,17 @@ describe('briefService', () => {
 
     expect(await briefService.plan('ship')).toEqual(BRIEF);
     expect(apiService.post).toHaveBeenCalledWith('/briefs', { brief: 'ship' });
+  });
+
+  it('reads no status from a write, which answers without one', async () => {
+    const [whole, split] = BRIEF_API.ideas;
+    const post = { ...split!.post!, status: undefined };
+    const answer = { ...BRIEF_API, ideas: [whole, { ...split, post }] };
+    vi.spyOn(apiService, 'post').mockResolvedValue({ data: answer } as never);
+
+    const brief = await briefService.write('brief_01', ['idea_1']);
+
+    expect(brief.ideas[1]!.post!.status).toBeNull();
   });
 
   it('writes the ideas named', async () => {

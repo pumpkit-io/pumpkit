@@ -1,9 +1,11 @@
 import { apiService } from './apiService';
+import { toMedia, type Media } from './mediaService';
 import {
   toPlan,
   toText,
   type Plan,
   type PlanApi,
+  type PostStatus,
   type PostText,
   type PostTextApi,
   type WritingState,
@@ -14,8 +16,15 @@ export interface BriefPost {
   id: string;
   /** Null once its first Version is written. */
   writingState: WritingState | null;
+  /**
+   * From its Scheduled post (ADR 0015); null until its first Version is written, and in the
+   * answer to a write, which doesn't read it.
+   */
+  status: PostStatus | null;
   /** Null until its first Version is written. */
   text: PostText | null;
+  /** Each of the Text's Parts' Media, in order, for "Post to…" to send. */
+  textMedia: Media[][];
 }
 
 /** One Post the planner proposed for a Brief, written or not (ADR 0025). */
@@ -52,7 +61,12 @@ interface BriefApi {
     posting_order: number;
     whole_brief: boolean;
     plan: PlanApi | null;
-    post: { id: string; writing_state: WritingState | null; text: PostTextApi | null } | null;
+    post: {
+      id: string;
+      writing_state: WritingState | null;
+      status?: PostStatus | null;
+      text: PostTextApi | null;
+    } | null;
   }[];
   generations_left: number | null;
 }
@@ -69,7 +83,9 @@ const toBrief = (data: BriefApi): Brief => ({
     post: idea.post && {
       id: idea.post.id,
       writingState: idea.post.writing_state,
+      status: idea.post.status ?? null,
       text: idea.post.text ? toText(idea.post.text) : null,
+      textMedia: idea.post.text ? idea.post.text.parts.map((p) => p.media.map(toMedia)) : [],
     },
   })),
   generationsLeft: data.generations_left,
@@ -90,6 +106,21 @@ export function wholeBriefIdea(brief: Brief): Idea {
 /** The Posts written or being written from the Brief, in the order of its Ideas. */
 export function briefPosts(brief: Brief): { idea: Idea; post: BriefPost }[] {
   return brief.ideas.flatMap((idea) => (idea.post ? [{ idea, post: idea.post }] : []));
+}
+
+/**
+ * The Ideas the Brief's page offers to write. The single-post Idea and the split Ideas are
+ * alternatives, so once a Post exists only Ideas of its kind are offered; while none does, every
+ * split Idea in posting order and then the single-post one.
+ */
+export function notWrittenIdeas(brief: Brief): Idea[] {
+  const unwritten = brief.ideas.filter((idea) => !idea.post);
+  const first = brief.ideas.find((idea) => idea.post);
+  if (first) return unwritten.filter((idea) => idea.wholeBrief === first.wholeBrief);
+  return [
+    ...unwritten.filter((idea) => !idea.wholeBrief),
+    ...unwritten.filter((idea) => idea.wholeBrief),
+  ];
 }
 
 export const briefService = {

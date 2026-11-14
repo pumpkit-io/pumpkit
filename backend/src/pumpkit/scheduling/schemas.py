@@ -7,6 +7,7 @@ from pumpkit.billing.allowance import WayOut
 from pumpkit.posts.formats import Format
 from pumpkit.posts.media_files import cleaned_alt_text
 from pumpkit.posts.schemas import (
+    BriefPostResponse,
     FailedFeedbackResponse,
     MediaResponse,
     PlanResponse,
@@ -126,6 +127,33 @@ class PostDetailResponse(BaseModel):
     status: Optional[PostStatus]
     # None while the Post is a Draft.
     scheduled_post: Optional[ScheduledPostResponse]
+
+
+class BriefPostDetailResponse(BriefPostResponse):
+    """An Idea's Post as its Brief's page shows it, with the status its Scheduled post gives it."""
+
+    # None until the Post's first Version is written: a Post being written is not a Draft.
+    status: Optional[PostStatus]
+
+
+class IdeaDetailResponse(BaseModel):
+    """An Idea as `IdeaResponse` gives it, its Post with its status."""
+
+    id: str
+    posting_order: int
+    whole_brief: bool
+    plan: Optional[PlanResponse]
+    post: Optional[BriefPostDetailResponse]
+
+
+class BriefDetailResponse(BaseModel):
+    """A Brief as `BriefResponse` gives it, each Post with its status, for the badge on its card."""
+
+    id: str
+    text: str
+    created_at: datetime
+    ideas: list[IdeaDetailResponse]
+    generations_left: Optional[int]
 
 
 MAX_POSTS_PAGE_SIZE = 50
