@@ -48,13 +48,23 @@ TOOLS: list[McpTool] = [
 INSTRUCTIONS = """\
 Pumpkit writes X posts from the user's positioning and publishes them on X.
 
-- A brief says what a post is about and what the user thinks about it. Starting a post from \
-a brief plans it around the user's positioning, then writes its first version in the \
-background: `get_post` says `writing_state` "writing" until it is written, and "not_written" \
-when Pumpkit couldn't write it, which the user retries from the post's page in the web app. A \
-brief that holds several separate ideas still gets one post, covering all of them; the web app's \
-New post lets the user write one post per idea instead. A user with no positioning can't start \
-a post: save one with `set_positioning`, or send them to the Persona page of the web app.
+- The user's positioning is a few sentences saying who they are on X, what they post about, \
+who they write for, what they post for and what they can point readers to. Pumpkit plans every \
+post around it. `get_positioning` reads it and `set_positioning` saves it. A user with no \
+positioning can't plan a brief: help them write one and save it, or send them to the Persona \
+page of the web app.
+- Writing posts takes two steps. First, `plan_posts` takes a brief, what the user wants to post \
+about and what they think about it, and answers with the ideas Pumpkit found in it, each a \
+separate post with its plan, and `single_post`, one post covering the whole brief. It writes \
+nothing. Show the user the core idea of each idea and ask which to write, or whether they want \
+one post covering everything instead. Then `write_posts` starts writing the ideas they picked, \
+or the single post alone, never both. Call it only with the user's choice. When the brief \
+holds one idea, `ideas` is empty: show its single post's core idea, then write it once the user \
+agrees.
+- Pumpkit writes each post in the background, in parallel, which takes about a minute. \
+`write_posts` answers with the posts' ids: read each with `get_post` until `writing_state` is \
+null, then show the user its text. "not_written" means Pumpkit couldn't write it, which the \
+user retries from the post's page in the web app.
 - A post has one text, the text meant for X, with one text per part for a thread. It is what \
 the user sees and edits by hand in the web app, and `get_post` says whether it was `edited` \
 since the version it came from.
@@ -88,8 +98,9 @@ failed post takes feedback: a scheduled or published one doesn't.
 - `delete_post` discards a draft for good, with every version and its media; its idea stays on \
 its brief, and the generations it used stay used. A scheduled, published or failed post is \
 refused, and so is one still being written. It can't be undone, so get the user's yes first.
-- Each post written and each feedback uses one generation of the user's allowance. Writing \
-that fails uses none. Each X post published uses one X post, each part of a thread and each \
+- Each post written and each feedback uses one generation of the user's allowance. Planning \
+and writing that fails use none, and `plan_posts` answers with the generations left, so tell \
+the user before they pick more ideas than that. Each X post published uses one X post, each part of a thread and each \
 first reply counting as one. Write a new version only when the user asks for one. `get_usage` says what is \
 left and when it resets.
 - `attach_media` attaches an image, a GIF or a video to a part from a public URL, or, without \

@@ -1,10 +1,11 @@
-"""`start_post` and `give_feedback` refuse at the Generations limit as the web routes do."""
+"""`write_posts` and `give_feedback` refuse at the Generations limit as the web routes do."""
 
 import pytest
 
 from pumpkit.core.config import settings
 from tests.mcp_client import error_text
 from tests.posts.generations import use_a_generation
+from tests.posts.mcp_writing import single_post_id, write_single_post
 
 REFUSAL = (
     "You've used this period's 2 generations. They reset on 1 November. "
@@ -20,13 +21,13 @@ async def with_positioning(subscribed, mcp, monkeypatch):
     ] is False
 
 
-async def test_start_post_refuses_with_no_generations_left_and_links_to_settings(
+async def test_write_posts_refuses_with_no_generations_left_and_links_to_settings(
     db, user, with_positioning, mcp, fake_llm, fixed_clock
 ):
     await use_a_generation(db, user.id)
     await use_a_generation(db, user.id)
 
-    result = await mcp.call_tool("start_post", brief="ship")
+    result = await write_single_post(mcp, "ship")
 
     assert result["isError"] is True
     assert error_text(result) == REFUSAL
@@ -39,14 +40,15 @@ async def test_start_post_refuses_with_no_generations_left_and_links_to_settings
         "resets_at": "2026-11-01T00:00:00Z",
         "way_out": None,
     }
-    assert fake_llm.calls == []
+    # Only the plan call: planning uses no generation, so a User can still see the ideas.
+    assert len(fake_llm.calls) == 1
 
 
 async def test_give_feedback_refuses_with_no_generations_left(
     db, user, with_positioning, mcp, fake_llm, fixed_clock
 ):
     fake_llm.replies = [{"post": "final"}]
-    post_id = (await mcp.call_tool("start_post", brief="ship"))["structuredContent"]["id"]
+    post_id = await single_post_id(mcp, "ship")
     await use_a_generation(db, user.id)
     fake_llm.calls.clear()
 

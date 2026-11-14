@@ -11,6 +11,7 @@ from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.mcp_client import error_text
+from tests.posts.mcp_writing import single_post_id
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     PLAN,
@@ -42,25 +43,15 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
     assert "sketch" not in json.dumps(tools["get_post"]["outputSchema"])
 
 
-async def test_starting_a_post_returns_its_first_versions_final_and_character_count(
+async def test_writing_a_post_returns_its_first_versions_final_and_character_count(
     with_positioning, mcp, fake_llm, fixed_clock
 ):
     fake_llm.replies = [{"post": "the final"}]
 
-    result = await mcp.call_tool("start_post", brief="  ship small things ")
+    post_id = await single_post_id(mcp, "  ship small things ")
 
-    assert result["isError"] is False
-    started = result["structuredContent"]
-    assert started["id"].startswith("post_")
-    assert started == {
-        "id": started["id"],
-        "brief": "ship small things",
-        "plan": PLAN,
-        "versions": [],
-        "writing_state": "writing",
-    }
-    post = (await mcp.call_tool("get_post", post_id=started["id"]))["structuredContent"]
-    assert post["writing_state"] is None
+    post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
+    assert (post["brief"], post["plan"], post["writing_state"]) == ("ship small things", PLAN, None)
     assert post["versions"] == [
         {
             "id": post["versions"][0]["id"],
@@ -75,16 +66,14 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
     ]
 
 
-async def test_starting_a_post_the_planner_makes_a_thread_returns_its_parts(
+async def test_writing_a_post_the_planner_makes_a_thread_returns_its_parts(
     with_positioning, mcp, fake_llm
 ):
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread())
     fake_llm.replies = [{"parts": ["final one", "final two 🚀"]}]
 
-    result = await mcp.call_tool("start_post", brief="ship small things, as a thread")
+    post_id = await single_post_id(mcp, "ship small things, as a thread")
 
-    assert result["isError"] is False
-    post_id = result["structuredContent"]["id"]
     [version] = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"]
     assert (version["format"], version["parts"]) == (
         "thread",
@@ -95,18 +84,11 @@ async def test_starting_a_post_the_planner_makes_a_thread_returns_its_parts(
     )
 
 
-async def test_start_post_takes_only_a_brief(subscribed, mcp):
-    schema = (await mcp.list_tools())["start_post"]["inputSchema"]
-
-    assert schema["required"] == ["brief"]
-    assert list(schema["properties"]) == ["brief"]
-
-
 @pytest.fixture
 async def post_id(with_positioning, mcp, fake_llm) -> str:
     """A Post of the User's with one Version, whose text is "final 1"."""
     fake_llm.replies = [{"post": "final 1"}]
-    return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]
+    return await single_post_id(mcp, "ship small things")
 
 
 async def _latest_version(mcp, post_id: str) -> dict:
@@ -310,25 +292,7 @@ async def test_another_users_post_reads_as_not_found(
     assert fake_llm.calls == []
 
 
-def _writing_call(tool: str, post_id: str) -> dict[str, str]:
-    """The arguments of a call to the writing `tool`, on `post_id` when it takes one."""
-    if tool == "start_post":
-        return {"brief": "ship"}
-    return {"post_id": post_id, "feedback": "shorter"}
-
-
-WRITING_TOOLS = ["start_post", "give_feedback"]
-
-
-async def test_a_failed_plan_is_a_reported_tool_error(post_id, mcp, fake_llm, fake_posthog):
-    # Starting a Post answers once the Brief is planned, so only the plan call fails it.
-    fake_llm.standing[POST_IDEAS] = LLMError("provider down")
-
-    result = await mcp.call_tool("start_post", brief="ship")
-
-    assert error_text(result) == "Writing the post failed. Please try again."
-    error_id = result["structuredContent"]["error_id"]
-    assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
+WRITING_TOOLS = ["plan_posts", "write_posts", "give_feedback"]
 
 
 async def test_a_feedback_the_model_failed_leaves_the_text_and_is_reported(
@@ -344,6 +308,15 @@ async def test_a_feedback_the_model_failed_leaves_the_text_and_is_reported(
     assert [version["number"] for version in post["versions"]] == [1]
     assert post["text"]["parts"][0]["text"] == "final 1"
     fake_posthog.capture_exception.assert_called_once()
+
+
+def _writing_call(tool: str, post_id: str, planned: dict) -> dict:
+    """The arguments of a call to the writing `tool`: a Brief, the `planned` one's Idea or `post_id`."""
+    if tool == "plan_posts":
+        return {"brief": "ship"}
+    if tool == "write_posts":
+        return {"brief_id": planned["brief_id"], "idea_ids": [planned["single_post"]["id"]]}
+    return {"post_id": post_id, "feedback": "shorter"}
 
 
 @pytest.mark.parametrize("tool", WRITING_TOOLS)
@@ -368,11 +341,12 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
         )
     await db.commit()
     fixed_clock.advance(timedelta(minutes=10))
+    planned = (await mcp.call_tool("plan_posts", brief="ship"))["structuredContent"]
     fake_llm.replies = [{"post": "final"}]
     assert (await client.post("/api/v1/briefs", json={"brief": "ship"})).status_code == 201
     fake_llm.calls.clear()
 
-    result = await mcp.call_tool(tool, **_writing_call(tool, post_id))
+    result = await mcp.call_tool(tool, **_writing_call(tool, post_id, planned))
 
     assert error_text(result) == "You've made 30 attempts at a version in the last hour."
     assert result["structuredContent"] == {"retry_at": "2026-10-10T13:00:30Z"}
@@ -382,7 +356,8 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
 @pytest.mark.parametrize(
     ("tool", "arguments", "per_minute"),
     [
-        ("start_post", {"brief": "ship"}, 20),
+        ("plan_posts", {"brief": "ship"}, 20),
+        ("write_posts", {"brief_id": "brief_missing", "idea_ids": ["idea_missing"]}, 20),
         ("give_feedback", {"post_id": "post_missing", "feedback": "shorter"}, 20),
         ("list_posts", {}, 60),
         ("get_post", {"post_id": "post_missing"}, 60),
