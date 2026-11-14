@@ -501,6 +501,24 @@ async def test_with_no_generations_left_a_brief_with_one_idea_is_planned_and_lef
     assert await _read(client, planned["id"]) == planned
 
 
+async def test_a_brief_left_unwritten_is_written_later_without_planning_again(
+    client, db, user, ready, fake_llm, cap, fixed_clock
+):
+    cap(1)
+    await _use_a_generation(db, user.id)
+    planned = await _plan(client)
+    [idea] = planned["ideas"]
+    cap(2)
+    fake_llm.replies = [{"post": "Written later.", "first_reply": None}]
+
+    written = await _write(client, planned, [idea["id"]])
+
+    assert written.status_code == 202, written.text
+    assert _plan_calls(fake_llm) == 1
+    [read] = (await _read(client, planned["id"]))["ideas"]
+    assert [part["text"] for part in read["post"]["text"]["parts"]] == ["Written later."]
+
+
 async def test_the_last_generation_used_during_the_plan_call_leaves_the_brief_unwritten(
     client, db, user, ready, cap, fixed_clock
 ):

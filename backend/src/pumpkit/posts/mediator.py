@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import BinaryIO, Literal, Optional
+from typing import BinaryIO, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -18,25 +18,24 @@ from pumpkit.core.errors import (
 )
 from pumpkit.core.llm import LLM
 from pumpkit.core.storage import FileStorage
-from pumpkit.core.time import Clock, as_utc
+from pumpkit.core.time import Clock
 from pumpkit.positioning import service as positioning_service
 from pumpkit.posts import media as media_service
 from pumpkit.posts import service
+from pumpkit.posts.brief_reading import brief_response, user_brief
 from pumpkit.posts.media_files import PREVIEW_CONTENT_TYPE
 from pumpkit.posts.models import Brief, Idea, Post
 from pumpkit.posts.plan_calls import count_plan_call
 from pumpkit.posts.plans import Plan
-from pumpkit.posts.schemas import BriefPostResponse, BriefResponse, IdeaResponse, PostResponse
+from pumpkit.posts.schemas import BriefResponse, PostResponse
 from pumpkit.posts.version_writing import (
     char_limit_for,
     charge_generation,
     check_attempt_limit,
     check_generation_left,
-    generations_left,
     plan_response,
     post_still_writing,
     record_failed_attempt,
-    text_response,
     user_post,
 )
 from pumpkit.posts.writing.planning import call_planner
@@ -77,7 +76,7 @@ async def plan_brief(
             created = await _create_post(db, planned, planned.brief.ideas[0], now=now)
             posts[created.idea_id] = created.post
             writes.append(created.write)
-    response = await _brief_response(db, planned.brief, posts, planned.char_limit, now=now)
+    response = await brief_response(db, planned.brief, posts, planned.char_limit, now=now)
     await _start_writes(db, llm, tasks, sessions, writes, clock)
     return response
 
@@ -180,7 +179,7 @@ async def write_ideas(
     now = clock()
     # Serializes the User's requests, so two can't both write one Idea or take the last Generation.
     await users_service.lock_user_id(db, user_id=user_id)
-    brief = await _user_brief(db, user=user, brief_id=brief_id)
+    brief = await user_brief(db, user=user, brief_id=brief_id)
     wanted = set(idea_ids)
     if not wanted <= {idea.id for idea in brief.ideas}:
         raise NotFoundError("Idea not found.")
@@ -202,54 +201,9 @@ async def write_ideas(
         created = await _create_post(db, planned, idea, now=now)
         posts[idea.id] = created.post
         writes.append(created.write)
-    response = await _brief_response(db, brief, posts, planned.char_limit, now=now)
+    response = await brief_response(db, brief, posts, planned.char_limit, now=now)
     await _start_writes(db, llm, tasks, sessions, writes, clock)
     return response
-
-
-async def get_brief(db: AsyncSession, *, user: User, brief_id: str, now: datetime) -> BriefResponse:
-    """The Brief with its Ideas and their Posts as they are now, for its page to poll."""
-    brief = await _user_brief(db, user=user, brief_id=brief_id)
-    posts = await service.posts_of_ideas(db, idea_ids=[idea.id for idea in brief.ideas])
-    char_limit = await char_limit_for(db, user_id=user.id)
-    return await _brief_response(db, brief, posts, char_limit, now=now)
-
-
-async def _user_brief(db: AsyncSession, *, user: User, brief_id: str) -> Brief:
-    brief = await service.get_user_brief(db, user_id=user.id, brief_id=brief_id)
-    if brief is None:
-        raise NotFoundError("Brief not found.")
-    return brief
-
-
-async def _brief_response(
-    db: AsyncSession, brief: Brief, posts: dict[str, Post], char_limit: int, *, now: datetime
-) -> BriefResponse:
-    def post_response(post: Optional[Post]) -> Optional[BriefPostResponse]:
-        if post is None:
-            return None
-        return BriefPostResponse(
-            id=post.id,
-            writing_state=writing_state(post, now=now),
-            text=text_response(post, char_limit),
-        )
-
-    return BriefResponse(
-        id=brief.id,
-        text=brief.text,
-        created_at=as_utc(brief.created_at),
-        ideas=[
-            IdeaResponse(
-                id=idea.id,
-                posting_order=idea.posting_order,
-                whole_brief=idea.whole_brief,
-                plan=plan_response(idea.plan),
-                post=post_response(posts.get(idea.id)),
-            )
-            for idea in brief.ideas
-        ],
-        generations_left=await generations_left(db, user_id=brief.user_id, now=now),
-    )
 
 
 @dataclass(frozen=True)

@@ -154,7 +154,7 @@ export const EVENTS = {
   },
   post_version_requested: {
     description:
-      "New post (brief: once per Post a request started, so a Brief planned with no split and no room, or with split Ideas, sends none until its Ideas are written) or the Post page (feedback, or retry of a first Version Pumpkit couldn't write): asked for a Version. Props: kind (brief | feedback | retry).",
+      "New post (brief: once per Post a request started, so a Brief planned with no split and no room, or with split Ideas, sends none until its Ideas are written), the Brief page (Write this one as brief, Retry as retry) or the Post page (feedback, or retry of a first Version Pumpkit couldn't write): asked for a Version. Props: kind (brief | feedback | retry).",
   },
   brief_planned: {
     description:

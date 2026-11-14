@@ -1,9 +1,9 @@
 import { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
+import { StatusBadge } from '@/features/scheduledPosts/StatusBadge';
 import { useIsPosting } from '@/features/scheduledPosts/usePosting';
 import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
@@ -139,9 +139,7 @@ export function PostRow({ post, charLimit }: { post: PostListItem; charLimit: nu
             {title}
           </Link>
           {post.status === 'scheduled' && (
-            <Badge variant={scheduled?.state === 'publishing' ? 'warning' : 'accent'}>
-              {scheduled?.state === 'publishing' ? 'Publishing' : 'Scheduled'}
-            </Badge>
+            <StatusBadge status="scheduled" publishing={scheduled?.state === 'publishing'} />
           )}
           <button
             type="button"

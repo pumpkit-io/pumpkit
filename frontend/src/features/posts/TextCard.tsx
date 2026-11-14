@@ -6,6 +6,7 @@ import { formatCount } from '@/lib/characters';
 import { cn } from '@/lib/utils';
 import { useProfile } from '@/pages/layout/ProfileContext';
 import { FORMAT_THREAD, formatOf } from '@/services/postService';
+import { CharacterCount } from './CharacterCount';
 import { partLabel } from './postShape';
 import { hasFirstReply, partName, type ShownPart } from './shownText';
 
@@ -27,9 +28,7 @@ function PartCounter({ part }: { part: ShownPart }) {
   const over = part.charCount - part.charLimit;
   return (
     <div className="space-y-0.5 font-sans text-[13px] tabular-nums">
-      <p className={over > 0 ? 'text-destructive' : 'text-muted-foreground'}>
-        {formatCount(part.charCount)} / {formatCount(part.charLimit)}
-      </p>
+      <CharacterCount count={part.charCount} limit={part.charLimit} />
       {over > 0 && (
         <p className="font-medium text-destructive">
           {`${formatCount(over)} characters over X's ${formatCount(part.charLimit)}-character limit`}
