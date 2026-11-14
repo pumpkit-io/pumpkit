@@ -30,6 +30,7 @@ async def main() -> None:
         ).scalar_one()
         post = Post(user_id=user.id, brief="E2E Thread", corpus_post_ids=[], created_at=now)
         version = VersionAttempt(
+            user_id=post.user_id,
             post=post,
             sequence=1,
             format="thread",
@@ -37,6 +38,7 @@ async def main() -> None:
             version_number=1,
             sketch_parts=PARTS,
             parts=PARTS,
+            first_reply=False,
             created_at=now,
         )
         set_text_from_version(post, version)
@@ -48,6 +50,7 @@ async def main() -> None:
             x_user_id="e2e-x-user",
             post_id=post.id,
             parts=PARTS,
+            first_reply=False,
             publish_at=(now + timedelta(days=1)).replace(second=0, microsecond=0),
             now=now,
         )

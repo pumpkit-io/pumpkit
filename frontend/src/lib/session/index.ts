@@ -80,6 +80,7 @@ async function endNow(reason: EndSessionReason): Promise<void> {
   clearSession();
   // Another User may sign in next on this browser.
   storage.remove('recent-drafts');
+  storage.remove('positioning-draft');
   sessionStorage.removeItem(POSTHOG_IDENTIFIED_KEY);
   resetPostHog();
   notify(null);

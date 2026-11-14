@@ -7,7 +7,6 @@ import pytest
 from pydantic import SecretStr
 
 from pumpkit.account_deletion import run_cli
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.gateway import TopUpPurchase
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
@@ -20,7 +19,7 @@ from tests.billing.test_top_ups import _send
 from tests.mcp_client import McpClient
 from tests.media_files import png
 from tests.oauth_app import REDIRECT, approved_code, exchange, register
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
 
 PREVIEW = "/api/v1/billing/coupons/preview"
 REDEEM = "/api/v1/billing/coupons/redemptions"
@@ -383,16 +382,9 @@ async def test_cardless_writing_spends_the_full_monthly_allowance_and_resets(
     created = await coupons("--months", "2")
     offer = (await client.post(PREVIEW, json={"code": created["code"]})).json()
     assert (await client.post(REDEEM, json=confirmation(offer))).status_code == 200
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="coupon-author-post", text="A useful writing example", posted_at=fixed_clock()
-        )
-    ]
-    assert (
-        await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    ).status_code == 201
-    fake_llm.replies = [written("Sketch"), {"post": "Written during free access"}]
-    response = await client.post("/api/v1/posts", json={"brief": "Write a useful note"})
+    await save_positioning(client)
+    fake_llm.replies = [{"post": "Written during free access"}]
+    response = await client.post("/api/v1/briefs", json={"brief": "Write a useful note"})
     assert response.status_code == 201, response.text
     usage = (await client.get("/api/v1/usage")).json()["allowance"]
     assert usage["generations"]["limit"] == 500
@@ -567,12 +559,9 @@ async def test_distinct_coupons_append_from_january_anchor_without_resetting_usa
     first = await coupons("--months", "1")
     offer = (await client.post(PREVIEW, json={"code": first["code"]})).json()
     first_result = (await client.post(REDEEM, json=confirmation(offer))).json()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="append-author", text="An example", posted_at=fixed_clock())
-    ]
-    await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    fake_llm.replies = [written("Sketch"), {"post": "Before appending"}]
-    assert (await client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
+    await save_positioning(client)
+    fake_llm.replies = [{"post": "Before appending"}]
+    assert (await client.post("/api/v1/briefs", json={"brief": "A note"})).status_code == 201
     before = (await client.get("/api/v1/usage")).json()
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 700)
     second = await coupons("--months", "1")

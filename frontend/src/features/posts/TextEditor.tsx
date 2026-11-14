@@ -1,8 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { MessageSquarePlus, X } from 'lucide-react';
 import { IS_MAC } from '@/lib/shortcuts';
 import { useMediaQuery } from '@/lib/useMediaQuery';
 import { changeDiff, type PartChange } from './changeDiff';
-import type { ShownPart } from './shownText';
+import { HoverLabel, HoverLabels } from './HoverLabel';
+import { ICON_BUTTON } from './panels/iconButton';
+import { partName, type ShownPart } from './shownText';
 import type { EditCause } from './textHistory';
 import { TextCard, type PartMedia } from './TextCard';
 import type { TextTrace } from './text/textController';
@@ -83,6 +86,7 @@ function PartBox({
   onRedo,
   onPasteFiles,
   trace,
+  autoFocus = false,
 }: {
   label: string;
   value: string;
@@ -92,6 +96,7 @@ function PartBox({
   /** Takes files pasted with no text, such as a screenshot, instead of the box. */
   onPasteFiles?: (files: File[]) => void;
   trace: { key: number; change: PartChange; first: boolean; still: boolean } | null;
+  autoFocus?: boolean;
 }) {
   const box = useRef<HTMLTextAreaElement>(null);
   const shown = useRef<HTMLDivElement>(null);
@@ -129,6 +134,7 @@ function PartBox({
         aria-keyshortcuts={IS_MAC ? 'Meta+Z Meta+Shift+Z' : 'Control+Z Control+Shift+Z'}
         value={value}
         rows={1}
+        autoFocus={autoFocus}
         onChange={(e) => {
           const native = e.nativeEvent as Partial<InputEvent>;
           onChange(e.target.value, native.inputType ?? null, e.target.selectionEnd);
@@ -173,9 +179,46 @@ function useShownTrace(trace: TextTrace | null | undefined) {
   return { key: trace.key, changes, first, still };
 }
 
+/** Removes the single post's first reply, from its label line. */
+function RemoveFirstReply({ onRemove }: { onRemove: () => void }) {
+  return (
+    <HoverLabels>
+      <HoverLabel label="Remove first reply">
+        <button
+          type="button"
+          aria-label="Remove first reply"
+          onClick={onRemove}
+          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
+        >
+          <X className="h-4 w-4" aria-hidden />
+        </button>
+      </HoverLabel>
+    </HoverLabels>
+  );
+}
+
+/** Gives a single post a first reply, from its counter row, where X's composer adds a post. */
+function AddFirstReply({ onAdd }: { onAdd: () => void }) {
+  return (
+    <HoverLabels>
+      <HoverLabel label="Add first reply">
+        <button
+          type="button"
+          aria-label="Add first reply"
+          onClick={onAdd}
+          className={`${ICON_BUTTON} -my-1.5 shrink-0`}
+        >
+          <MessageSquarePlus aria-hidden className="h-[18px] w-[18px]" />
+        </button>
+      </HoverLabel>
+    </HoverLabels>
+  );
+}
+
 /**
  * The Post's card with each Part's text editable in place, except Parts live on X. `texts` are
- * the Text's Parts; an edit hands back all of them, so the number and order of Parts never change.
+ * the Text's Parts; an edit hands back all of them, so the number and order of Parts never change,
+ * except that `onAddFirstReply` and `onRemoveFirstReply` add and drop a single post's first reply.
  * `trace` marks the words the last undo, redo, restore or rewrite changed.
  */
 export function TextEditor({
@@ -185,6 +228,8 @@ export function TextEditor({
   onEdit,
   onUndo,
   onRedo,
+  onAddFirstReply,
+  onRemoveFirstReply,
   trace,
   media,
   corner,
@@ -198,15 +243,20 @@ export function TextEditor({
   onEdit: (texts: string[], change: TextChange) => void;
   onUndo?: () => void;
   onRedo?: () => void;
+  onAddFirstReply?: () => void;
+  onRemoveFirstReply?: () => void;
   trace?: TextTrace | null;
   media?: (index: number) => PartMedia | null;
   corner?: ReactNode;
   header?: ReactNode;
   busy?: boolean;
 }) {
-  const total = parts.length;
   const caret = useRef<{ part: number; at: number } | null>(null);
   const shownTrace = useShownTrace(trace);
+  // Only the box a click on "Add first reply" opened takes focus, not one an undo brings back.
+  const [replyAdded, setReplyAdded] = useState(false);
+  const canAddReply =
+    editable && !!onAddFirstReply && parts.length === 1 && !parts[0]?.live && !parts[0]?.firstReply;
 
   const edit = (index: number, value: string, inputType: string | null, at: number) => {
     const before = texts[index] ?? '';
@@ -228,16 +278,37 @@ export function TextEditor({
       media={media}
       corner={corner}
       header={header}
+      firstReplyAction={
+        editable && onRemoveFirstReply ? (
+          <RemoveFirstReply
+            onRemove={() => {
+              setReplyAdded(false);
+              onRemoveFirstReply();
+            }}
+          />
+        ) : undefined
+      }
+      postTool={
+        canAddReply ? (
+          <AddFirstReply
+            onAdd={() => {
+              setReplyAdded(true);
+              onAddFirstReply();
+            }}
+          />
+        ) : undefined
+      }
       renderText={
         editable
           ? (part, index) =>
               part.live ? undefined : (
                 <PartBox
-                  label={total > 1 ? `Part ${index + 1} text` : 'Post text'}
+                  label={`${partName(parts, index)} text`}
                   value={part.text}
                   onChange={(value, inputType, at) => edit(index, value, inputType, at)}
                   onUndo={onUndo}
                   onRedo={onRedo}
+                  autoFocus={replyAdded && part.firstReply}
                   onPasteFiles={
                     media ? (files) => media(index)?.onFiles?.(files, 'paste') : undefined
                   }

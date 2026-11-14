@@ -33,15 +33,6 @@ vi.mock('@/services/billingService', () => ({
     }),
   },
 }));
-vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
-  inspirationAuthorService: {
-    list: vi.fn(),
-    add: vi.fn(),
-    remove: vi.fn(),
-    refresh: vi.fn(),
-  },
-}));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
@@ -52,9 +43,22 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     }),
     get: vi.fn(),
     start: vi.fn(),
+    retry: vi.fn(),
     addVersion: vi.fn(),
+    awaitVersion: vi.fn(),
+    dismissFailedFeedback: vi.fn(),
     restoreVersion: vi.fn(),
     saveText: vi.fn(),
+    discard: vi.fn(),
+  },
+}));
+vi.mock('@/services/briefService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/briefService')>()),
+  briefService: {
+    plan: vi.fn(),
+    get: vi.fn(),
+    write: vi.fn(),
+    recent: vi.fn().mockResolvedValue([]),
   },
 }));
 vi.mock('@/services/xConnectionService', () => ({
@@ -107,13 +111,19 @@ import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from '@/features/posts/text/te
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
-import { inspirationAuthorService } from '@/services/inspirationAuthorService';
+import { briefService, type Brief } from '@/services/briefService';
+import { recentDraftIds } from '@/features/posts/list/recentDrafts';
 import {
   postService,
+  VersionNotWritten,
+  WRITING_POLL_MS,
   textOf,
   type Part,
+  type PlaceInBrief,
+  type Plan,
   type PostDetail,
   type PostText,
+  type UnwrittenPost,
   type Version,
 } from '@/services/postService';
 import {
@@ -128,15 +138,14 @@ import { usageService, type Usage } from '@/services/usageService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { xConnectionReturn } from '@/features/xConnection/xConnectionReturn';
 import {
-  LEVELSIO,
   NOT_SUBSCRIBED,
   NO_POSTS,
-  PAULG,
   SUBSCRIBED,
   allowanceUsedUp,
   apiError,
   renderSignedIn,
   currentPath,
+  goTo,
   usageWith,
 } from './testing/signedInApp';
 
@@ -161,11 +170,21 @@ function version(number: number, texts: string[], extra: Partial<Version> = {}):
     number,
     feedback: number === 1 ? null : 'punchier',
     format: texts.length > 1 ? 'thread' : 'post',
+    firstReply: false,
     parts: texts.map((text) => part(text)),
     createdAt: `2026-10-10T0${number}:00:00Z`,
     ...extra,
   };
 }
+
+const ALONE: PlaceInBrief = { position: 1, postCount: 1, previousPostId: null, nextPostId: null };
+/** The second of a Brief's four Posts. */
+const SECOND_OF_FOUR: PlaceInBrief = {
+  position: 2,
+  postCount: 4,
+  previousPostId: 'post_00',
+  nextPostId: 'post_03',
+};
 
 /** `post` with `versions`, its Text set from the last of them, as the server sets it. */
 function withVersions<P extends PostDetail>(post: P, versions: Version[]): P {
@@ -178,9 +197,14 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
     {
       id: 'post_01',
       brief: 'ship small things',
+      briefId: 'brief_01',
+      placeInBrief: ALONE,
+      plan: null,
       text: null,
       versions: [],
       status: 'draft',
+      writing: false,
+      failedFeedback: null,
       scheduledPost: null,
       textMedia: [],
     },
@@ -206,6 +230,7 @@ function threadWith(parts: Part[]): PostDetail {
 const SCHEDULED: ScheduledPost = {
   id: 'scheduled_post_01',
   parts: [{ text: 'the final text', live: false, xPostUrl: null, media: [] }],
+  firstReply: false,
   state: 'scheduled',
   publishAt: '2026-10-12T07:00:00Z',
   publishedAt: null,
@@ -230,9 +255,13 @@ function withScheduledPost(scheduledPost: ScheduledPost): PostDetail {
   };
 }
 
-function renderPost(post: PostDetail, instance: Instance = SELLS_PLANS) {
+function renderPost(
+  post: PostDetail,
+  instance: Instance = SELLS_PLANS,
+  { strict = false }: { strict?: boolean } = {},
+) {
   vi.mocked(postService.get).mockResolvedValue(post);
-  return renderSignedIn(`/posts/${post.id}`, { instance });
+  return renderSignedIn(`/posts/${post.id}`, { instance, strict });
 }
 
 async function textCard() {
@@ -278,9 +307,10 @@ describe('Post page', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
     vi.mocked(postService.get).mockReset();
     vi.mocked(postService.addVersion).mockReset();
+    vi.mocked(postService.awaitVersion).mockReset();
+    vi.mocked(postService.dismissFailedFeedback).mockReset().mockResolvedValue();
     vi.mocked(postService.restoreVersion).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
@@ -301,35 +331,8 @@ describe('Post page', () => {
       'href',
       '/posts/drafts',
     );
-    expect(
-      (await screen.findByRole('link', { name: 'Writing in the style of @levelsio' })).closest(
-        'header',
-      ),
-    ).not.toBeNull();
-  });
-
-  it("shows the Persona's photos in the header and their handles on focus", async () => {
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
-      { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/levelsio_normal.jpg' },
-      PAULG,
-    ]);
-    renderPost(postWith('the final text'));
-
-    const chip = await screen.findByRole('link', {
-      name: 'Writing in the style of @levelsio, @paulg',
-    });
-    expect(chip).toHaveAttribute('href', '/persona');
-    expect(chip.querySelector('img')).toHaveAttribute(
-      'src',
-      'https://pbs.twimg.com/levelsio_normal.jpg',
-    );
-    expect(within(chip).getByText('P')).toBeInTheDocument();
-    expect(within(chip).getByText('@paulg')).not.toBeVisible();
-
-    act(() => chip.focus());
-
-    expect(within(chip).getByText('@levelsio')).toBeVisible();
-    expect(within(chip).getByText('@paulg')).toBeVisible();
+    const header = within(heading.closest('header')!);
+    expect(header.getByRole('link', { name: 'Persona' })).toHaveAttribute('href', '/persona');
   });
 
   it('shortens a long title with an ellipsis', async () => {
@@ -450,6 +453,7 @@ describe('Post page', () => {
         ...draft([version(1, ['the first text']), version(2, ['the second text'])]),
         text: {
           format: 'post',
+          firstReply: false,
           parts: [part('the text on screen')],
           versionNumber: 1,
           edited: true,
@@ -548,6 +552,74 @@ describe('Post page', () => {
   });
 
   describe('Origin line', () => {
+    const PLAN: Plan = {
+      coreIdea: 'Shipping small things beats planning big ones.',
+      takeaway: 'Ship the smallest thing that works this week.',
+      funnel: 'middle',
+      desiredAction: 'bookmark',
+      format: 'post',
+      length: 'medium',
+      structure: 'hook_problem_insight_closer',
+    };
+
+    it('shows the Plan in plain words after the Brief, and again above the full Brief', async () => {
+      renderPost({ ...postWith('the final text'), plan: PLAN });
+      await textCard();
+
+      fireEvent.click(
+        card().getByRole('button', {
+          name: 'V1 · From your brief · Built for trust · aims for bookmarks · medium',
+        }),
+      );
+
+      const brief = within(await screen.findByRole('dialog', { name: 'Brief' }));
+      expect(brief.getByText('Built for trust · aims for bookmarks · medium')).toBeInTheDocument();
+      expect(brief.getByText('ship small things')).toBeInTheDocument();
+    });
+
+    it.each<[Partial<Plan>, string]>([
+      [
+        { funnel: 'top', desiredAction: 'reply', length: 'short' },
+        'Built for reach · aims for replies · short',
+      ],
+      [
+        { funnel: 'bottom', desiredAction: 'sign-up', length: 'long' },
+        'Built for conversion · aims for sign-ups · long',
+      ],
+      [{ desiredAction: 'trust' }, 'Built for trust · aims for trust · medium'],
+      [{ desiredAction: 'dwell_time' }, 'Built for trust · aims for full reads · medium'],
+    ])('words the Plan %j as "%s"', async (choices, words) => {
+      renderPost({ ...postWith('the final text'), plan: { ...PLAN, ...choices } });
+      await textCard();
+
+      expect(
+        card().getByRole('button', { name: `V1 · From your brief · ${words}` }),
+      ).toBeInTheDocument();
+    });
+
+    it('leaves the Length out of the Plan of a Thread', async () => {
+      renderPost({ ...threadWith([part('one'), part('two')]), plan: PLAN });
+      await textCard();
+
+      expect(
+        card().getByRole('button', {
+          name: 'V1 · From your brief · Built for trust · aims for bookmarks',
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('shows no Plan on a Version written from Feedback, which may have overridden it', async () => {
+      renderPost({
+        ...draft([version(1, ['the final text']), version(2, ['a punchier text'])]),
+        plan: PLAN,
+      });
+      await textCard();
+
+      expect(
+        card().getByRole('button', { name: 'V2 · From feedback: “punchier”' }),
+      ).toBeInTheDocument();
+    });
+
     it('says the Text came from the Brief, and opens the full Brief', async () => {
       renderPost(postWith('the final text'));
       await textCard();
@@ -584,7 +656,13 @@ describe('Post page', () => {
     it('follows the Version the Text came from, and says when it was edited', async () => {
       renderPost({
         ...draft([version(1, ['the first text']), version(2, ['the second text'])]),
-        text: { format: 'post', parts: [part('changed')], versionNumber: 1, edited: true },
+        text: {
+          format: 'post',
+          firstReply: false,
+          parts: [part('changed')],
+          versionNumber: 1,
+          edited: true,
+        },
       });
       await textCard();
 
@@ -694,7 +772,13 @@ describe('Post page', () => {
       vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(THREE[2]!));
       renderPost({
         ...draft(THREE),
-        text: { format: 'post', parts: [part('changed by hand')], versionNumber: 3, edited: true },
+        text: {
+          format: 'post',
+          firstReply: false,
+          parts: [part('changed by hand')],
+          versionNumber: 3,
+          edited: true,
+        },
       });
       const history = await openHistory();
 
@@ -811,6 +895,7 @@ describe('Post page', () => {
         .mockReset()
         .mockImplementation(async (_postId, texts) => ({
           format: texts.length > 1 ? 'thread' : 'post',
+          firstReply: false,
           parts: texts.map((text) => part(text)),
           versionNumber: 1,
           edited: true,
@@ -841,7 +926,11 @@ describe('Post page', () => {
       expect(postService.saveText).not.toHaveBeenCalled();
       await pause();
       expect(postService.saveText).toHaveBeenCalledTimes(1);
-      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['the final text, edited']);
+      expect(postService.saveText).toHaveBeenCalledWith(
+        'post_01',
+        ['the final text, edited'],
+        false,
+      );
     });
 
     it('edits each Part of a Thread, keeping its Parts in number and order', async () => {
@@ -853,10 +942,11 @@ describe('Post page', () => {
       });
       await pause();
 
-      expect(postService.saveText).toHaveBeenCalledWith('post_01', [
-        'part one',
-        'part two, edited',
-      ]);
+      expect(postService.saveText).toHaveBeenCalledWith(
+        'post_01',
+        ['part one', 'part two, edited'],
+        false,
+      );
       expect(card.getAllByRole('listitem', { name: /^Part \d of 2$/ })).toHaveLength(2);
     });
 
@@ -887,10 +977,11 @@ describe('Post page', () => {
       });
       await pause();
 
-      expect(postService.saveText).toHaveBeenCalledWith('post_01', [
-        'Rewritten one.',
-        'Fixed two.',
-      ]);
+      expect(postService.saveText).toHaveBeenCalledWith(
+        'post_01',
+        ['Rewritten one.', 'Fixed two.'],
+        false,
+      );
     });
 
     it('says an edit was not saved and retries it until it is', async () => {
@@ -898,6 +989,7 @@ describe('Post page', () => {
         .mockRejectedValueOnce(new Error('Network Error'))
         .mockResolvedValueOnce({
           format: 'post',
+          firstReply: false,
           parts: [part('edited')],
           versionNumber: 1,
           edited: true,
@@ -911,7 +1003,7 @@ describe('Post page', () => {
       expect(await card().findByText('Edit not saved. Retrying.')).toBeInTheDocument();
       await pause(TEXT_SAVE_RETRY_MS);
       expect(postService.saveText).toHaveBeenCalledTimes(2);
-      expect(vi.mocked(postService.saveText).mock.calls[1]).toEqual(['post_01', ['edited']]);
+      expect(vi.mocked(postService.saveText).mock.calls[1]).toEqual(['post_01', ['edited'], false]);
       expect(
         await card().findByRole('button', { name: 'V1 · From your brief · edited' }),
       ).toBeInTheDocument();
@@ -926,7 +1018,7 @@ describe('Post page', () => {
 
       unmount();
 
-      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']);
+      expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited'], false);
     });
 
     it('opens "Post to…" only once the edit is saved', async () => {
@@ -935,7 +1027,13 @@ describe('Post page', () => {
         () =>
           new Promise((resolve) => {
             saved = () =>
-              resolve({ format: 'post', parts: [part('edited')], versionNumber: 1, edited: true });
+              resolve({
+                format: 'post',
+                firstReply: false,
+                parts: [part('edited')],
+                versionNumber: 1,
+                edited: true,
+              });
           }),
       );
       renderPost(postWith('the final text'));
@@ -945,7 +1043,9 @@ describe('Post page', () => {
 
       fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
 
-      await waitFor(() => expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited']));
+      await waitFor(() =>
+        expect(postService.saveText).toHaveBeenCalledWith('post_01', ['edited'], false),
+      );
       expect(screen.queryByRole('dialog', { name: 'Post to…' })).not.toBeInTheDocument();
       expect(card().getByRole('button', { name: 'Post to…' })).toHaveAttribute('aria-busy', 'true');
       await act(async () => saved());
@@ -2728,6 +2828,42 @@ describe('Post page', () => {
         expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
       });
 
+      it('puts the Media of a Part where the first reply goes onto the post', async () => {
+        vi.mocked(postService.addVersion).mockResolvedValue(
+          version(2, ['the post', 'Try it: [link]'], { format: 'post', firstReply: true }),
+        );
+        renderPost(withMedia(threadOfTwo(), [[image('m1')], [image('m2')]]));
+        await textCard();
+
+        await sendFeedback('one post, link in a reply');
+
+        expect(await card().findByRole('textbox', { name: 'First reply text' })).toHaveValue(
+          'Try it: [link]',
+        );
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
+      it('puts the Media of a Part where a restored first reply goes onto the post', async () => {
+        const withReply = version(1, ['the post', 'Try it: [link]'], {
+          format: 'post',
+          firstReply: true,
+        });
+        vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(withReply));
+        renderPost(
+          withMedia(draft([withReply, version(2, ['one', 'two'])]), [[image('m1')], [image('m2')]]),
+        );
+        await textCard();
+
+        fireEvent.click(card().getByRole('button', { name: 'History' }));
+        const history = within(await screen.findByRole('dialog', { name: 'History' }));
+        fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+        expect(await card().findByRole('textbox', { name: 'First reply text' })).toHaveValue(
+          'Try it: [link]',
+        );
+        expect(await mediaIdsOn('the post')).toEqual(['m1/preview', 'm2/preview']);
+      });
+
       it("keeps every tile on a Part over X's rule, says so under them, and Post to refuses it", async () => {
         vi.mocked(postService.addVersion).mockResolvedValue(version(2, ['one post']));
         renderPost(
@@ -3027,6 +3163,7 @@ describe('Post page', () => {
       it('leaves Media be when a text edit is undone and redone', async () => {
         vi.mocked(postService.saveText).mockImplementation(async (_postId, texts) => ({
           format: 'thread',
+          firstReply: false,
           parts: texts.map((text) => part(text)),
           versionNumber: 1,
           edited: true,
@@ -3521,6 +3658,7 @@ describe('Post page', () => {
         .mockReset()
         .mockImplementation(async (_postId, texts) => ({
           format: 'post',
+          firstReply: false,
           parts: texts.map((text) => part(text)),
           versionNumber: 1,
           edited: true,
@@ -3588,13 +3726,17 @@ describe('Post page', () => {
       expect(await origin('V1 · From your brief')).toBeInTheDocument();
       expect(await screen.findByText('Undid: your edit')).toBeInTheDocument();
       await pause(TEXT_SAVE_PAUSE_MS);
-      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the final text']);
+      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the final text'], false);
 
       fireEvent.click(button('Redo'));
       expect(box).toHaveValue('the final text, again');
       expect(await origin('V1 · From your brief · edited')).toBeInTheDocument();
       await pause(TEXT_SAVE_PAUSE_MS);
-      expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the final text, again']);
+      expect(postService.saveText).toHaveBeenLastCalledWith(
+        'post_01',
+        ['the final text, again'],
+        false,
+      );
       expect(track).toHaveBeenCalledWith('text_undone', { step: 'edit' });
       expect(track).toHaveBeenCalledWith('text_redone', { step: 'edit' });
     });
@@ -3721,9 +3863,13 @@ describe('Post page', () => {
       expect(dock.getByRole('button', { name: 'Writing…' })).toBeDisabled();
       expect(card().getByText('Writing version 2 from your feedback…')).toBeInTheDocument();
       expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'true');
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post', [
-        'the first final',
-      ]);
+      expect(postService.addVersion).toHaveBeenCalledWith(
+        'post_01',
+        'make it shorter',
+        'post',
+        ['the first final'],
+        expect.any(AbortSignal),
+      );
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'feedback' });
 
       answer(versionTwo);
@@ -3751,9 +3897,13 @@ describe('Post page', () => {
       fireEvent.click(format().getByRole('radio', { name: 'Thread' }));
       await sendFeedback('expand it');
 
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'expand it', 'thread', [
-        'the first final',
-      ]);
+      expect(postService.addVersion).toHaveBeenCalledWith(
+        'post_01',
+        'expand it',
+        'thread',
+        ['the first final'],
+        expect.any(AbortSignal),
+      );
       expect(
         await (await textCard()).findAllByRole('listitem', { name: /^Part \d of 3$/ }),
       ).toHaveLength(3);
@@ -3783,9 +3933,13 @@ describe('Post page', () => {
       await waitFor(() => expect(format.getByRole('radio', { name: 'Single post' })).toBeChecked());
       vi.mocked(postService.addVersion).mockResolvedValue(version(3, ['the third text']));
       await sendFeedback('shorter');
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'shorter', 'post', [
-        'the first text',
-      ]);
+      expect(postService.addVersion).toHaveBeenCalledWith(
+        'post_01',
+        'shorter',
+        'post',
+        ['the first text'],
+        expect.any(AbortSignal),
+      );
     });
 
     it('shows a failure in the dock with a way to try again, keeping the Feedback', async () => {
@@ -3812,8 +3966,134 @@ describe('Post page', () => {
         'make it shorter',
         'post',
         ['the first final'],
+        expect.any(AbortSignal),
       );
       expect(dock.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('keeps the Text and the Feedback, with a way to send it again, when the version could not be written', async () => {
+      vi.mocked(postService.addVersion)
+        .mockRejectedValueOnce(new VersionNotWritten())
+        .mockResolvedValueOnce(versionTwo);
+      renderPost(postWith('the first final'));
+      await textCard();
+
+      await sendFeedback('make it shorter');
+
+      const alert = within(await panel('Draft').findByRole('alert'));
+      expect(
+        alert.getByText(
+          "Pumpkit couldn't write the next version, so your text hasn't changed. Try again.",
+        ),
+      ).toBeInTheDocument();
+      expect((await textCard()).getByText('the first final')).toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('make it shorter');
+      expect(feedbackBox()).toBeEnabled();
+      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'feedback' });
+
+      fireEvent.click(alert.getByRole('button', { name: /try again/i }));
+
+      expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
+      expect(postService.addVersion).toHaveBeenCalledTimes(2);
+    });
+
+    it('opens a Post that Feedback is rewriting in the writing state, then shows the new version', async () => {
+      let answer: (v: Version) => void = () => {};
+      vi.mocked(postService.awaitVersion).mockImplementation(
+        (_postId, _after, signal) =>
+          new Promise((resolve, reject) => {
+            answer = resolve;
+            signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+          }),
+      );
+      renderPost({ ...postWith('the first final'), writing: true }, SELLS_PLANS, { strict: true });
+
+      expect(
+        await (await textCard()).findByText('Writing version 2 from your feedback…'),
+      ).toBeInTheDocument();
+      expect(feedbackBox()).toBeDisabled();
+      expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'true');
+      expect(postService.awaitVersion).toHaveBeenCalledWith('post_01', 1, expect.any(AbortSignal));
+
+      answer(versionTwo);
+
+      expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
+      expect(feedbackBox()).toBeEnabled();
+    });
+
+    const NOT_WRITTEN =
+      "Pumpkit couldn't write the next version, so your text hasn't changed. Try again.";
+
+    it('opens a Post whose last Feedback failed with the failure and the Feedback to send again', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(versionTwo);
+      renderPost({
+        ...postWith('the first final'),
+        failedFeedback: { feedback: 'make it a thread', format: 'thread' },
+      });
+      await textCard();
+
+      const alert = within(await panel('Draft').findByRole('alert'));
+      expect(alert.getByText(NOT_WRITTEN)).toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('make it a thread');
+      const format = within(panel('Draft').getByRole('radiogroup', { name: 'Format' }));
+      expect(format.getByRole('radio', { name: 'Thread' })).toBeChecked();
+
+      const tryAgain = alert.getByRole('button', { name: 'Try again' });
+      await waitFor(() => expect(tryAgain).toBeEnabled());
+      fireEvent.click(tryAgain);
+
+      await waitFor(() =>
+        expect(postService.addVersion).toHaveBeenCalledWith(
+          'post_01',
+          'make it a thread',
+          'thread',
+          ['the first final'],
+          expect.any(AbortSignal),
+        ),
+      );
+      expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
+    });
+
+    it('dismisses a failed Feedback, emptying the box', async () => {
+      renderPost({
+        ...postWith('the first final'),
+        failedFeedback: { feedback: 'warmer', format: 'post' },
+      });
+      await textCard();
+      const alert = within(await panel('Draft').findByRole('alert'));
+
+      fireEvent.click(alert.getByRole('button', { name: 'Dismiss' }));
+
+      await waitFor(() => expect(panel('Draft').queryByRole('alert')).not.toBeInTheDocument());
+      expect(feedbackBox()).toHaveValue('');
+      expect(postService.dismissFailedFeedback).toHaveBeenCalledWith('post_01');
+    });
+
+    it('opens a Post mid-Feedback, then offers that Feedback again once it fails', async () => {
+      vi.mocked(postService.awaitVersion).mockRejectedValue(
+        new VersionNotWritten({ feedback: 'warmer', format: 'post' }),
+      );
+      renderPost({ ...postWith('the first final'), writing: true });
+      await textCard();
+
+      const alert = within(await panel('Draft').findByRole('alert'));
+      expect(alert.getByText(NOT_WRITTEN)).toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('warmer');
+      expect(alert.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    });
+
+    it('opens a Post whose Feedback then fails with the Text as it was and the failure', async () => {
+      vi.mocked(postService.awaitVersion).mockRejectedValue(new VersionNotWritten());
+      renderPost({ ...postWith('the first final'), writing: true });
+      await textCard();
+
+      expect(
+        await panel('Draft').findByText(
+          "Pumpkit couldn't write the next version, so your text hasn't changed. Try again.",
+        ),
+      ).toBeInTheDocument();
+      expect((await textCard()).getByText('the first final')).toBeInTheDocument();
+      expect(feedbackBox()).toBeEnabled();
     });
 
     it.each([
@@ -3933,9 +4213,13 @@ describe('Post page', () => {
       fireEvent.keyDown(feedbackBox(), { key: 'Enter', ...keys });
 
       await waitFor(() =>
-        expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post', [
-          'the first final',
-        ]),
+        expect(postService.addVersion).toHaveBeenCalledWith(
+          'post_01',
+          'make it shorter',
+          'post',
+          ['the first final'],
+          expect.any(AbortSignal),
+        ),
       );
     });
 
@@ -5242,7 +5526,7 @@ describe('Post page', () => {
       });
       const dialog = await openRetry();
 
-      expect(dialog.getByText('Single post · 1 part · as @ada')).toBeInTheDocument();
+      expect(dialog.getByText('Single post · as @ada')).toBeInTheDocument();
       scheduleAt(dialog, '2026-10-12', '09:00');
       fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
 
@@ -5527,5 +5811,701 @@ describe('Post page', () => {
 
     expect(await sidebar.findByRole('link', { name: 'Posts' })).toBeInTheDocument();
     expect(sidebar.queryByRole('link', { name: 'Posts, 1 failed' })).not.toBeInTheDocument();
+  });
+});
+
+describe('A first reply on the Post page', () => {
+  const WITH_REPLY = draft([
+    version(1, ['the post', 'Try it: [link]'], { format: 'post', firstReply: true }),
+  ]);
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    localStorage.clear();
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+    vi.mocked(postService.saveText)
+      .mockReset()
+      .mockImplementation(async (_postId, texts, firstReply) => ({
+        format: 'post',
+        firstReply,
+        parts: texts.map((text) => part(text)),
+        versionNumber: 1,
+        edited: true,
+      }));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function pause() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TEXT_SAVE_PAUSE_MS);
+    });
+  }
+
+  it('shows the first reply as the last Part, labelled, with its own editor and no media', async () => {
+    renderPost(WITH_REPLY);
+    const text = await textCard();
+
+    const post = text.getByRole('listitem', { name: 'Post' });
+    const reply = text.getByRole('listitem', { name: 'First reply' });
+    expect(within(post).getByRole('textbox', { name: 'Post text' })).toHaveValue('the post');
+    expect(within(reply).getByRole('textbox', { name: 'First reply text' })).toHaveValue(
+      'Try it: [link]',
+    );
+    expect(within(reply).getByText('First reply')).toBeInTheDocument();
+    expect(within(post).getByRole('button', { name: 'Add media to the post' })).toBeInTheDocument();
+    expect(within(reply).queryByRole('button', { name: /media/i })).not.toBeInTheDocument();
+    expect(text.queryByText('1/2')).not.toBeInTheDocument();
+  });
+
+  it('saves an edit of the first reply as a first reply', async () => {
+    renderPost(WITH_REPLY);
+    const text = await textCard();
+
+    fireEvent.change(text.getByRole('textbox', { name: 'First reply text' }), {
+      target: { value: 'Try it: pumpkit.io/calc' },
+    });
+    await pause();
+
+    expect(postService.saveText).toHaveBeenCalledWith(
+      'post_01',
+      ['the post', 'Try it: pumpkit.io/calc'],
+      true,
+    );
+  });
+
+  it('removes the first reply, and undo brings it back', async () => {
+    renderPost(WITH_REPLY);
+    const text = await textCard();
+
+    fireEvent.click(text.getByRole('button', { name: 'Remove first reply' }));
+    await pause();
+
+    expect(text.queryByRole('listitem', { name: 'First reply' })).not.toBeInTheDocument();
+    expect(postService.saveText).toHaveBeenLastCalledWith('post_01', ['the post'], false);
+
+    fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+    await pause();
+
+    expect(await text.findByRole('listitem', { name: 'First reply' })).toBeInTheDocument();
+    expect(postService.saveText).toHaveBeenLastCalledWith(
+      'post_01',
+      ['the post', 'Try it: [link]'],
+      true,
+    );
+  });
+
+  const WITHOUT_REPLY = draft([version(1, ['the post'])]);
+
+  it('adds an empty first reply under a single post, ready to type in, and saves it', async () => {
+    renderPost(WITHOUT_REPLY);
+    const text = await textCard();
+
+    fireEvent.click(text.getByRole('button', { name: 'Add first reply' }));
+
+    const box = await text.findByRole('textbox', { name: 'First reply text' });
+    expect(box).toHaveValue('');
+    expect(box).toHaveFocus();
+    expect(
+      within(text.getByRole('listitem', { name: 'First reply' })).queryByRole('button', {
+        name: /media/i,
+      }),
+    ).not.toBeInTheDocument();
+    expect(text.queryByRole('button', { name: 'Add first reply' })).not.toBeInTheDocument();
+    fireEvent.change(box, { target: { value: 'Try it: pumpkit.io/calc' } });
+    await pause();
+
+    expect(postService.saveText).toHaveBeenLastCalledWith(
+      'post_01',
+      ['the post', 'Try it: pumpkit.io/calc'],
+      true,
+    );
+  });
+
+  it('takes an added first reply away again on undo', async () => {
+    renderPost(WITHOUT_REPLY);
+    const text = await textCard();
+
+    fireEvent.click(text.getByRole('button', { name: 'Add first reply' }));
+    await text.findByRole('listitem', { name: 'First reply' });
+    fireEvent.click(card().getByRole('button', { name: 'Undo' }));
+    await pause();
+
+    expect(text.queryByRole('listitem', { name: 'First reply' })).not.toBeInTheDocument();
+    expect(text.getByRole('button', { name: 'Add first reply' })).toBeInTheDocument();
+  });
+
+  it('offers no first reply to add on a thread', async () => {
+    renderPost(draft([version(1, ['one', 'two'])]));
+
+    expect((await textCard()).queryByRole('button', { name: 'Add first reply' })).toBeNull();
+  });
+
+  it('offers no second first reply on a post that has one', async () => {
+    renderPost(WITH_REPLY);
+
+    expect((await textCard()).queryByRole('button', { name: 'Add first reply' })).toBeNull();
+  });
+
+  it('refuses "Post to…" while a Part holds the [link] placeholder', async () => {
+    renderPost(WITH_REPLY);
+    await textCard();
+
+    fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+    expect(dialog.getByText('Replace [link] with the real link first.')).toBeInTheDocument();
+    expect(dialog.getByText('Single post · first reply · as @ada')).toBeInTheDocument();
+  });
+
+  it('reads a markdown link named link as no placeholder', async () => {
+    renderPost(
+      draft([
+        version(1, ['the post', 'Try it: [link](https://pumpkit.io/calc)'], {
+          format: 'post',
+          firstReply: true,
+        }),
+      ]),
+    );
+    await textCard();
+
+    fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+    expect(dialog.queryByText('Replace [link] with the real link first.')).toBeNull();
+  });
+
+  it('reads the placeholder in any case, with spaces inside', async () => {
+    renderPost(
+      draft([version(1, ['the post', 'Try it: [ LINK ]'], { format: 'post', firstReply: true })]),
+    );
+    await textCard();
+
+    fireEvent.click(card().getByRole('button', { name: 'Post to…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+
+    expect(dialog.getByText('Replace [link] with the real link first.')).toBeInTheDocument();
+  });
+});
+
+describe('A post before its first version', () => {
+  const PLANNED: Plan = {
+    coreIdea: 'Shipping small things beats planning big ones.',
+    takeaway: 'Ship the smallest thing that works this week.',
+    funnel: 'middle',
+    desiredAction: 'bookmark',
+    format: 'post',
+    length: 'short',
+    structure: 'few_lines',
+  };
+
+  function unwritten(writingState: UnwrittenPost['writingState']): UnwrittenPost {
+    return {
+      id: 'post_01',
+      brief: 'ship small things',
+      briefId: 'brief_01',
+      placeInBrief: ALONE,
+      plan: PLANNED,
+      writingState,
+    };
+  }
+
+  async function poll() {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(postService.get).mockReset();
+    vi.mocked(postService.retry).mockReset();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+    vi.mocked(track).mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows the card being written, with its plan, and no dock or text', async () => {
+    vi.mocked(postService.get).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+
+    expect(await screen.findByRole('status', { name: '' })).toHaveTextContent('Writing…');
+    expect(screen.getByText(/You can leave this page and come back/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(
+      'Shipping small things beats planning big ones.',
+    );
+    expect(
+      screen.getByRole('button', { name: /^From your brief · Built for trust/ }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Text' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Feedback' })).not.toBeInTheDocument();
+  });
+
+  it('reads the post again until its text is written, then shows it', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockResolvedValueOnce(postWith('the final text'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+    expect(screen.getByText('Writing…')).toBeInTheDocument();
+    await poll();
+
+    expect((await textCard()).getByText('the final text')).toBeInTheDocument();
+    expect(postService.get).toHaveBeenCalledTimes(3);
+  });
+
+  it('keeps polling after a read fails, waiting twice as long after each failure', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValueOnce(postWith('the final text'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(3);
+    await poll();
+    await poll();
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(3);
+    await poll();
+
+    expect((await textCard()).getByText('the final text')).toBeInTheDocument();
+    expect(postService.get).toHaveBeenCalledTimes(4);
+  });
+
+  it('stops polling and says the post is gone when a read answers 404', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValue(apiError(404, 'Post not found.'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+
+    expect(await screen.findByText(/This post isn't here/)).toBeInTheDocument();
+    await poll();
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops polling and shows the load error when a read answers 403', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValue(apiError(403, 'Not allowed.'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+
+    expect(await screen.findByText('Not allowed.')).toBeInTheDocument();
+    await poll();
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops reading the post once the user leaves the page', async () => {
+    vi.mocked(postService.get).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    fireEvent.click(
+      within(screen.getAllByRole('navigation', { name: 'Main' })[0]!).getByRole('link', {
+        name: 'New post',
+      }),
+    );
+    await poll();
+    await poll();
+
+    expect(postService.get).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a write that failed while the page was open, with Retry', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockResolvedValueOnce(unwritten('not_written'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+
+    await poll();
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("This post couldn't be written.");
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+    await poll();
+    expect(postService.get).toHaveBeenCalledTimes(2);
+  });
+
+  it('retries the write and shows the post being written again, then its text', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(postWith('written on retry'));
+    vi.mocked(postService.retry).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Writing…')).toBeInTheDocument();
+    expect(postService.retry).toHaveBeenCalledWith('post_01');
+    expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'retry' });
+    await poll();
+    expect((await textCard()).getByText('written on retry')).toBeInTheDocument();
+  });
+
+  it('tells a failed retry apart from a failed first write', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(unwritten('not_written'));
+    vi.mocked(postService.retry).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    await screen.findByText('Writing…');
+    await poll();
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'retry' });
+    expect(track).not.toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+  });
+
+  it('reads again at the normal pace after a retry, whatever reads failed before', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(postWith('written on retry'));
+    vi.mocked(postService.retry).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+    await poll();
+    await poll();
+    await poll();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    await screen.findByText('Writing…');
+    await poll();
+
+    expect((await textCard()).getByText('written on retry')).toBeInTheDocument();
+  });
+
+  it('reads another post afresh after moving to it from a retried one', async () => {
+    const other = (writingState: UnwrittenPost['writingState']) => ({
+      ...unwritten(writingState),
+      id: 'post_02',
+    });
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(other('writing'))
+      .mockResolvedValueOnce(other('not_written'));
+    vi.mocked(postService.retry).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    await screen.findByText('Writing…');
+
+    goTo('/posts/post_02');
+    await waitFor(() => expect(postService.get).toHaveBeenLastCalledWith('post_02'));
+    await poll();
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+    expect(track).not.toHaveBeenCalledWith('post_version_failed', { kind: 'retry' });
+  });
+
+  it('shows the text when a retry finds the late write already finished', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(postWith('written late'));
+    vi.mocked(postService.retry).mockRejectedValue(apiError(409, 'This post is already written.'));
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect((await textCard()).getByText('written late')).toBeInTheDocument();
+    expect(screen.queryByText('This post is already written.')).not.toBeInTheDocument();
+  });
+
+  it('follows a retry another tab started, then shows its text', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockResolvedValueOnce(postWith('written from the other tab'));
+    vi.mocked(postService.retry).mockRejectedValue(
+      apiError(409, 'Pumpkit is still writing this post.'),
+    );
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Writing…')).toBeInTheDocument();
+    expect(screen.queryByText('Pumpkit is still writing this post.')).not.toBeInTheDocument();
+    await poll();
+    expect((await textCard()).getByText('written from the other tab')).toBeInTheDocument();
+  });
+
+  it('says why a retry was refused and keeps Retry', async () => {
+    vi.mocked(postService.get).mockResolvedValue(unwritten('not_written'));
+    vi.mocked(postService.retry).mockRejectedValue(
+      apiError(409, 'This post was started before plans existed.'),
+    );
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(
+      await screen.findByText('This post was started before plans existed.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeEnabled();
+  });
+
+  it('shows the allowance refusal when no generation is left for a retry', async () => {
+    vi.mocked(postService.get).mockResolvedValue(unwritten('not_written'));
+    vi.mocked(postService.retry).mockRejectedValue(
+      allowanceUsedUp("You've used this month's 500 generations."),
+    );
+    renderSignedIn('/posts/post_01');
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText(/You've used this month's 500 generations/)).toBeInTheDocument();
+  });
+});
+
+describe("A post among its brief's posts", () => {
+  beforeEach(() => {
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(postService.get).mockReset();
+    vi.mocked(postService.retry).mockReset();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+  });
+
+  function among(placeInBrief: PlaceInBrief, id = 'post_02'): PostDetail {
+    return { ...postWith(`the text of ${id}`), id, placeInBrief };
+  }
+
+  function briefNav() {
+    return within(screen.getByRole('navigation', { name: 'Posts from your brief' }));
+  }
+
+  it('links back to the brief and shows "2 of 4" with the previous and next posts', async () => {
+    renderPost(among(SECOND_OF_FOUR));
+    await textCard();
+
+    const nav = briefNav();
+    expect(nav.getByRole('link', { name: 'Posts from your brief' })).toHaveAttribute(
+      'href',
+      '/briefs/brief_01',
+    );
+    expect(nav.getByText('2 of 4')).toBeInTheDocument();
+    expect(nav.getByRole('link', { name: 'Previous post' })).toHaveAttribute(
+      'href',
+      '/posts/post_00',
+    );
+    expect(nav.getByRole('link', { name: 'Next post' })).toHaveAttribute('href', '/posts/post_03');
+  });
+
+  it('disables previous on the first post and next on the last', async () => {
+    renderPost(
+      among({ position: 1, postCount: 2, previousPostId: null, nextPostId: 'post_02' }, 'post_01'),
+    );
+    await textCard();
+
+    const previous = briefNav().getByRole('link', { name: 'Previous post' });
+    expect(previous).toHaveAttribute('aria-disabled', 'true');
+    expect(previous).not.toHaveAttribute('href');
+    expect(briefNav().getByRole('link', { name: 'Next post' })).toHaveAttribute(
+      'href',
+      '/posts/post_02',
+    );
+  });
+
+  it('opens the next post in place', async () => {
+    vi.mocked(postService.get).mockImplementation(async (id) =>
+      id === 'post_03'
+        ? among({ position: 3, postCount: 4, previousPostId: 'post_02', nextPostId: null }, id)
+        : among(SECOND_OF_FOUR),
+    );
+    renderSignedIn('/posts/post_02');
+    await textCard();
+
+    fireEvent.click(briefNav().getByRole('link', { name: 'Next post' }));
+
+    expect(await screen.findByText('3 of 4')).toBeInTheDocument();
+    expect((await textCard()).getByText('the text of post_03')).toBeInTheDocument();
+    expect(currentPath()).toBe('/posts/post_03');
+  });
+
+  it('shows a post from a brief with one post as before, with no brief links', async () => {
+    renderPost(postWith('the final text'));
+    await textCard();
+
+    expect(
+      screen.queryByRole('navigation', { name: 'Posts from your brief' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/ of \d/)).not.toBeInTheDocument();
+  });
+
+  it('keeps its place while a post of the brief is written again', async () => {
+    const unwritten: UnwrittenPost = {
+      id: 'post_02',
+      brief: 'ship small things',
+      briefId: 'brief_01',
+      placeInBrief: SECOND_OF_FOUR,
+      plan: null,
+      writingState: 'not_written',
+    };
+    vi.mocked(postService.get).mockResolvedValue(unwritten);
+    vi.mocked(postService.retry).mockResolvedValue({
+      id: 'post_02',
+      brief: 'ship small things',
+      plan: null,
+      writingState: 'writing',
+    });
+    renderSignedIn('/posts/post_02');
+    expect(await screen.findByText('2 of 4')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Writing…')).toBeInTheDocument();
+    expect(briefNav().getByText('2 of 4')).toBeInTheDocument();
+  });
+});
+
+describe('Discarding a draft from its page', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(postService.get).mockReset();
+    vi.mocked(postService.discard).mockReset().mockResolvedValue();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+    vi.mocked(briefService.get).mockReset();
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+    vi.mocked(track).mockClear();
+  });
+
+  /** The Brief of `post_01` once it is discarded, its one Idea offered again. */
+  const DISCARDED_ALONE: Brief = {
+    id: 'brief_01',
+    text: 'ship small things',
+    createdAt: '2026-10-10T12:00:30Z',
+    ideas: [
+      {
+        id: 'idea_01',
+        postingOrder: 1,
+        wholeBrief: true,
+        plan: {
+          coreIdea: 'Ship small things.',
+          takeaway: 'Ship this week.',
+          funnel: 'middle',
+          desiredAction: 'bookmark',
+          format: 'post',
+          length: 'short',
+          structure: 'few_lines',
+        },
+        post: null,
+      },
+    ],
+    generationsLeft: null,
+  };
+
+  async function confirmDiscard() {
+    fireEvent.click((await textCard()).getByRole('button', { name: 'Discard post' }));
+    const dialog = within(await screen.findByRole('alertdialog'));
+    expect(dialog.getByText('Discard this post?')).toBeInTheDocument();
+    expect(dialog.getByText('Its versions are deleted for good.')).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole('button', { name: 'Discard' }));
+  }
+
+  it("asks first, then discards it and opens its brief, which offers the post's idea again", async () => {
+    vi.mocked(briefService.get).mockResolvedValue(DISCARDED_ALONE);
+    renderPost(postWith('the final text'));
+    await textCard();
+    expect(recentDraftIds()).toEqual(['post_01']);
+
+    await confirmDiscard();
+
+    await waitFor(() => expect(currentPath()).toBe('/briefs/brief_01'));
+    expect(postService.discard).toHaveBeenCalledWith('post_01');
+    expect(recentDraftIds()).toEqual([]);
+    expect(track).toHaveBeenCalledWith('post_discarded', { from: 'post_page' });
+  });
+
+  it('opens Drafts when its brief has nothing left to show', async () => {
+    vi.mocked(briefService.get).mockResolvedValue({ ...DISCARDED_ALONE, ideas: [] });
+    renderPost(postWith('the final text'));
+
+    await confirmDiscard();
+
+    await waitFor(() => expect(currentPath()).toBe('/posts/drafts'));
+  });
+
+  it('keeps the post when the User changes their mind', async () => {
+    renderPost(postWith('the final text'));
+
+    fireEvent.click((await textCard()).getByRole('button', { name: 'Discard post' }));
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Keep it' }),
+    );
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(postService.discard).not.toHaveBeenCalled();
+    expect(currentPath()).toBe('/posts/post_01');
+  });
+
+  it('says why when discarding is refused, and stays on the post', async () => {
+    vi.mocked(postService.discard).mockRejectedValue(
+      apiError(409, "This post is still being written, so it can't be discarded yet."),
+    );
+    renderPost(postWith('the final text'));
+
+    await confirmDiscard();
+
+    const dialog = within(screen.getByRole('alertdialog'));
+    expect(await dialog.findByRole('alert')).toHaveTextContent(
+      "This post is still being written, so it can't be discarded yet.",
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Keep it' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(currentPath()).toBe('/posts/post_01');
+    expect(recentDraftIds()).toEqual(['post_01']);
+  });
+
+  it('disables discard while a version is written', async () => {
+    renderPost({ ...postWith('the final text'), writing: true });
+
+    expect((await textCard()).getByRole('button', { name: 'Discard post' })).toBeDisabled();
+  });
+
+  it.each([
+    ['scheduled', SCHEDULED],
+    ['published', { ...SCHEDULED, state: 'published' as const }],
+    ['failed', { ...SCHEDULED, state: 'failed' as const }],
+  ])('offers no discard on a %s post', async (_, scheduledPost) => {
+    renderPost(withScheduledPost(scheduledPost));
+
+    expect(
+      (await textCard()).queryByRole('button', { name: 'Discard post' }),
+    ).not.toBeInTheDocument();
   });
 });

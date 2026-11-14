@@ -28,10 +28,6 @@ vi.mock('@/services/billingService', () => ({
     cancelRenewal: vi.fn(),
   },
 }));
-vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
-  inspirationAuthorService: { list: vi.fn().mockResolvedValue([]) },
-}));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
     get: vi.fn(),

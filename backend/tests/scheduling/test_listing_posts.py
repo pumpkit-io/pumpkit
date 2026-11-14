@@ -9,7 +9,6 @@ from typing import Optional
 import pytest
 
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.formats import format_of
 from pumpkit.posts.models import ATTEMPT_FAILED, ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.scheduling.models import (
@@ -23,9 +22,11 @@ from pumpkit.scheduling.models import (
 )
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written, written_thread
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import start_thread, started_post_id, written_post
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 T0 = datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc)
 NO_POSTS = {"draft": 0, "scheduled": 0, "published": 0, "failed": 0}
@@ -63,9 +64,10 @@ def seed_post(db, user):
         for number, parts in enumerate(versions, start=1):
             attempts.append(
                 VersionAttempt(
+                    user_id=post.user_id,
                     post=post,
                     sequence=number,
-                    format=format_of(parts),
+                    format=format_of(parts, first_reply=False),
                     status=ATTEMPT_SUCCEEDED,
                     version_number=number,
                     sketch_parts=parts,
@@ -157,6 +159,7 @@ async def test_a_post_with_no_version_is_left_out_of_every_list_and_count(
     await db.flush()
     db.add(
         VersionAttempt(
+            user_id=no_version.user_id,
             post_id=no_version.id,
             sequence=1,
             format="post",
@@ -266,9 +269,17 @@ async def test_a_draft_carries_its_latest_versions_text_and_no_scheduled_post(cl
     assert item == {
         "id": post_id,
         "brief": "About First take.",
+        "brief_id": item["brief_id"],
+        "place_in_brief": {
+            "position": 1,
+            "post_count": 1,
+            "previous_post_id": None,
+            "next_post_id": None,
+        },
         "status": "draft",
         "parts": ["Hook line.\nMore.", "Second part."],
         "format": "thread",
+        "first_reply": False,
         "version_count": 2,
         "latest_version_at": "2026-10-01T09:00:00Z",
         "scheduled_post": None,
@@ -318,10 +329,11 @@ async def test_a_published_post_carries_its_link_on_x(client, seed_post):
 
 
 async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_parts_link(
-    client, with_author_and_x, fake_llm, fake_x_publisher
+    client, with_positioning_and_x, fake_llm, fake_x_publisher
 ):
-    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["Live one.", "Refused two."]}]
-    post = (await client.post(POSTS, json={"brief": "ship", "format": "thread"})).json()
+    post = await written_post(
+        client, await start_thread(client, fake_llm, ["Live one.", "Refused two."])
+    )
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
     fake_x_publisher.fail_publish_on = 2
     failed = await client.post(
@@ -336,9 +348,9 @@ async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_par
     assert item["scheduled_post"]["x_post_url"] == failed.json()["parts"][0]["x_post_url"]
 
 
-async def test_unscheduling_moves_the_post_back_to_drafts(client, with_author_and_x, fake_llm):
-    fake_llm.replies = [written("sketch"), {"post": "Version one."}]
-    post = (await client.post(POSTS, json={"brief": "ship"})).json()
+async def test_unscheduling_moves_the_post_back_to_drafts(client, with_positioning_and_x, fake_llm):
+    fake_llm.replies = [{"post": "Version one."}]
+    post = {"id": started_post_id(await client.post(BRIEFS, json={"brief": "ship"}))}
     scheduled = (
         await client.post(
             SCHEDULED_POSTS,
@@ -358,13 +370,9 @@ async def test_unscheduling_moves_the_post_back_to_drafts(client, with_author_an
 
 
 @pytest.fixture
-async def with_author_and_x(client, subscribed, fake_x_reader, connect_x, fixed_clock) -> None:
+async def with_positioning_and_x(client, subscribed, connect_x, fixed_clock) -> None:
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=T0)
-    ]
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
+    await save_positioning(client)
 
 
 async def test_the_list_posts_tool_lists_a_status_with_each_scheduled_post_and_the_counts(

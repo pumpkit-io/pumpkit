@@ -7,16 +7,16 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.gateway import OneOffPrice, TopUpPurchase
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
-from pumpkit.posts.llm import LLMError
+from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import start, started_post_id
 
-AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 USAGE = "/api/v1/usage"
 WEBHOOK = "/api/v1/stripe/webhook"
 CUSTOMER = "cus_1"
@@ -27,11 +27,8 @@ def _utc(*args: int) -> datetime:
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader):
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=_utc(2026, 9, 1))
-    ]
-    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
+async def with_positioning(client, subscribed):
+    await save_positioning(client)
 
 
 @pytest.fixture
@@ -68,6 +65,7 @@ async def _use_allowance(db, user_id: str, count: int = 4) -> None:
     for sequence in range(1, count + 1):
         db.add(
             VersionAttempt(
+                user_id=post.user_id,
                 post_id=post.id,
                 sequence=sequence,
                 version_number=sequence,
@@ -90,12 +88,20 @@ async def _generations_left(client) -> tuple[int, list[int]]:
 
 
 async def _start_post(client, fake_llm):
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
-    return await client.post(POSTS, json={"brief": "ship"})
+    fake_llm.replies = [{"post": "final"}]
+    return await start(client)
 
 
 async def test_with_the_allowance_used_up_a_version_is_charged_to_a_top_up(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     await _use_allowance(db, user.id)
@@ -106,8 +112,37 @@ async def test_with_the_allowance_used_up_a_version_is_charged_to_a_top_up(
     assert await _generations_left(client) == (0, [1])
 
 
+async def test_a_discarded_draft_keeps_what_it_took_from_a_top_up(
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
+):
+    await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
+    await _use_allowance(db, user.id)
+    response = await _start_post(client, fake_llm)
+
+    discarded = await client.delete(f"{POSTS}/{started_post_id(response)}")
+
+    assert discarded.status_code == 204, discarded.text
+    assert await _generations_left(client) == (0, [1])
+
+
 async def test_a_top_up_is_untouched_while_the_allowance_has_room(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     await _use_allowance(db, user.id, count=3)
@@ -117,21 +152,37 @@ async def test_a_top_up_is_untouched_while_the_allowance_has_room(
 
 
 async def test_feedback_is_charged_to_a_top_up_too(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
-    post_id = (await _start_post(client, fake_llm)).json()["id"]
+    post_id = started_post_id(await _start_post(client, fake_llm))
     await _use_allowance(db, user.id, count=3)
-    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+    fake_llm.replies = [{"post": "final 2"}]
 
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "shorter"})
 
-    assert response.status_code == 201
+    assert response.status_code == 202
     assert await _generations_left(client) == (0, [1])
 
 
 async def test_the_top_up_that_expires_first_is_spent_first(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_later", _utc(2026, 10, 5))
     await _buy_top_up(client, fake_billing, "cs_sooner", _utc(2026, 10, 1))
@@ -148,7 +199,15 @@ async def test_the_top_up_that_expires_first_is_spent_first(
 
 
 async def test_with_the_allowance_and_top_ups_used_up_the_way_out_is_a_top_up(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     await _use_allowance(db, user.id)
@@ -164,11 +223,20 @@ async def test_with_the_allowance_and_top_ups_used_up_the_way_out_is_a_top_up(
         "Failed attempts don't count."
     )
     assert (response.json()["left"], response.json()["way_out"]) == (0, "top_up")
-    assert fake_llm.calls == []
+    # Only the plan call: the Brief is planned, and its Post refused.
+    assert len(fake_llm.calls) == 1
 
 
 async def test_an_expired_top_up_is_not_spent(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_old", _utc(2025, 10, 9))
     await _use_allowance(db, user.id)
@@ -180,19 +248,35 @@ async def test_an_expired_top_up_is_not_spent(
 
 
 async def test_a_failed_attempt_takes_nothing_from_a_top_up(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     await _use_allowance(db, user.id)
     fake_llm.replies = [LLMError("down")]
 
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 502
+    assert (await start(client)).status_code == 201
 
     assert await _generations_left(client) == (0, [2])
 
 
 async def test_a_top_up_bought_before_a_subscription_ended_is_spent_in_the_next_one(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 9, 3))
     subscribed.status = "canceled"
@@ -231,7 +315,15 @@ async def test_a_user_who_isnt_subscribed_spends_no_top_up(
 
 
 async def test_a_refunded_top_up_keeps_the_versions_it_paid_for_off_the_allowance(
-    client, db, user, subscribed, with_author, sells_top_ups, fake_llm, fake_billing, fixed_clock
+    client,
+    db,
+    user,
+    subscribed,
+    with_positioning,
+    sells_top_ups,
+    fake_llm,
+    fake_billing,
+    fixed_clock,
 ):
     await _buy_top_up(client, fake_billing, "cs_1", _utc(2026, 10, 3))
     await _use_allowance(db, user.id)

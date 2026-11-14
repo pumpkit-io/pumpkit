@@ -1,12 +1,10 @@
 """Give the seeded e2e user an X connection, so "Post to…" lets them schedule.
 
 Its tokens are fakes: nothing in the smoke tests reaches X, and `seed_user.py` removes the
-connection again on the next run. Run it like `seed_user.py`, after it. An email argument
-connects that seeded user instead, as `onboarding_user.py`'s to pass the X step.
+connection again on the next run. Run it like `seed_user.py`, after it.
 """
 
 import asyncio
-import sys
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -17,21 +15,16 @@ from pumpkit.core.db.session import _db_session_handler
 from pumpkit.x_connection.x_publisher import X_SCOPES, XAccount, XTokens
 from tests.browser_seed import x_id_for
 
-# X account ids are unique across Users, so each seeded user gets its own X account.
-ACCOUNTS = {
-    "e2e@e2e-user.dev": ("e2e-x-user", "e2e_user"),
-    "e2e-onboarding@e2e-user.dev": ("e2e-x-onboarding", "e2e_newcomer"),
-}
-E2E_EMAIL = sys.argv[1] if len(sys.argv) > 1 else "e2e@e2e-user.dev"
+E2E_EMAIL = "e2e@e2e-user.dev"
 X_USER_ID = x_id_for(E2E_EMAIL)
-HANDLE = ACCOUNTS[E2E_EMAIL][1]
+HANDLE = "e2e_user"
 
 
 async def main() -> None:
     now = datetime.now(timezone.utc)
     async with _db_session_handler.async_session_maker() as db:
         user = (
-            await db.execute(select(User).where(User.x_user_id == x_id_for(E2E_EMAIL)))
+            await db.execute(select(User).where(User.x_user_id == X_USER_ID))
         ).scalar_one()
         await x_connections_service.save_connection(
             db,

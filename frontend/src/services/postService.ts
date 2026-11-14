@@ -1,3 +1,4 @@
+import { errorStatus } from './apiErrors';
 import { apiService } from './apiService';
 import { toMedia, type Media, type MediaApi } from './mediaService';
 import {
@@ -13,9 +14,9 @@ export type Format = 'post' | 'thread';
 export const FORMAT_POST: Format = 'post';
 export const FORMAT_THREAD: Format = 'thread';
 
-/** One Part is a single post; several are a Thread. */
-export function formatOf(parts: readonly unknown[]): Format {
-  return parts.length > 1 ? FORMAT_THREAD : FORMAT_POST;
+/** The Format of Parts that record none, as a Scheduled post's: a first reply keeps it a post. */
+export function formatOf(partCount: number, firstReply: boolean): Format {
+  return partCount > 1 && !firstReply ? FORMAT_THREAD : FORMAT_POST;
 }
 
 /** One Part of a Version's text, in its place in the order. */
@@ -34,8 +35,10 @@ export interface Version {
   /** Null for the first Version, which comes from the Brief. */
   feedback: string | null;
   format: Format;
-  /** A single X post has one Part. */
+  /** A single X post has one Part, or two with its first reply. */
   parts: Part[];
+  /** Whether the last Part is the single post's first reply (ADR 0027). */
+  firstReply: boolean;
   /** When Pumpkit wrote it. */
   createdAt: string;
 }
@@ -44,6 +47,8 @@ export interface Version {
 export interface PostText {
   format: Format;
   parts: Part[];
+  /** Whether the last Part is the single post's first reply, posted as a reply to it. */
+  firstReply: boolean;
   /** The Version it came from: the last one written or restored. */
   versionNumber: number;
   /** Whether the User changed it since it came from that Version. */
@@ -59,11 +64,133 @@ export interface Post {
 /** Where a Post stands, from its one Scheduled post (ADR 0015): none makes it a Draft. */
 export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed';
 
+export type Funnel = 'top' | 'middle' | 'bottom';
+export type DesiredAction =
+  | 'dwell_time'
+  | 'reply'
+  | 'bookmark'
+  | 'repost'
+  | 'share'
+  | 'follow'
+  | 'trust'
+  | 'click'
+  | 'DM'
+  | 'sign-up'
+  | 'buy';
+export type Length = 'short' | 'medium' | 'long';
+
+/** What Pumpkit decided about a Post before writing it (ADR 0025). */
+export interface Plan {
+  coreIdea: string;
+  takeaway: string;
+  /** Who the Post is for: `top` for reach, `middle` for trust, `bottom` for conversion. */
+  funnel: Funnel;
+  desiredAction: DesiredAction;
+  format: Format;
+  /** Null for a Thread. */
+  length: Length | null;
+  structure: string;
+}
+
+/**
+ * Whether Pumpkit is writing a Post's first Version, or couldn't write it and offers Retry
+ * (ADR 0026). A write that outlives the backend's timeout reads as `not_written`.
+ */
+export type WritingState = 'writing' | 'not_written';
+
+/** How often a page reads a Post again while one of its Versions is being written. */
+export const WRITING_POLL_MS = 3_000;
+/** The longest wait between reads, which doubles after each read that fails. */
+export const WRITING_POLL_MAX_MS = 60_000;
+
+/** How long to wait before the next read while a Version is written, after `failures` in a row. */
+export function pollDelay(failures: number): number {
+  return Math.min(WRITING_POLL_MS * 2 ** failures, WRITING_POLL_MAX_MS);
+}
+
+/** Feedback whose Version Pumpkit couldn't write, as it was sent, to send again. */
+export interface FailedFeedback {
+  feedback: string;
+  format: Format;
+}
+
+/** Feedback's write failed or outlived the backend's timeout: the Text is as it was. */
+export class VersionNotWritten extends Error {
+  constructor(readonly failedFeedback: FailedFeedback | null = null) {
+    super("Pumpkit couldn't write the next version, so your text hasn't changed. Try again.");
+    this.name = 'VersionNotWritten';
+  }
+}
+
+/** Resolves after `ms`, or rejects once `signal` aborts. */
+function pause(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason);
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', stop);
+      resolve();
+    }, ms);
+    const stop = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    signal?.addEventListener('abort', stop, { once: true });
+  });
+}
+
+/**
+ * Where a Post comes among its Brief's Posts, in the order of their Ideas: every Post counts,
+ * written, being written or not, and an Idea not written doesn't.
+ */
+export interface PlaceInBrief {
+  /** From 1. */
+  position: number;
+  postCount: number;
+  previousPostId: string | null;
+  nextPostId: string | null;
+}
+
+interface PlaceInBriefApi {
+  position: number;
+  post_count: number;
+  previous_post_id: string | null;
+  next_post_id: string | null;
+}
+
+const toPlaceInBrief = (p: PlaceInBriefApi): PlaceInBrief => ({
+  position: p.position,
+  postCount: p.post_count,
+  previousPostId: p.previous_post_id,
+  nextPostId: p.next_post_id,
+});
+
+/** A Post with no Text yet: no Draft, no status, only its Brief, Plan and writing state. */
+export interface UnwrittenPost {
+  id: string;
+  brief: string;
+  briefId: string;
+  placeInBrief: PlaceInBrief;
+  plan: Plan | null;
+  writingState: WritingState;
+}
+
+export function isUnwritten(post: PostDetail | UnwrittenPost): post is UnwrittenPost {
+  return 'writingState' in post;
+}
+
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
-  /** Null only for a Post whose first Version failed. */
+  briefId: string;
+  placeInBrief: PlaceInBrief;
+  /** Null for a Post written before Briefs were planned. */
+  plan: Plan | null;
+  /** Never null from `get`: a Post with no Text reads as an `UnwrittenPost`. */
   text: PostText | null;
   status: PostStatus;
+  /** True while Feedback's Version is being written: the Text can't change until it is. */
+  writing: boolean;
+  /** The last Feedback when its Version couldn't be written, until the User moves on. */
+  failedFeedback: FailedFeedback | null;
   /** Null while the Post is a Draft. */
   scheduledPost: ScheduledPost | null;
   /**
@@ -96,10 +223,14 @@ export interface ScheduledPostSummary {
 export interface PostListItem {
   id: string;
   brief: string;
+  briefId: string;
+  placeInBrief: PlaceInBrief;
   status: PostStatus;
   /** The Scheduled post's text when it has one, else the latest Version's. */
   parts: string[];
   format: Format;
+  /** Whether the last Part is the single post's first reply. */
+  firstReply: boolean;
   versionCount: number;
   latestVersionAt: string;
   scheduledPost: ScheduledPostSummary | null;
@@ -128,9 +259,12 @@ interface PostsPageApi {
   data: {
     id: string;
     brief: string;
+    brief_id: string;
+    place_in_brief: PlaceInBriefApi;
     status: PostStatus;
     parts: string[];
     format: Format;
+    first_reply: boolean;
     version_count: number;
     latest_version_at: string;
     scheduled_post: ScheduledPostSummaryApi | null;
@@ -166,6 +300,7 @@ interface VersionApi {
   feedback: string | null;
   format: Format;
   parts: PartApi[];
+  first_reply: boolean;
   created_at: string;
 }
 
@@ -175,18 +310,50 @@ interface PostApi {
   versions: VersionApi[];
 }
 
-interface PostTextApi {
+interface StartedPostApi extends PostApi {
+  plan: PlanApi | null;
+  writing_state: 'writing';
+}
+
+export interface PostTextApi {
   format: Format;
   parts: (PartApi & { media: MediaApi[] })[];
+  first_reply: boolean;
   version_number: number;
   edited: boolean;
 }
 
+export interface PlanApi {
+  core_idea: string;
+  takeaway: string;
+  funnel: Funnel;
+  desired_action: DesiredAction;
+  format: Format;
+  length: Length | null;
+  structure: string;
+}
+
 interface PostDetailApi extends PostApi {
+  brief_id: string;
+  place_in_brief: PlaceInBriefApi;
+  plan: PlanApi | null;
   text: PostTextApi | null;
-  status: PostStatus;
+  writing_state: WritingState | null;
+  failed_feedback: FailedFeedback | null;
+  /** Null until the first Version is written. */
+  status: PostStatus | null;
   scheduled_post: ScheduledPostApi | null;
 }
+
+export const toPlan = (p: PlanApi): Plan => ({
+  coreIdea: p.core_idea,
+  takeaway: p.takeaway,
+  funnel: p.funnel,
+  desiredAction: p.desired_action,
+  format: p.format,
+  length: p.length,
+  structure: p.structure,
+});
 
 const toPart = (p: PartApi): Part => ({
   text: p.text,
@@ -200,12 +367,14 @@ const toVersion = (v: VersionApi): Version => ({
   feedback: v.feedback,
   format: v.format,
   parts: v.parts.map(toPart),
+  firstReply: v.first_reply,
   createdAt: v.created_at,
 });
 
-const toText = (t: PostTextApi): PostText => ({
+export const toText = (t: PostTextApi): PostText => ({
   format: t.format,
   parts: t.parts.map(toPart),
+  firstReply: t.first_reply,
   versionNumber: t.version_number,
   edited: t.edited,
 });
@@ -215,10 +384,21 @@ export function textOf(version: Version): PostText {
   return {
     format: version.format,
     parts: version.parts,
+    firstReply: version.firstReply,
     versionNumber: version.number,
     edited: false,
   };
 }
+
+/** A Post just started, which the response of starting it doesn't place in its Brief. */
+export type StartedPost = Omit<UnwrittenPost, 'briefId' | 'placeInBrief'>;
+
+const startedPost = (data: StartedPostApi): StartedPost => ({
+  id: data.id,
+  brief: data.brief,
+  plan: data.plan ? toPlan(data.plan) : null,
+  writingState: data.writing_state,
+});
 
 /** The backend refuses a longer Brief; the UI shows a counter as it gets close. */
 export const BRIEF_MAX_CHARS = 200_000;
@@ -235,9 +415,12 @@ export const postService = {
       posts: data.data.map((p) => ({
         id: p.id,
         brief: p.brief,
+        briefId: p.brief_id,
+        placeInBrief: toPlaceInBrief(p.place_in_brief),
         status: p.status,
         parts: p.parts,
         format: p.format,
+        firstReply: p.first_reply,
         versionCount: p.version_count,
         latestVersionAt: p.latest_version_at,
         scheduledPost: p.scheduled_post ? toSummary(p.scheduled_post) : null,
@@ -246,49 +429,109 @@ export const postService = {
       nextOffset: data.next_offset,
     };
   },
-  /** Open to a User who isn't Subscribed, so their history stays readable. */
-  get: async (postId: string): Promise<PostDetail> => {
+  /**
+   * The Post as its page shows it, or as an `UnwrittenPost` until its first Version is written.
+   * Open to a User who isn't Subscribed, so their history stays readable.
+   */
+  get: async (postId: string): Promise<PostDetail | UnwrittenPost> => {
     const { data } = await apiService.get<PostDetailApi>(`/posts/${encodeURIComponent(postId)}`);
+    const plan = data.plan ? toPlan(data.plan) : null;
+    const place = { briefId: data.brief_id, placeInBrief: toPlaceInBrief(data.place_in_brief) };
+    if (data.status === null)
+      return {
+        id: data.id,
+        brief: data.brief,
+        ...place,
+        plan,
+        writingState: data.writing_state ?? 'not_written',
+      };
     return {
       id: data.id,
       brief: data.brief,
+      ...place,
+      plan,
       text: data.text ? toText(data.text) : null,
       versions: data.versions.map(toVersion),
       status: data.status,
+      writing: data.writing_state === 'writing',
+      failedFeedback: data.failed_feedback,
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
     };
   },
-  /** Writes the first Version before answering, which can take a minute or two. */
-  start: async (brief: string, format: Format): Promise<Post> => {
-    const { data } = await apiService.post<PostApi>('/posts', { brief, format });
-    return { id: data.id, brief: data.brief, versions: data.versions.map(toVersion) };
+  /**
+   * Discards a Draft: the Post and its Versions are deleted for good, and its Idea is offered again
+   * on its Brief. The server refuses any other Post, and one being written.
+   */
+  discard: async (postId: string): Promise<void> => {
+    await apiService.delete(`/posts/${encodeURIComponent(postId)}`);
+  },
+  /** Writes the first Version of a Post Pumpkit couldn't write again, from the same Plan. */
+  retry: async (postId: string): Promise<StartedPost> => {
+    const { data } = await apiService.post<StartedPostApi>(
+      `/posts/${encodeURIComponent(postId)}/retry`,
+    );
+    return startedPost(data);
   },
   /**
-   * Writes the next Version from Feedback on the Text before answering, which can take a minute
-   * or two. `text` is every Part on screen: the server refuses it while an edit isn't saved yet.
+   * Writes the next Version from Feedback on the Text, in the background, and resolves with it
+   * once it is the Text: a minute or two. `text` is every Part on screen: the server refuses it
+   * while an edit isn't saved yet.
    */
   addVersion: async (
     postId: string,
     feedback: string,
     format: Format,
     text: string[],
+    signal?: AbortSignal,
   ): Promise<Version> => {
-    const { data } = await apiService.post<VersionApi>(`/posts/${postId}/versions`, {
+    const { data } = await apiService.post<PostDetailApi>(`/posts/${postId}/versions`, {
       feedback,
       format,
       text,
     });
-    return toVersion(data);
+    const after = Math.max(0, ...data.versions.map((v) => v.number));
+    return postService.awaitVersion(postId, after, signal);
   },
   /**
-   * Stores the User's edit of the Post's Text, every Part in order, as typed. Saving the same
-   * Parts again changes nothing, so a failed save can be retried as it is.
+   * Reads the Post until no Version is being written, and resolves with the Version written after
+   * Version `after`. Rejects with `VersionNotWritten` when the write failed or timed out, which
+   * leaves the Text as it was, and with the read's error on a 404 or 403.
    */
-  saveText: async (postId: string, parts: string[]): Promise<PostText> => {
+  awaitVersion: async (postId: string, after: number, signal?: AbortSignal): Promise<Version> => {
+    let failures = 0;
+    for (;;) {
+      await pause(pollDelay(failures), signal);
+      let post: PostDetail | UnwrittenPost;
+      try {
+        post = await postService.get(postId);
+      } catch (e) {
+        const status = errorStatus(e);
+        if (status === 404 || status === 403) throw e;
+        failures += 1;
+        continue;
+      }
+      failures = 0;
+      if (!isUnwritten(post) && post.writing) continue;
+      const versions = isUnwritten(post) ? [] : post.versions.filter((v) => v.number > after);
+      const written = versions[versions.length - 1];
+      if (written) return written;
+      throw new VersionNotWritten(isUnwritten(post) ? null : post.failedFeedback);
+    }
+  },
+  /** Stops showing the Post's last Feedback as one Pumpkit couldn't write. */
+  dismissFailedFeedback: async (postId: string): Promise<void> => {
+    await apiService.delete(`/posts/${postId}/failed-feedback`);
+  },
+  /**
+   * Stores the User's edit of the Post's Text, every Part in order, as typed, and whether the
+   * last is a single post's first reply, which the User may add or remove. Saving the same Parts
+   * again changes nothing, so a failed save can be retried as it is.
+   */
+  saveText: async (postId: string, parts: string[], firstReply: boolean): Promise<PostText> => {
     const { data } = await apiService.put<PostTextApi>(
       `/posts/${encodeURIComponent(postId)}/text`,
-      { parts },
+      { parts, first_reply: firstReply },
     );
     return toText(data);
   },

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { errorStatus } from '@/services/apiErrors';
-import { postService } from '@/services/postService';
+import { isUnwritten, postService } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 
 /** The waits between reads of a posting Post, the last one repeating for as long as it posts. */
@@ -84,7 +84,8 @@ export function usePosting(
         return;
       }
       try {
-        const { scheduledPost: current } = await postService.get(postId);
+        const post = await postService.get(postId);
+        const current = isUnwritten(post) ? null : post.scheduledPost;
         if (stopped) return;
         const shown = latest.current;
         shown.forget();

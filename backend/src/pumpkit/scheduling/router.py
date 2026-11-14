@@ -2,20 +2,21 @@ from datetime import datetime
 from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Path, Query, Request, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import XReader, get_x_reader
 from pumpkit.billing.dependencies import require_subscribed_user
-from pumpkit.core.db.session import get_async_db
+from pumpkit.core.background import TaskRegistry, get_background_tasks
+from pumpkit.core.db.session import get_async_db, get_session_maker
+from pumpkit.core.llm import LLM, get_llm
 from pumpkit.core.photos import PhotoFetcher, get_photo_fetcher
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.core.time import Clock, get_clock
-from pumpkit.posts.llm import LLM, get_llm
 from pumpkit.posts.media_upload import ReceivedMedia, receive_media
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import AltTextRequest, MediaResponse, TextResponse, VersionResponse
+from pumpkit.posts.schemas import AltTextRequest, MediaResponse, TextResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.rules import (
     DestinationChange,
@@ -27,6 +28,7 @@ from pumpkit.scheduling.rules import (
 )
 from pumpkit.scheduling.schemas import (
     WRITE_RATE,
+    BriefDetailResponse,
     CommunityLookupRequest,
     CommunityResponse,
     FeedbackRequest,
@@ -340,6 +342,19 @@ async def list_posts(
 
 
 @posts_router.get(
+    "/briefs/{brief_id}", response_model=BriefDetailResponse, status_code=status.HTTP_200_OK
+)
+async def get_brief(
+    brief_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> BriefDetailResponse:
+    """The Brief with its Ideas and their Posts, each Post's writing state and status included."""
+    return await mediator.get_brief(db, user=current_user, brief_id=brief_id, now=clock())
+
+
+@posts_router.get(
     "/posts/{post_id}", response_model=PostDetailResponse, status_code=status.HTTP_200_OK
 )
 async def get_post(
@@ -351,10 +366,28 @@ async def get_post(
     return await mediator.get_post(db=db, user=current_user, post_id=post_id, now=clock())
 
 
+@posts_router.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def discard_post(
+    post_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    storage: FileStorage = Depends(get_file_storage),
+    clock: Clock = Depends(get_clock),
+) -> None:
+    """
+    Discards a Draft: the Post and its Versions are deleted for good, with its Media, and its Idea
+    stays on the Brief as not written. The Generations it used stay used. Any other Post is
+    refused, and so is one still being written.
+    """
+    await mediator.discard_post(
+        db=db, storage=storage, user=current_user, post_id=post_id, now=clock()
+    )
+
+
 @posts_router.post(
     "/posts/{post_id}/versions",
-    response_model=VersionResponse,
-    status_code=status.HTTP_201_CREATED,
+    response_model=PostDetailResponse,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 @limiter.limit(VERSION_WRITE_RATE)
 async def give_feedback(
@@ -364,20 +397,24 @@ async def give_feedback(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     llm: LLM = Depends(get_llm),
+    tasks: TaskRegistry = Depends(get_background_tasks),
+    sessions: async_sessionmaker[AsyncSession] = Depends(get_session_maker),
     clock: Clock = Depends(get_clock),
-) -> VersionResponse:
+) -> PostDetailResponse:
     """
-    Writes the Version before answering, which takes two model calls. A Scheduled or Published
-    Post is refused.
+    Answers with the Post being written; the Version is written in the background, and
+    `GET /posts/{post_id}` shows it once it is. A Scheduled or Published Post is refused.
     """
     return await mediator.give_feedback(
         db=db,
         llm=llm,
+        tasks=tasks,
+        sessions=sessions,
         user=current_user,
         post_id=post_id,
         feedback=feedback_request.feedback,
         format=feedback_request.format,
-        now=clock(),
+        clock=clock,
         sent_text=feedback_request.text,
     )
 
@@ -414,11 +451,17 @@ async def edit_text(
     clock: Clock = Depends(get_clock),
 ) -> TextResponse:
     """
-    Saves the User's edit of the Post's Text, every Part in order. Idempotent, so the web app
-    retries a failed save as it is. A Scheduled or Published Post is refused.
+    Saves the User's edit of the Post's Text, every Part in order, which may add or remove a
+    single post's first reply. Idempotent, so the web app retries a failed save as it is. A
+    Scheduled or Published Post is refused.
     """
     return await mediator.edit_text(
-        db=db, user=current_user, post_id=post_id, parts=edit_request.parts, now=clock()
+        db=db,
+        user=current_user,
+        post_id=post_id,
+        parts=edit_request.parts,
+        first_reply=edit_request.first_reply,
+        now=clock(),
     )
 
 

@@ -43,6 +43,7 @@ async def test_saving_a_draft_stores_the_parts_as_the_edited_text(client, subscr
     saved = {
         "format": "post",
         "parts": [{**_part("As edited."), "media": []}],
+        "first_reply": False,
         "version_number": 1,
         "edited": True,
     }
