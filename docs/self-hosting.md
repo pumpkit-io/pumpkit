@@ -208,8 +208,8 @@ X alone signs users in and authorizes publishing for the same stable X account (
 Sells Plans. Without it the Instance sells no Plans and every signed-in User may use all of Pumpkit. See [Selling Plans](#selling-plans) for the whole setup.
 
 - Get keys: [dashboard.stripe.com/apikeys](https://dashboard.stripe.com/apikeys) (the secret and publishable keys).
-- Pricing: [Stripe pricing](https://stripe.com/pricing) and, since Checkout charges tax, [Stripe Tax pricing](https://stripe.com/tax/pricing).
-- Settings: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` and `BILLING_PLAN_KEYS`, set together. `BILLING_TRIAL_PERIOD_DAYS` (default 7, `0` for none) sets the Trial. `GENERATIONS_MONTHLY_CAP` (default 500 per month, a quarter for the Trial, empty for no cap) sets how many Versions each Subscribed User may have written. `BILLING_TOP_UP_KEY` (optional) sells Top-ups.
+- Pricing: [Stripe pricing](https://stripe.com/pricing) and, if you stay the seller, [Stripe Tax pricing](https://stripe.com/tax/pricing).
+- Settings: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET` and `BILLING_PLAN_KEYS`, set together. `BILLING_TRIAL_PERIOD_DAYS` (default 7, `0` for none) sets the Trial. `GENERATIONS_MONTHLY_CAP` (default 500 per month, a quarter for the Trial, empty for no cap) sets how many Versions each Subscribed User may have written. `BILLING_TOP_UP_KEY` (optional) sells Top-ups. `STRIPE_MANAGED_PAYMENTS` (optional, default off) makes Stripe the seller instead of you.
 
 ### Support address and Operator details
 
@@ -253,10 +253,17 @@ docker compose up -d --wait
 
 ## Selling Plans
 
-Turn this on only if you charge Users. You are then the seller: your own Terms, Privacy Policy and tax registration apply, not the Operator's.
+Turn this on only if you charge Users. Your own Terms and Privacy Policy then apply, not the Operator's. First choose who the seller is (ADR 0028):
 
-1. **Create the Plans.** In Stripe, create a product with one recurring price per Plan, give each price a lookup key (for example `pro_monthly`), and set each price's tax behaviour to inclusive. Only the lookup keys in `BILLING_PLAN_KEYS` are on sale, in that order.
-2. **Set up Stripe Tax.** Checkout charges tax and collects tax IDs, and Stripe refuses to open a Checkout until Stripe Tax is set up. Under Settings, then Tax, set the origin address and the default product category (for example "Software as a service (SaaS) - business use"), set "Include tax in prices" to Yes, and add a registration for each place you collect tax in. Without a registration, Checkout charges no tax. Pumpkit turns off Stripe's Managed Payments (Stripe as merchant of record, on by default for new accounts) for its Checkouts, so you stay the seller whatever that setting says.
+- **You are the seller** (the default). Checkout charges VAT through Stripe Tax and collects VAT IDs, and you register for VAT and file it wherever you sell. Pumpkit turns Stripe's Managed Payments off for its Checkouts, whatever the account's setting says.
+- **Stripe is the seller**, with `STRIPE_MANAGED_PAYMENTS=true`. Every Subscription and Top-up Checkout runs with [Managed Payments](https://docs.stripe.com/payments/managed-payments/how-it-works): Stripe, through Sold through Link, LLC, is merchant of record, calculates, collects and files VAT, handles disputes and fraud, and sends customers their receipts and invoices. Your Terms and Privacy Policy should then name Sold through Link as the seller.
+
+The mode applies to Subscriptions started after you set it. A Subscription keeps the mode of the Checkout that started it, so if you switch with paying subscribers, they stay in the old mode until they go through Checkout again. Choose before your first paying subscriber.
+
+1. **Create the Plans.** In Stripe, create a product with one recurring price per Plan, give each price a lookup key (for example `pro_monthly`), and set each price's tax behaviour to inclusive, so the price on the Paywall is the price a User pays. Only the lookup keys in `BILLING_PLAN_KEYS` are on sale, in that order. Under Managed Payments, also give each product a [tax code eligible for Managed Payments](https://docs.stripe.com/payments/managed-payments/eligibility#eligible-tax-codes), such as `txcd_10103001` (Software as a service, business use); Stripe refuses a Checkout for a product without one.
+2. **Set up tax for your mode.**
+   - As the seller, set up Stripe Tax. Stripe refuses to open a Checkout until it is set up. Under Settings, then Tax, set the origin address and the default product category (for example "Software as a service (SaaS) - business use"), set "Include tax in prices" to Yes, and add a registration for each place you collect tax in. Without a registration, Checkout charges no tax.
+   - Under Managed Payments, [set it up in Stripe](https://docs.stripe.com/payments/managed-payments/set-up): accept the Managed Payments terms in the Dashboard. You need no Stripe Tax registration.
 3. **Add the webhook endpoint.** In Stripe's Developers section, add an endpoint at `PUBLIC_URL/api/v1/stripe/webhook` (for example `https://pumpkit.example.org/api/v1/stripe/webhook`) subscribed to `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded` and `charge.dispute.created`. Copy its signing secret.
 4. **Write the settings.**
 
@@ -267,9 +274,11 @@ Turn this on only if you charge Users. You are then the seller: your own Terms, 
    curl -s http://localhost:8080/api/v1/instance | grep -o '"sells_plans":[a-z]*'
    ```
 
+   For Managed Payments, add `STRIPE_MANAGED_PAYMENTS=true` to the `setup.sh` line.
+
    **Check:** it prints `"sells_plans":true`, and `curl -s PUBLIC_URL/api/v1/billing/plans` lists each Plan with its price.
 
-5. **Sell Top-ups, if you want to.** A Top-up is a one-off pack, half of each monthly cap (250 generations and 50 X posts, up to 5 with a link, at the defaults), that a paid-up User buys once they run low; it lasts 12 months and is spent only after the Allowance. In Stripe, add a one-off price (not recurring) to a product, give it a lookup key such as `top_up`, set its tax behaviour to inclusive, and set `BILLING_TOP_UP_KEY=top_up` in `.env`. Leave the setting out and no Top-ups are sold. A refund or a dispute of a Top-up's payment in Stripe removes whatever is left of it; what it already paid for, waiting Scheduled posts included, stays paid for and doesn't move onto the Allowance. Your Terms should say that a Top-up is not refunded once any of it is spent.
+5. **Sell Top-ups, if you want to.** A Top-up is a one-off pack, half of each monthly cap (250 generations and 50 X posts, up to 5 with a link, at the defaults), that a paid-up User buys once they run low; it lasts 12 months and is spent only after the Allowance. In Stripe, add a one-off price (not recurring) to a product, give it a lookup key such as `top_up`, set its tax behaviour to inclusive (and, under Managed Payments, give the product an eligible tax code), and set `BILLING_TOP_UP_KEY=top_up` in `.env`. Leave the setting out and no Top-ups are sold. A refund or a dispute of a Top-up's payment in Stripe removes whatever is left of it; what it already paid for, waiting Scheduled posts included, stays paid for and doesn't move onto the Allowance. Your Terms should say that a Top-up is not refunded once any of it is spent.
 
    **Check:** `curl -s PUBLIC_URL/api/v1/billing/plans` shows `top_up` with its price.
 
@@ -456,7 +465,7 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **A Scheduled post does not go out.** `docker compose ps publisher` should show `(healthy)`; `docker compose logs --tail 50 publisher` shows its passes and any error from X. A Failed Scheduled post shows its reason on the Posts page.
 
-**Stripe Checkout fails, or a paid Subscription does not show.** Check Stripe Tax ([Selling Plans](#selling-plans), step 2) and the backend log, which has Stripe's reason. On Stripe's webhook endpoint page, check that deliveries to `PUBLIC_URL/api/v1/stripe/webhook` succeed.
+**Stripe Checkout fails, or a paid Subscription does not show.** The backend log has Stripe's reason. As the seller, check Stripe Tax ([Selling Plans](#selling-plans), step 2). Under Managed Payments, check that each Plan's and the Top-up's product has a tax code eligible for Managed Payments, and that the account has accepted the Managed Payments terms ([Selling Plans](#selling-plans), steps 1 and 2). On Stripe's webhook endpoint page, check that deliveries to `PUBLIC_URL/api/v1/stripe/webhook` succeed.
 
 ## Coupon readiness
 
