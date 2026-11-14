@@ -232,7 +232,7 @@ async def _fail_after(client, fake_x_publisher, post_id: str, *, live: int) -> N
 async def test_restoring_a_version_that_would_put_media_on_a_part_already_on_x_is_refused(
     client, with_author, fake_llm, fake_x_publisher
 ):
-    fake_llm.replies = [written("one post"), {"post": "one post"}]
+    fake_llm.replies = [{"post": "one post"}]
     started = await client.post(POSTS, json={"brief": "ship small things"})
     post_id = started.json()["id"]
     fake_llm.replies = [written_thread(["a", "b", "c"]), {"parts": ["a", "b", "c"]}]

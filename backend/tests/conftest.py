@@ -115,7 +115,14 @@ from tests.oauth_app import (  # noqa: E402
     exchange,
     register,
 )
-from tests.posts.writing_replies import POST_IDEAS, ideas  # noqa: E402
+from tests.posts.writing_replies import (  # noqa: E402
+    MERGED_SKETCH,
+    POST_IDEAS,
+    SKETCHED_POST,
+    ideas,
+    merged,
+    sketched,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -259,9 +266,12 @@ def fake_x_publisher():
 def fake_llm():
     """
     Every test calls a scripted fake model: queue `fake_llm.replies`, read `fake_llm.calls`.
-    The plan call has a standing answer; set `fake_llm.standing[POST_IDEAS]` to plan otherwise.
+    The plan, sketch and merge calls have standing answers, so a single post needs only its
+    humanizer's reply queued; set `fake_llm.standing[...]` to answer them otherwise.
     """
-    fake = FakeLLM(standing={POST_IDEAS: ideas()})
+    fake = FakeLLM(
+        standing={POST_IDEAS: ideas(), SKETCHED_POST: sketched(), MERGED_SKETCH: merged()}
+    )
     app.dependency_overrides[get_llm] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_llm, None)

@@ -266,13 +266,19 @@ async def prepare_next_version(
     """
     For Feedback on `post`'s Text, in `format` or else the Text's, with the corpus the Post
     started with, and holds the Text until the Version is recorded. Raises when the Post has no
-    Text yet, when another Version is being written, when `sent_text` isn't the saved Text, or
-    when the User is over the attempt limit or has no Generation left.
+    Text yet, when another Version is being written, when `sent_text` isn't the saved Text, when
+    the Post has no corpus, or when the User is over the attempt limit or has no Generation left.
     """
     versions = versions_of(post)
     text = post_text(post)
     if not versions or text is None:
         raise ConflictError("This post has no version to give feedback on. Start a new post.")
+    # Feedback is written from the corpus, which a single post written from its Plan may lack.
+    if not post.corpus_post_ids:
+        raise ConflictError(
+            "Feedback can't revise a post written without inspiration authors yet. "
+            "Start a new post instead."
+        )
     service.check_not_writing(post, now=now)
     if sent_text is not None and sent_text != text.parts:
         raise ConflictError("Your last edit to the text isn't saved yet. Save it, then try again.")

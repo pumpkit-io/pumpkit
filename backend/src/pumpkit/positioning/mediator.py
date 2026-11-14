@@ -1,4 +1,3 @@
-import asyncio
 from dataclasses import replace
 from datetime import datetime
 from typing import Optional
@@ -118,14 +117,14 @@ async def draft_positioning(
     if profile.is_blank() and not posts:
         return answer(None, _NOTHING_TO_DRAFT_FROM)
     try:
-        async with asyncio.timeout(DRAFT_CALL_SECONDS):
-            result = await llm.structured(
-                model=settings.LLM_POSITIONING_MODEL,
-                messages=draft_messages(profile, posts),
-                response_model=PositioningDraft,
-                max_tokens=DRAFT_MAX_TOKENS,
-            )
-    except (LLMError, LLMNotConfiguredError, TimeoutError) as error:
+        result = await llm.structured(
+            model=settings.LLM_POSITIONING_MODEL,
+            messages=draft_messages(profile, posts),
+            response_model=PositioningDraft,
+            max_tokens=DRAFT_MAX_TOKENS,
+            timeout_seconds=DRAFT_CALL_SECONDS,
+        )
+    except (LLMError, LLMNotConfiguredError) as error:
         logger.warning("Drafting a positioning failed: %s", error or type(error).__name__)
         return answer(None, _NOT_DRAFTED)
     text = draft_text(result.parsed)

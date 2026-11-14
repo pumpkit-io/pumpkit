@@ -18,7 +18,6 @@ from tests.billing.test_top_ups import (
     sells_top_ups as sells_top_ups,
 )
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
 
 
 async def redeem(client, coupons):
@@ -184,7 +183,7 @@ async def test_free_access_spends_existing_packs_allowance_first_and_keeps_rever
         await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     ).status_code == 201
     for i in range(4):
-        fake_llm.replies = [written("sketch"), {"post": "finished"}]
+        fake_llm.replies = [{"post": "finished"}]
         response = await client.post("/api/v1/posts", json={"brief": "Write something useful"})
         assert response.status_code == 201, response.text
         usage = (await client.get("/api/v1/usage")).json()["allowance"]

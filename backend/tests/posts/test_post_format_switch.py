@@ -46,7 +46,7 @@ async def _start(client, fake_llm, format: str) -> str:
             {"parts": ["final a", "final b"]},
         ]
     else:
-        fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
+        fake_llm.replies = [{"post": "final 1"}]
     response = await client.post(POSTS, json={"brief": "ship small things", "format": format})
     assert response.status_code == 201, response.text
     fake_llm.calls.clear()

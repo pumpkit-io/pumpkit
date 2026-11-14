@@ -32,7 +32,7 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
     await save_positioning(client)
     added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     assert added.status_code == 201, added.text
-    fake_llm.replies = [written("sketch one"), {"post": "Version one."}]
+    fake_llm.replies = [{"post": "Version one."}]
     started = await client.post(POSTS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     fake_llm.replies = [written("sketch two"), {"post": "Version two."}]

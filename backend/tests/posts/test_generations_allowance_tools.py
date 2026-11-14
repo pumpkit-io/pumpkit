@@ -8,7 +8,6 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
 from pumpkit.posts.models import Post, VersionAttempt
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written
 
 REFUSAL = (
     "You've used this period's 2 generations. They reset on 1 November. "
@@ -76,7 +75,7 @@ async def test_start_post_refuses_with_no_generations_left_and_links_to_settings
 async def test_give_feedback_refuses_with_no_generations_left(
     db, user, with_author, mcp, fake_llm, fixed_clock
 ):
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
     post_id = (await mcp.call_tool("start_post", brief="ship"))["structuredContent"]["id"]
     await _use_a_generation(db, user.id)
     fake_llm.calls.clear()

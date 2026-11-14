@@ -350,11 +350,26 @@ describe('New post', () => {
   });
 
   describe('Writing a Post', () => {
-    it('replaces the write button with "Set up your persona" while the Persona is empty', async () => {
+    it('writes a single post for a User with a Positioning and no Inspiration authors', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
       renderNewPost();
 
       const area = await writer();
+      fireEvent.change(area.getByLabelText('Brief'), { target: { value: 'ship small things' } });
+
+      await waitFor(() =>
+        expect(area.getByRole('button', { name: 'Write the post' })).toBeEnabled(),
+      );
+      expect(area.queryByRole('link', { name: 'Set up your persona' })).not.toBeInTheDocument();
+    });
+
+    it('replaces the write button with "Set up your persona" for a Thread while no Inspiration author has posts', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      renderNewPost();
+
+      const area = await writer();
+      await area.findByRole('button', { name: 'Write the post' });
+      fireEvent.click(area.getByRole('radio', { name: 'Thread' }));
       const setUp = await area.findByRole('link', { name: 'Set up your persona' });
       // No gradient on New post: the solid Pumpkin fill.
       expect(setUp).not.toHaveClass('bg-primary-gradient');

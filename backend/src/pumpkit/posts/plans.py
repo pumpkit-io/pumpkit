@@ -20,6 +20,14 @@ DesiredAction = Literal[
     "sign-up",
     "buy",
 ]
+
+# Which desired actions sit naturally at each funnel stage, as the plan prompt and the guide list them.
+FUNNEL_ACTIONS: dict[Funnel, frozenset[DesiredAction]] = {
+    "top": frozenset({"dwell_time", "reply", "repost", "share", "follow"}),
+    "middle": frozenset({"dwell_time", "reply", "bookmark", "follow", "trust", "click"}),
+    "bottom": frozenset({"click", "DM", "sign-up", "buy"}),
+}
+
 Length = Literal["short", "medium", "long"]
 LENGTH_SHORT: Length = "short"
 Structure = Literal[

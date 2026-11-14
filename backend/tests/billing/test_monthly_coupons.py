@@ -17,7 +17,6 @@ from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 from tests.billing.test_top_ups import _send
 from tests.migrations import migrate
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
 
 
 async def monthly(db, user, fake_billing, fixed_clock):
@@ -223,7 +222,7 @@ async def test_month_end_paid_usage_and_accepted_caps_survive_webhooks_and_stack
     )
     await save_positioning(authed_client)
     await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    fake_llm.replies = [written("Sketch"), {"post": "Paid allowance survives redemption"}]
+    fake_llm.replies = [{"post": "Paid allowance survives redemption"}]
     assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
     offer = (await authed_client.post(PREVIEW, json={"code": created["code"]})).json()
     assert offer["starts_at"] == "2028-02-29T12:00:00Z"

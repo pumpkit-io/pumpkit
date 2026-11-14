@@ -24,7 +24,7 @@ from pumpkit.scheduling.models import (
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written, written_thread
+from tests.posts.writing_replies import written_thread
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -338,7 +338,7 @@ async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_par
 
 
 async def test_unscheduling_moves_the_post_back_to_drafts(client, with_author_and_x, fake_llm):
-    fake_llm.replies = [written("sketch"), {"post": "Version one."}]
+    fake_llm.replies = [{"post": "Version one."}]
     post = (await client.post(POSTS, json={"brief": "ship"})).json()
     scheduled = (
         await client.post(

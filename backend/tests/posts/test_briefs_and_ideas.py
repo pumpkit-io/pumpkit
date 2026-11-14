@@ -13,7 +13,6 @@ from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Brief, Idea, Post
 from tests.connected_apps.conftest import foreign_keys_session as foreign_keys_session
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -46,7 +45,7 @@ async def _stored(db) -> list[tuple[str, str, int, str]]:
 async def test_starting_a_post_stores_its_brief_with_one_idea_the_post_belongs_to(
     client, with_author, fake_llm, db, user
 ):
-    fake_llm.replies = [written("the sketch"), {"post": "the final"}]
+    fake_llm.replies = [{"post": "the final"}]
 
     started = (await client.post(POSTS, json={"brief": "ship small things"})).json()
 
@@ -64,7 +63,7 @@ async def test_a_post_whose_first_version_failed_still_has_its_brief(
 
 
 async def test_each_post_started_gets_a_brief_of_its_own(client, with_author, fake_llm, db):
-    fake_llm.replies = [written("one"), {"post": "one"}, written("two"), {"post": "two"}]
+    fake_llm.replies = [{"post": "one"}, {"post": "two"}]
 
     first = (await client.post(POSTS, json={"brief": "the same words"})).json()
     second = (await client.post(POSTS, json={"brief": "the same words"})).json()

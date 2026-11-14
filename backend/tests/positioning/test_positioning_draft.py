@@ -1,6 +1,5 @@
 """`POST /positioning/draft`: a draft of the User's Positioning from their X profile and posts."""
 
-import asyncio
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 
@@ -299,12 +298,7 @@ async def test_the_models_answer_is_capped_at_4000_tokens(client, on_x, fake_llm
 async def test_a_model_call_that_runs_too_long_gives_no_draft_and_a_reason(
     client, on_x, monkeypatch
 ):
-    class NeverAnswers(FakeLLM):
-        async def structured(self, **call):
-            await asyncio.sleep(3600)
-            return await super().structured(**call)
-
-    app.dependency_overrides[get_llm] = lambda: NeverAnswers()
+    app.dependency_overrides[get_llm] = lambda: FakeLLM(latency=3600)
     monkeypatch.setattr(mediator, "DRAFT_CALL_SECONDS", 0.01)
 
     response = await client.post(DRAFT)

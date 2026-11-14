@@ -1,3 +1,4 @@
+import asyncio
 import json
 from typing import Any
 
@@ -7,7 +8,7 @@ import respx
 from pydantic import BaseModel, ConfigDict
 
 from pumpkit.core.config import settings
-from pumpkit.core.llm import LLMError, OpenAICompatibleLLM
+from pumpkit.core.llm import FakeLLM, LLMError, OpenAICompatibleLLM
 from pumpkit.core.llm_client import LLMClient
 
 COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -189,3 +190,81 @@ def test_it_is_configured_only_with_the_key(monkeypatch):
     monkeypatch.setattr(settings, "LLM_API_KEY", None)
 
     assert OpenAICompatibleLLM(LLMClient()).is_configured() is False
+
+
+@respx.mock
+async def test_model_calls_in_flight_are_capped_across_the_instance(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_CALLS_IN_FLIGHT", 2)
+    in_flight = 0
+    most = 0
+
+    async def _respond(request: httpx.Request) -> httpx.Response:
+        nonlocal in_flight, most
+        in_flight += 1
+        most = max(most, in_flight)
+        await asyncio.sleep(0.01)
+        in_flight -= 1
+        return httpx.Response(200, json=_completion(json.dumps({"post": "hello"})))
+
+    respx.post(COMPLETIONS_URL).mock(side_effect=_respond)
+    message = [{"role": "user", "content": "x"}]
+
+    # Separate adapters share the cap, as every area's calls do.
+    results = await asyncio.gather(
+        *(
+            OpenAICompatibleLLM(LLMClient()).structured(
+                model="m", messages=message, response_model=_Answer
+            )
+            for _ in range(5)
+        )
+    )
+
+    assert [result.parsed.post for result in results] == ["hello"] * 5
+    assert most == 2
+
+
+async def test_a_call_waiting_for_a_slot_is_not_timed_out_by_its_wait(monkeypatch):
+    monkeypatch.setattr(settings, "LLM_CALLS_IN_FLIGHT", 1)
+    message = [{"role": "user", "content": "x"}]
+    holding = FakeLLM(standing={"_Answer": {"post": "first"}}, latency=0.2)
+    waiting = FakeLLM(standing={"_Answer": {"post": "second"}})
+
+    first = asyncio.create_task(
+        holding.structured(model="m", messages=message, response_model=_Answer)
+    )
+    await asyncio.sleep(0)
+    second = await waiting.structured(
+        model="m", messages=message, response_model=_Answer, timeout_seconds=0.05
+    )
+
+    assert second.parsed.post == "second"
+    assert (await first).parsed.post == "first"
+
+
+async def test_a_call_slower_than_its_timeout_once_sent_is_an_llm_error():
+    slow = FakeLLM(standing={"_Answer": {"post": "late"}}, latency=1)
+
+    with pytest.raises(LLMError, match="took over"):
+        await slow.structured(
+            model="m",
+            messages=[{"role": "user", "content": "x"}],
+            response_model=_Answer,
+            timeout_seconds=0.01,
+        )
+
+
+@respx.mock
+async def test_a_provider_slower_than_the_calls_timeout_is_an_llm_error():
+    async def _respond(request: httpx.Request) -> httpx.Response:
+        await asyncio.sleep(1)
+        return httpx.Response(200, json=_completion(json.dumps({"post": "late"})))
+
+    respx.post(COMPLETIONS_URL).mock(side_effect=_respond)
+
+    with pytest.raises(LLMError, match="took over"):
+        await OpenAICompatibleLLM(LLMClient()).structured(
+            model="m",
+            messages=[{"role": "user", "content": "x"}],
+            response_model=_Answer,
+            timeout_seconds=0.01,
+        )

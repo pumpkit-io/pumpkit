@@ -10,11 +10,10 @@ from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.posts.models import Post
 from pumpkit.posts.writing.constants import THREAD_MAX_PARTS
 from pumpkit.posts.writing.prompts.humanizer_thread import humanizer_thread_prompt
-from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import writing_calls, written, written_thread
+from tests.posts.writing_replies import writing_calls, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -161,13 +160,13 @@ async def test_a_thread_reply_outside_the_part_bounds_fails_the_attempt(
 
 
 async def test_a_post_started_with_the_post_format_is_a_single_post(client, with_author, fake_llm):
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    fake_llm.replies = [{"post": "final"}]
 
     response = await client.post(POSTS, json={"brief": "ship", "format": "post"})
 
     [version] = response.json()["versions"]
     assert (version["format"], len(version["parts"])) == ("post", 1)
-    assert writing_calls(fake_llm)[0].messages[0] == _system(sketch_post_prompt(X_POST_MAX_CHARS))
+    assert fake_llm.calls[1].response_model.__name__ == "sketched_post"
 
 
 async def test_an_unknown_format_returns_422(client, with_author, fake_llm):

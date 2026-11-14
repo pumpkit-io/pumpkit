@@ -21,7 +21,6 @@ from tests.billing.test_paid_signups import SIGNUPS, _open
 from tests.billing.test_paid_signups import billing_clock as billing_clock
 from tests.billing.test_top_ups import _send
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
 
 CHANGES = "/api/v1/billing/plan-changes"
 
@@ -455,10 +454,7 @@ async def test_interval_change_keeps_used_generation_and_captured_paid_caps(
     assert (
         await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     ).status_code == 201
-    fake_llm.replies = [
-        written("Sketch"),
-        {"post": "A used generation before changing payment frequency"},
-    ]
+    fake_llm.replies = [{"post": "A used generation before changing payment frequency"}]
     assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 800)
     before = (await authed_client.get("/api/v1/usage")).json()
