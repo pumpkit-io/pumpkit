@@ -4,9 +4,11 @@ The plan call and writing a Post would call the LLM, so the Brief, its Ideas and
 Posts are written straight into the database. Run it like `seed_user.py`, after it:
 
 - `planned_brief.py plan` stores the Brief and prints `BRIEF_ID=<id>`.
-- `planned_brief.py writing <brief_id> <idea_id>...` starts a Post of each Idea, being written.
+- `planned_brief.py writing <brief_id> <idea_id>...` starts a Post of each Idea, being written,
+  or of each split Idea when it names none.
 - `planned_brief.py written <brief_id>` writes the first Version of each Post being written.
-- `planned_brief.py clean` deletes the user's Briefs and Positioning again.
+- `planned_brief.py clean` deletes the user's Briefs, Positioning and the attempts of Posts
+  discarded meanwhile again.
 """
 
 import asyncio
@@ -54,6 +56,12 @@ async def main(command: str, args: list[str]) -> None:
         if command == "clean":
             await db.execute(delete(Brief).where(Brief.user_id == user.id))
             await db.execute(delete(Positioning).where(Positioning.user_id == user.id))
+            # A discarded Post's attempts outlive it, and would count against later runs.
+            await db.execute(
+                delete(VersionAttempt).where(
+                    VersionAttempt.user_id == user.id, VersionAttempt.post_id.is_(None)
+                )
+            )
         elif command == "plan":
             await db.execute(delete(Positioning).where(Positioning.user_id == user.id))
             db.add(Positioning(user_id=user.id, text="I post about bootstrapping.", saved_at=now))
@@ -76,9 +84,8 @@ async def main(command: str, args: list[str]) -> None:
             print(f"BRIEF_ID={brief.id}")
         elif command == "writing":
             brief_id, *idea_ids = args
-            ideas = await db.scalars(
-                select(Idea).where(Idea.brief_id == brief_id, Idea.id.in_(idea_ids))
-            )
+            picked = Idea.id.in_(idea_ids) if idea_ids else Idea.whole_brief.is_(False)
+            ideas = await db.scalars(select(Idea).where(Idea.brief_id == brief_id, picked))
             for idea in ideas:
                 db.add(
                     Post(
@@ -95,6 +102,7 @@ async def main(command: str, args: list[str]) -> None:
             for post in posts:
                 parts = [f"Written: {post.idea.core_idea}."]
                 version = VersionAttempt(
+                    user_id=post.user_id,
                     post=post,
                     sequence=1,
                     format="post",

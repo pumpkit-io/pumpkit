@@ -70,6 +70,7 @@ async def _trial_attempts(db, user_id: str, count: int) -> None:
     for sequence in range(1, count + 1):
         db.add(
             VersionAttempt(
+                user_id=post.user_id,
                 post_id=post.id,
                 sequence=sequence,
                 version_number=sequence,

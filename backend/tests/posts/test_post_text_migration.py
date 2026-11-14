@@ -45,10 +45,13 @@ def _attempt(
     parts,
     status="succeeded",
 ) -> None:
+    # The schema keeps the columns added later, built at head, such as 0066's attempt User.
+    owner = sa.text("SELECT user_id FROM posts WHERE id = :post_id")
     insert(
         connection,
         "version_attempts",
         id=f"{post_id}-attempt-{sequence}",
+        user_id=connection.execute(owner, {"post_id": post_id}).scalar_one(),
         post_id=post_id,
         sequence=sequence,
         version_number=number,

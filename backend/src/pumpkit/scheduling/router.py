@@ -366,6 +366,24 @@ async def get_post(
     return await mediator.get_post(db=db, user=current_user, post_id=post_id, now=clock())
 
 
+@posts_router.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def discard_post(
+    post_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    storage: FileStorage = Depends(get_file_storage),
+    clock: Clock = Depends(get_clock),
+) -> None:
+    """
+    Discards a Draft: the Post and its Versions are deleted for good, with its Media, and its Idea
+    stays on the Brief as not written. The Generations it used stay used. Any other Post is
+    refused, and so is one still being written.
+    """
+    await mediator.discard_post(
+        db=db, storage=storage, user=current_user, post_id=post_id, now=clock()
+    )
+
+
 @posts_router.post(
     "/posts/{post_id}/versions",
     response_model=PostDetailResponse,

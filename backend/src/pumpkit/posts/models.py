@@ -226,7 +226,12 @@ class VersionAttempt(Base):
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: ulid_with_prefix("version_attempt")
     )
-    post_id: Mapped[str] = mapped_column(ForeignKey("posts.id", ondelete="CASCADE"), index=True)
+    # The attempt outlives a discarded Post, so the Generation it used and the hourly limit still
+    # count it; the Post id is then None and only what counts it is kept.
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    post_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("posts.id", ondelete="SET NULL"), index=True
+    )
     # Counts every attempt on the Post, failed ones included.
     sequence: Mapped[int] = mapped_column(Integer)
     # None for the first Version, which comes from the Brief.
@@ -286,7 +291,7 @@ class VersionAttempt(Base):
     error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
-    post: Mapped["Post"] = relationship(back_populates="attempts")
+    post: Mapped[Optional["Post"]] = relationship(back_populates="attempts")
 
     __table_args__ = (
         # Named here: the naming convention uses only the first column, so the two would clash.
