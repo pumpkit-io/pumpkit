@@ -16,7 +16,7 @@ from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import PLAN, written_thread
+from tests.posts.writing_replies import PLAN, start_thread, written_thread
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -154,11 +154,7 @@ async def test_a_published_post_reads_as_published_with_its_link_on_x(client, po
 async def test_a_thread_that_failed_partway_reads_as_failed_with_its_live_part(
     client, with_author, fake_llm, fake_x_publisher
 ):
-    fake_llm.replies = [
-        written_thread(["sketch one", "sketch two"]),
-        {"parts": ["Live one.", "Refused two."]},
-    ]
-    post = (await client.post(POSTS, json={"brief": "ship", "format": "thread"})).json()
+    post = (await start_thread(client, fake_llm, ["Live one.", "Refused two."])).json()
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
     fake_x_publisher.fail_publish_on = 2
 

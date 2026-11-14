@@ -1,6 +1,7 @@
 """
 The sketch, merge and humanizer calls that write a single post's first Version, ported from
-pumpkit-new-architecture-v5. The writing guide they share is in `guide.py`.
+pumpkit-new-architecture-v5, and the inputs a Thread's calls share with them (`thread.py`). The
+writing guide they share is in `guide.py`.
 """
 
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from pumpkit.posts.writing.prompts.guide import (
     PROMPT_FUNNELS,
     char_limit_for_plan,
     effective_length,
+    prompt_format,
     writing_guide,
 )
 from pumpkit.posts.writing.prompts.humanizer import HUMANIZATION_GUIDELINES
@@ -22,7 +24,7 @@ from pumpkit.posts.writing.prompts.parts import tagged_post
 
 @dataclass(frozen=True)
 class PostInputs:
-    """What every call writes the post from: the Brief, the Positioning and the Idea's Plan."""
+    """What every call writes the post or Thread from: the Brief, the Positioning and the Idea's Plan."""
 
     brief: str
     positioning: str
@@ -40,17 +42,22 @@ GIVEN = """\
 - takeaway: what the reader walks away with.
 - funnel, desired_action, format, structure: the kind of post this is, already decided. The guide below is already tailored to them."""
 
-SKETCH_FIELDS = """\
+HOOK_FIELDS = """\
 - hook_levers: the one to three psychological levers the hook pulls. Choose these first.
 - hook_types: the one to three hook types the hook combines.
 - hook_reasoning: one to three sentences, written before the post: why these levers and types fit this idea and this reader, and what question the hook raises in the reader's mind.
-- cta_type: the CTA the post makes, or "none".
+- cta_type: the CTA the post makes, or "none"."""
+
+SKETCH_FIELDS = (
+    HOOK_FIELDS
+    + """
 - post: the post text and nothing else. No preamble, no quotes around it, no notes. Line breaks as they should appear on X.
 - first_reply: the text of my first reply under the post, only when the CTA needs an external link or a follow-up there. Use a link only if the raw input gives one; otherwise write [link] where it goes. null in every other case."""
+)
 
 
 def post_inputs_block(inputs: PostInputs) -> str:
-    """The inputs of the sketch and merge calls, as the model reads them."""
+    """The inputs of the sketch and merge calls, a single post's or a Thread's, as the model reads them."""
     plan = inputs.plan
     return (
         f"<raw_input>\n{inputs.brief.strip()}\n</raw_input>\n\n"
@@ -60,7 +67,7 @@ def post_inputs_block(inputs: PostInputs) -> str:
         "<choices>\n"
         f"funnel: {PROMPT_FUNNELS[plan.funnel]}\n"
         f"desired_action: {plan.desired_action}\n"
-        f"format: {effective_length(plan)}\n"
+        f"format: {prompt_format(plan)}\n"
         f"structure: {plan.structure}\n"
         "</choices>"
     )
@@ -109,15 +116,20 @@ def sketch_angle(index: int) -> HookType:
     return HOOK_TYPE_ROTATION[index % len(HOOK_TYPE_ROTATION)]
 
 
-def sketch_user(inputs: PostInputs, angle: HookType) -> str:
-    return post_inputs_block(inputs) + (
-        "\n\n<angle>\n"
-        "Several writers are sketching this same post, each from a different angle, so I can compare them. "
-        f"Your angle: build the hook around the `{angle}` hook type ({HOOK_TYPE_NAMES[angle]}), combined with one or two other types. "
+def angle_block(angle: HookType, *, noun: str, hook: str) -> str:
+    """The hook type one of the sketches is asked to try first, in the words of its Format."""
+    return (
+        "<angle>\n"
+        f"Several writers are sketching this same {noun}, each from a different angle, so I can compare them. "
+        f"Your angle: build {hook} around the `{angle}` hook type ({HOOK_TYPE_NAMES[angle]}), combined with one or two other types. "
         "If the raw input can't support that type honestly, use the closest type that it can support and say so in hook_reasoning. "
         "Everything else in the guide applies unchanged.\n"
         "</angle>"
     )
+
+
+def sketch_user(inputs: PostInputs, angle: HookType) -> str:
+    return post_inputs_block(inputs) + "\n\n" + angle_block(angle, noun="post", hook="the hook")
 
 
 def merge_prompt(inputs: PostInputs, sketch_count: int) -> str:

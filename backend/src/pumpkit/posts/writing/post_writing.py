@@ -1,14 +1,15 @@
 """
-Writing a single post's Versions from its Plan, as pumpkit-new-architecture-v5 does (ADR 0026).
-The first: sketches in parallel, each trying a different hook type first, then the merge, the
-scrub, the humanizer and the scrub again; the merged sketch, scrubbed, is the Version's Sketch.
-After Feedback: the revise call, the scrub, the revision humanizer and the scrub again; the
-revised post, scrubbed, is the Sketch.
+Writing a Post's Versions from its Plan, as pumpkit-new-architecture-v5 does (ADR 0026).
+The first, a single post's or a Thread's under its own prompts: sketches in parallel, each trying
+a different hook type first, then the merge, the scrub, the humanizer and the scrub again; the
+merged sketch, scrubbed, is the Version's Sketch. After Feedback on a single post: the revise
+call, the scrub, the revision humanizer and the scrub again; the revised post, scrubbed, is the
+Sketch.
 """
 
 import asyncio
 import logging
-from typing import Any, Optional, Sequence, TypeVar, Union
+from typing import Any, Callable, Optional, Sequence, TypeVar, Union
 
 from pydantic import BaseModel
 
@@ -23,9 +24,12 @@ from pumpkit.posts.writing.corpus import Corpus
 from pumpkit.posts.writing.post_replies import (
     HookType,
     HumanizedPost,
+    HumanizedThread,
     MergedSketch,
+    MergedThread,
     RevisedPost,
     SketchedPost,
+    SketchedThread,
 )
 from pumpkit.posts.writing.prompts.post import (
     PostInputs,
@@ -49,6 +53,15 @@ from pumpkit.posts.writing.prompts.revision_humanizer import (
     hand_written_message,
     latest_feedback_message,
 )
+from pumpkit.posts.writing.prompts.thread import (
+    thread_brief_message,
+    thread_humanizer_prompt,
+    thread_merge_prompt,
+    thread_merge_user,
+    thread_message,
+    thread_sketch_prompt,
+    thread_sketch_user,
+)
 from pumpkit.posts.writing.scrub import scrub
 from pumpkit.posts.writing.starting_text import StartingText
 from pumpkit.posts.writing.versions import (
@@ -58,14 +71,15 @@ from pumpkit.posts.writing.versions import (
     hand_written,
     replayed_versions,
     system_message,
+    thread_parts,
     user_message,
-    write_first_version,
     write_next_version,
 )
 
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
+S = TypeVar("S", SketchedPost, SketchedThread)
 
 # The request waits on the writing, so each call gets this long once sent, then counts as failed.
 WRITING_CALL_SECONDS = 240.0
@@ -112,19 +126,30 @@ async def _call(
 
 
 async def _sketches(
-    llm: LLM, inputs: PostInputs, user_id: str
-) -> tuple[list[SketchedPost], list[dict]]:
-    """The sketches that succeeded, in the order they were asked for, and a record of every call."""
+    llm: LLM,
+    user_id: str,
+    *,
+    prompt: str,
+    user: Callable[[HookType], str],
+    schema: type[S],
+    check: Callable[[S], object] = lambda _sketch: None,
+) -> tuple[list[S], list[dict]]:
+    """
+    The sketches that succeeded, in the order they were asked for, and a record of every call.
+    A sketch `check` raises an `LLMError` for is skipped like a failed call.
+    """
     model = settings.LLM_SKETCHING_MODEL
     # One system prompt for every sketch, so they share one cache entry.
-    system = system_message(sketch_prompt(inputs))
+    system = system_message(prompt)
 
-    async def sketch(angle: HookType) -> StructuredResult[SketchedPost]:
-        messages = [system, user_message(sketch_user(inputs, angle))]
-        return await _call(llm, model, messages, SketchedPost)
+    async def sketch(angle: HookType) -> StructuredResult[S]:
+        messages = [system, user_message(user(angle))]
+        result = await _call(llm, model, messages, schema)
+        check(result.parsed)
+        return result
 
     angles: list[HookType] = [sketch_angle(index) for index in range(SKETCHES_PER_POST)]
-    results: list[Union[StructuredResult[SketchedPost], BaseException]] = await asyncio.gather(
+    results: list[Union[StructuredResult[S], BaseException]] = await asyncio.gather(
         *(sketch(angle) for angle in angles), return_exceptions=True
     )
     # Only a failed model call is skipped; anything else, a missing key included, fails the write.
@@ -132,7 +157,7 @@ async def _sketches(
         if isinstance(result, BaseException) and not isinstance(result, LLMError):
             raise result
 
-    sketches: list[SketchedPost] = []
+    sketches: list[S] = []
     records: list[dict] = []
     for number, (angle, result) in enumerate(zip(angles, results), start=1):
         if isinstance(result, BaseException):
@@ -169,7 +194,13 @@ async def write_post(llm: LLM, inputs: PostInputs, *, user_id: str) -> WrittenVe
     merge or humanizer call fails or writes a blank post, or whatever else the LLM port raises;
     stores nothing.
     """
-    sketches, sketch_records = await _sketches(llm, inputs, user_id)
+    sketches, sketch_records = await _sketches(
+        llm,
+        user_id,
+        prompt=sketch_prompt(inputs),
+        user=lambda angle: sketch_user(inputs, angle),
+        schema=SketchedPost,
+    )
 
     merged = await _call(
         llm,
@@ -223,21 +254,77 @@ async def write_post(llm: LLM, inputs: PostInputs, *, user_id: str) -> WrittenVe
     )
 
 
+def _clean_parts(call: str, parts: list[str]) -> list[str]:
+    """A Thread reply's Parts, scrubbed; an `LLMError` for a Part count out of bounds or a blank Part."""
+    return thread_parts(call, [_clean(part) for part in parts])
+
+
+async def write_thread(llm: LLM, inputs: PostInputs, *, user_id: str) -> WrittenVersion:
+    """
+    Write a Thread's first Version. Raises an `LLMError` when every sketch call fails or writes
+    Parts outside the bounds, when the merge or humanizer call fails or writes them, or whatever
+    else the LLM port raises; stores nothing.
+    """
+    sketches, sketch_records = await _sketches(
+        llm,
+        user_id,
+        prompt=thread_sketch_prompt(inputs),
+        user=lambda angle: thread_sketch_user(inputs, angle),
+        schema=SketchedThread,
+        check=lambda sketch: thread_parts("sketch", sketch.parts),
+    )
+
+    merged = await _call(
+        llm,
+        settings.LLM_MERGING_MODEL,
+        [
+            system_message(thread_merge_prompt(inputs, len(sketches))),
+            user_message(thread_merge_user(inputs, sketches)),
+        ],
+        MergedThread,
+    )
+    merged_parts = _clean_parts("merge", merged.parsed.parts)
+
+    humanized = await _call(
+        llm,
+        settings.LLM_HUMANIZING_MODEL,
+        [
+            system_message(thread_humanizer_prompt(inputs)),
+            user_message(thread_brief_message(inputs)),
+            user_message(thread_message(merged_parts)),
+        ],
+        HumanizedThread,
+    )
+    parts = _clean_parts("humanizer", humanized.parsed.parts)
+
+    return WrittenVersion(
+        format=FORMAT_THREAD,
+        sketch_parts=merged_parts,
+        parts=parts,
+        sketch_model=merged.model,
+        humanizing_model=humanized.model,
+        sketch_usage=_usage(merged),
+        humanizing_usage=_usage(humanized),
+        hook_levers=list(merged.parsed.hook_levers),
+        hook_types=list(merged.parsed.hook_types),
+        cta_type=merged.parsed.cta_type,
+        sketches=_storable(sketch_records),
+        merge=_storable(
+            {
+                "reviews": [review.model_dump() for review in merged.parsed.reviews],
+                "reasoning": merged.parsed.reasoning,
+            }
+        ),
+    )
+
+
 async def write_planned_version(
-    llm: LLM,
-    *,
-    corpus: Corpus,
-    brief: str,
-    positioning: str,
-    plan: Plan,
-    format: Format,
-    char_limit: int,
-    user_id: str,
+    llm: LLM, *, brief: str, positioning: str, plan: Plan, char_limit: int, user_id: str
 ) -> WrittenVersion:
-    """A Post's first Version in `format`: a Thread from the corpus, a single post from its Plan."""
-    if format == FORMAT_THREAD:
-        return await write_first_version(llm, corpus, brief, format, char_limit)
+    """A Post's first Version in the Format its Plan chose."""
     inputs = PostInputs(brief=brief, positioning=positioning, plan=plan, char_limit=char_limit)
+    if plan.format == FORMAT_THREAD:
+        return await write_thread(llm, inputs, user_id=user_id)
     return await write_post(llm, inputs, user_id=user_id)
 
 

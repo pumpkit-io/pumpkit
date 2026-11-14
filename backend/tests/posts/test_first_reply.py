@@ -17,6 +17,7 @@ from tests.posts.writing_replies import (
     REVISED_POST,
     merged,
     revised,
+    start_thread,
     written,
     written_thread,
 )
@@ -264,8 +265,7 @@ def _prompts(fake_llm) -> str:
 async def test_feedback_written_from_the_corpus_keeps_the_first_reply_as_it_is(
     client, with_author, fake_llm
 ):
-    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["a", "b"]}]
-    started = await client.post(POSTS, json={"brief": BRIEF, "format": "thread"})
+    started = await start_thread(client, fake_llm, ["a", "b"], brief=BRIEF)
     post_id = started.json()["id"]
     fake_llm.replies = [written("one post"), {"post": "One post."}]
     await _feedback(client, post_id, "condense it", format="post")
@@ -337,8 +337,7 @@ async def test_a_thread_of_ten_parts_takes_the_first_reply_into_its_last_part_an
 
 async def _corpus_post(client, fake_llm) -> str:
     """A single post "One post." written from the corpus, as Version 2 after a Thread."""
-    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["a", "b"]}]
-    started = await client.post(POSTS, json={"brief": BRIEF, "format": "thread"})
+    started = await start_thread(client, fake_llm, ["a", "b"], brief=BRIEF)
     post_id = started.json()["id"]
     fake_llm.replies = [written("one post"), {"post": "One post."}]
     await _feedback(client, post_id, "condense it", format="post")

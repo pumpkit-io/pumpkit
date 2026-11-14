@@ -24,7 +24,7 @@ from pumpkit.scheduling.models import (
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written_thread
+from tests.posts.writing_replies import start_thread
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -322,8 +322,7 @@ async def test_a_published_post_carries_its_link_on_x(client, seed_post):
 async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_parts_link(
     client, with_author_and_x, fake_llm, fake_x_publisher
 ):
-    fake_llm.replies = [written_thread(["a", "b"]), {"parts": ["Live one.", "Refused two."]}]
-    post = (await client.post(POSTS, json={"brief": "ship", "format": "thread"})).json()
+    post = (await start_thread(client, fake_llm, ["Live one.", "Refused two."])).json()
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
     fake_x_publisher.fail_publish_on = 2
     failed = await client.post(

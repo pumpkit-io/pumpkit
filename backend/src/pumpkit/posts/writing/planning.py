@@ -1,7 +1,7 @@
 """Planning a Brief: one model call that returns its Ideas, each with a Plan (ADR 0025)."""
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Literal, Optional, Sequence, Union
 
 from pydantic import BaseModel, ConfigDict
@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from pumpkit.core.config import settings
 from pumpkit.core.llm import LLM
 from pumpkit.core.text import drop_unstorable
-from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
+from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD
 from pumpkit.posts.plans import (
     FUNNEL_ACTIONS,
     LENGTH_SHORT,
@@ -31,6 +31,13 @@ _PromptFunnel = Literal["TOF", "MOF", "BOF"]
 _FUNNELS: dict[_PromptFunnel, Funnel] = {"TOF": "top", "MOF": "middle", "BOF": "bottom"}
 _ShortStructure = Literal["one_line", "few_lines"]
 _SHORT_STRUCTURES: tuple[Structure, ...] = ("one_line", "few_lines")
+# `one_line` and `few_lines` are a single post's only.
+_ThreadStructure = Literal[
+    "hook_list_closer",
+    "hook_problem_insight_closer",
+    "hook_story_insight_closer",
+    "hook_playbook_closer",
+]
 
 
 class _Strict(BaseModel):
@@ -56,23 +63,33 @@ class _PlannedShortPost(_PlannedIdea):
     structure: _ShortStructure
 
 
+class _PlannedThread(_PlannedIdea):
+    # The prompt's `format` names a single post's Length, or `thread`.
+    format: Literal["thread"]
+    structure: _ThreadStructure
+
+
+_Longer = Union[_PlannedPost, _PlannedThread]
+_ShortOrThread = Union[_PlannedShortPost, _PlannedThread]
+
+
 class PostIdeas(_Strict):
     """The plan call's answer: always one post for the whole Brief, and one per idea on a split."""
 
     reasoning: str
-    single_idea: _PlannedPost
-    split_ideas: Optional[list[_PlannedPost]]
+    single_idea: _Longer
+    split_ideas: Optional[list[_Longer]]
 
 
 class ShortPostIdeas(_Strict):
-    """The answer on an account that holds only a short post, which the schema then enforces."""
+    """The answer on an account whose posts hold only a short one, or a Thread of them."""
 
     reasoning: str
-    single_idea: _PlannedShortPost
-    split_ideas: Optional[list[_PlannedShortPost]]
+    single_idea: _ShortOrThread
+    split_ideas: Optional[list[_ShortOrThread]]
 
 
-_Planned = Union[_PlannedPost, _PlannedShortPost]
+_Planned = Union[_PlannedPost, _PlannedShortPost, _PlannedThread]
 
 # The model reads the schema names.
 PostIdeas.__name__ = "post_ideas"
@@ -109,16 +126,22 @@ def _text(value: str) -> str:
 
 
 def _plan(planned: _Planned) -> Plan:
-    """The Plan of one planned post. `one_line` and `few_lines` are short whatever `format` says."""
-    # The ported prompt calls the Length `format`.
-    length: Length = LENGTH_SHORT if planned.structure in _SHORT_STRUCTURES else planned.format
+    """
+    The Plan of one planned post: a Thread with no Length, or a single post whose Length is the
+    prompt's `format`. `one_line` and `few_lines` are short whatever `format` says.
+    """
+    if isinstance(planned, _PlannedThread):
+        format, length = FORMAT_THREAD, None
+    else:
+        format = FORMAT_POST
+        length = LENGTH_SHORT if planned.structure in _SHORT_STRUCTURES else planned.format
     return Plan(
         core_idea=_text(planned.core_idea),
         takeaway=_text(planned.takeaway),
         reasoning=_text(planned.reasoning),
         funnel=_FUNNELS[planned.funnel],
         desired_action=planned.desired_action,
-        format=FORMAT_POST,
+        format=format,
         length=length,
         structure=planned.structure,
     )
@@ -127,7 +150,7 @@ def _plan(planned: _Planned) -> Plan:
 def _pulls(planned: _Planned, plan: Plan) -> list[str]:
     """Choices of one planned post that pull against each other. The Post is still written."""
     pulls = []
-    if planned.format != plan.length:
+    if plan.format == FORMAT_POST and planned.format != plan.length:
         pulls.append(
             f"structure={plan.structure} is a short post: format={planned.format} is ignored "
             "and the post is planned short."
@@ -163,11 +186,11 @@ def _plans(planned: Sequence[_Planned], user_id: str) -> list[Plan]:
 
 
 async def plan_brief(
-    llm: LLM, *, user_id: str, brief: str, positioning: str, format: Format, char_limit: int
+    llm: LLM, *, user_id: str, brief: str, positioning: str, char_limit: int
 ) -> PlannedBrief:
     """
-    Plan `brief`, which the User asked to be written in `format`. Stores nothing, and raises
-    what the LLM port raises, or an `LLMError` when the call runs out of time.
+    Plan `brief`, choosing each Post's Format and Length. Stores nothing, and raises what the
+    LLM port raises, or an `LLMError` when the call runs out of time.
     """
     response_model: type[Union[PostIdeas, ShortPostIdeas]] = (
         ShortPostIdeas if is_short_only(char_limit) else PostIdeas
@@ -181,9 +204,6 @@ async def plan_brief(
     )
     ideas = result.parsed
     [single] = _plans([ideas.single_idea], user_id)
-    if format == FORMAT_THREAD:
-        # The User still picks the Format, so the Plan follows it; #476 hands the planner that choice.
-        single = replace(single, format=FORMAT_THREAD, length=None)
     split = _plans((ideas.split_ideas or [])[:MAX_SPLIT_IDEAS], user_id)
     return PlannedBrief(
         positioning=positioning,

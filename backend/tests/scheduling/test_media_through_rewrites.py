@@ -15,7 +15,7 @@ from pumpkit.main import app
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import png
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written, written_thread
+from tests.posts.writing_replies import start_thread, written, written_thread
 
 POSTS = "/api/v1/posts"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -38,8 +38,7 @@ async def with_author(client, subscribed, fake_x_reader, connect_x):
 
 
 async def _start_thread(client, fake_llm, *parts: str) -> str:
-    fake_llm.replies = [written_thread(list(parts)), {"parts": list(parts)}]
-    started = await client.post(POSTS, json={"brief": "ship small things", "format": "thread"})
+    started = await start_thread(client, fake_llm, list(parts))
     assert started.status_code == 201, started.text
     return started.json()["id"]
 

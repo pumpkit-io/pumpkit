@@ -48,8 +48,7 @@ TOOLS: list[McpTool] = [
 ]
 
 INSTRUCTIONS = """\
-Pumpkit writes X posts from the user's positioning and publishes them on X. A thread is \
-written in the style of X accounts the user picks, their inspiration authors (up to three).
+Pumpkit writes X posts from the user's positioning and publishes them on X.
 
 - A brief says what a post is about and what the user thinks about it. Starting a post from \
 a brief plans it around the user's positioning, then makes its first version. A user with no \
@@ -63,9 +62,12 @@ next version, which becomes the text. The writing sees every version in order, s
 as "like version 2, with a different hook" works. A version whose feedback was given on a text \
 other than the version before keeps that text as its starting text.
 - Each version has a format: a single X post, or a thread. A thread is several ordered parts, \
-each one X post, published on X with each part replying to the one before. A \
-post starts as a single X post unless the user asks for a thread, and feedback may switch the \
-format.
+each one X post, published on X with each part replying to the one before. Pumpkit chooses the \
+format when it plans the post: a thread when the material needs more room than one post on the \
+user's account holds, or when the brief asks for one ("as a thread"). A thread puts its link in \
+its last part and has no first reply. Feedback may switch the format. Feedback on a thread is \
+still written in the style of X accounts the user picked, their inspiration authors, so it is \
+refused on a thread started while none of them had posts.
 - A single X post may end with a first reply, a reply the user's account posts under it, where \
 the writing puts an external link: `first_reply` on a version or the text says its last part is \
 one. Feedback may add, change or remove it. Where the writing has no real link it writes \

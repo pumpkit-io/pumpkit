@@ -19,9 +19,9 @@ describe('postService', () => {
       data: { id: 'post_01', brief: 'ship', versions: [VERSION] },
     } as never);
 
-    const post = await postService.start('ship', 'post');
+    const post = await postService.start('ship');
 
-    expect(apiService.post).toHaveBeenCalledWith('/posts', { brief: 'ship', format: 'post' });
+    expect(apiService.post).toHaveBeenCalledWith('/posts', { brief: 'ship' });
     expect(post.versions).toEqual([
       {
         id: 'version_attempt_01',

@@ -18,7 +18,7 @@ from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
 from pumpkit.core.time import as_utc
 from pumpkit.posts import media as media_service
 from pumpkit.posts import service
-from pumpkit.posts.formats import Format
+from pumpkit.posts.formats import FORMAT_THREAD, Format
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt
 from pumpkit.posts.plans import Plan
 from pumpkit.posts.schemas import (
@@ -293,6 +293,11 @@ async def prepare_next_version(
         format=format or text.format,
         char_limit=char_limit,
     )
+    if inputs is None and not post.corpus_post_ids and text.format == FORMAT_THREAD:
+        raise ConflictError(
+            "Feedback on a thread written without inspiration authors isn't available yet. "
+            "Edit the text by hand, or start a new post."
+        )
     if inputs is None and not post.corpus_post_ids:
         raise ConflictError(
             "Feedback can't turn a post written without inspiration authors into a thread yet. "

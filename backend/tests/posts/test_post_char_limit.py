@@ -1,5 +1,6 @@
 """Writing a Version for the post limit of the User's X account, in either Format."""
 
+import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -11,7 +12,7 @@ from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import writing_calls, written_thread
+from tests.posts.writing_replies import start_thread, writing_calls, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -49,25 +50,28 @@ def _limits(version: dict) -> list[int]:
     return [part["char_limit"] for part in version["parts"]]
 
 
+def _thread_limits(fake_llm) -> list[int]:
+    """The per-Part limit each thread sketch, merge and humanizer prompt states."""
+    limits = []
+    for call in fake_llm.calls[1:]:
+        found = re.search(r"at most ([\d,]+) characters as X counts them", _system_text(call))
+        assert found is not None
+        limits.append(int(found.group(1).replace(",", "")))
+    return limits
+
+
 async def test_without_an_x_connection_both_formats_are_written_for_xs_default_limit(
     client, with_author, fake_llm
 ):
-    fake_llm.replies = [
-        {"post": "final"},
-        written_thread(["one", "two"]),
-        {"parts": ["one", "two"]},
-    ]
+    fake_llm.replies = [{"post": "final"}]
 
     post = await client.post(POSTS, json={"brief": "ship"})
     fake_llm.calls.clear()
-    thread = await client.post(POSTS, json={"brief": "ship", "format": "thread"})
+    thread = await start_thread(client, fake_llm, ["one", "two"], brief="ship")
 
     assert _limits(post.json()["versions"][0]) == [X_POST_MAX_CHARS]
     assert _limits(thread.json()["versions"][0]) == [X_POST_MAX_CHARS, X_POST_MAX_CHARS]
-    assert [_system_text(call) for call in writing_calls(fake_llm)] == [
-        sketch_thread_prompt(X_POST_MAX_CHARS),
-        humanizer_thread_prompt(X_POST_MAX_CHARS),
-    ]
+    assert _thread_limits(fake_llm) == [X_POST_MAX_CHARS] * 7
 
 
 @pytest.mark.parametrize(
@@ -83,30 +87,22 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
     client, with_author, fake_llm, connect_x_as, subscription_type, char_limit
 ):
     await connect_x_as(subscription_type)
-    fake_llm.replies = [
-        {"post": "final"},
-        written_thread(["one", "two"]),
-        {"parts": ["one", "two"]},
-    ]
+    fake_llm.replies = [{"post": "final"}]
 
     post = await client.post(POSTS, json={"brief": "ship"})
     fake_llm.calls.clear()
-    thread = await client.post(POSTS, json={"brief": "ship", "format": "thread"})
+    thread = await start_thread(client, fake_llm, ["one", "two"], brief="ship")
 
     assert _limits(post.json()["versions"][0]) == [char_limit]
     assert _limits(thread.json()["versions"][0]) == [char_limit, char_limit]
-    assert [_system_text(call) for call in writing_calls(fake_llm)] == [
-        sketch_thread_prompt(char_limit),
-        humanizer_thread_prompt(char_limit),
-    ]
+    assert _thread_limits(fake_llm) == [char_limit] * 7
 
 
 async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit(
     client, db, user, with_author, fake_llm, connect_x_as
 ):
     await connect_x_as("None")
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["one", "two"]}]
-    post_id = (await client.post(POSTS, json={"brief": "ship", "format": "thread"})).json()["id"]
+    post_id = (await start_thread(client, fake_llm, ["one", "two"], brief="ship")).json()["id"]
     connection = await x_connections_service.get_connection(db, user_id=user.id)
     assert connection is not None
     await x_connections_service.save_account(
@@ -121,8 +117,8 @@ async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "longer"})
 
     assert _limits(response.json()) == [X_LONG_POST_MAX_CHARS, X_LONG_POST_MAX_CHARS]
-    assert _system_text(writing_calls(fake_llm)[2]) == sketch_thread_prompt(X_LONG_POST_MAX_CHARS)
-    assert _system_text(writing_calls(fake_llm)[3]) == humanizer_thread_prompt(
+    assert _system_text(writing_calls(fake_llm)[1]) == sketch_thread_prompt(X_LONG_POST_MAX_CHARS)
+    assert _system_text(writing_calls(fake_llm)[2]) == humanizer_thread_prompt(
         X_LONG_POST_MAX_CHARS
     )
     read = (await client.get(f"{POSTS}/{post_id}")).json()

@@ -12,7 +12,6 @@ from pumpkit.core.storage import FileStorage
 from pumpkit.positioning import service as positioning_service
 from pumpkit.posts import media as media_service
 from pumpkit.posts import service
-from pumpkit.posts.formats import FORMAT_THREAD, Format
 from pumpkit.posts.media_files import PREVIEW_CONTENT_TYPE
 from pumpkit.posts.models import Idea, Post
 from pumpkit.posts.schemas import PostResponse
@@ -33,11 +32,11 @@ PERSONA_PAGE = "/persona"
 
 
 async def start_post(
-    db: AsyncSession, llm: LLM, user: User, brief: str, format: Format, now: datetime
+    db: AsyncSession, llm: LLM, user: User, brief: str, now: datetime
 ) -> PostResponse:
     """
     Plan the Brief with the User's Positioning, then start a Post from its single-post Idea
-    and write its first Version: a single post from its Plan, a Thread from the corpus.
+    and write its first Version from its Plan, as a single post or a Thread.
 
     The Brief, its Ideas, the Post and its attempt are stored only after the calls, so no
     transaction stays open across them. A failed plan stores nothing; a failed write is stored
@@ -47,12 +46,8 @@ async def start_post(
     positioning = await positioning_service.get_positioning(db, user_id=user_id)
     if positioning is None:
         raise RefusedError("Set up your persona before writing a post.", fix_page=PERSONA_PAGE)
+    # Kept on the Post for Feedback on a Thread, which still writes from it.
     corpus = await service.corpus_for_user(db, user_id=user_id)
-    # A Thread is written from the Inspiration authors' posts; a single post needs none.
-    if format == FORMAT_THREAD and not corpus.post_ids:
-        raise RefusedError(
-            "Add an inspiration author with posts before writing a post.", fix_page=PERSONA_PAGE
-        )
     await check_attempt_limit(db, user_id=user_id, now=now)
     await check_generation_left(db, user_id=user_id, now=now)
     char_limit = await char_limit_for(db, user_id=user_id)
@@ -64,7 +59,6 @@ async def start_post(
         user_id=user_id,
         brief=brief,
         positioning=positioning.text,
-        format=format,
         char_limit=char_limit,
     )
 
@@ -78,18 +72,22 @@ async def start_post(
     try:
         written = await write_planned_version(
             llm,
-            corpus=corpus,
             brief=brief,
             positioning=positioning.text,
             plan=planned.single,
-            format=format,
             char_limit=char_limit,
             user_id=user_id,
         )
     except Exception as error:
         _, post = await store_post()
         await record_failed_attempt(
-            db, post=post, sequence=1, feedback=None, format=format, error=error, now=now
+            db,
+            post=post,
+            sequence=1,
+            feedback=None,
+            format=planned.single.format,
+            error=error,
+            now=now,
         )
         # Commit before re-raising, or the request session rolls the failed attempt back.
         await db.commit()
