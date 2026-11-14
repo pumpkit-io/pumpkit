@@ -6409,7 +6409,7 @@ describe('Discarding a draft from its page', () => {
   };
 
   async function confirmDiscard() {
-    fireEvent.click((await textCard()).getByRole('button', { name: 'Discard' }));
+    fireEvent.click((await textCard()).getByRole('button', { name: 'Discard post' }));
     const dialog = within(await screen.findByRole('alertdialog'));
     expect(dialog.getByText('Discard this post?')).toBeInTheDocument();
     expect(dialog.getByText('Its versions are deleted for good.')).toBeInTheDocument();
@@ -6442,7 +6442,7 @@ describe('Discarding a draft from its page', () => {
   it('keeps the post when the User changes their mind', async () => {
     renderPost(postWith('the final text'));
 
-    fireEvent.click((await textCard()).getByRole('button', { name: 'Discard' }));
+    fireEvent.click((await textCard()).getByRole('button', { name: 'Discard post' }));
     fireEvent.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Keep it' }),
     );
@@ -6470,10 +6470,10 @@ describe('Discarding a draft from its page', () => {
     expect(recentDraftIds()).toEqual(['post_01']);
   });
 
-  it('offers no discard while a version is written', async () => {
+  it('disables discard while a version is written', async () => {
     renderPost({ ...postWith('the final text'), writing: true });
 
-    expect((await textCard()).getByRole('button', { name: 'Discard' })).toBeDisabled();
+    expect((await textCard()).getByRole('button', { name: 'Discard post' })).toBeDisabled();
   });
 
   it.each([
@@ -6483,6 +6483,8 @@ describe('Discarding a draft from its page', () => {
   ])('offers no discard on a %s post', async (_, scheduledPost) => {
     renderPost(withScheduledPost(scheduledPost));
 
-    expect((await textCard()).queryByRole('button', { name: 'Discard' })).not.toBeInTheDocument();
+    expect(
+      (await textCard()).queryByRole('button', { name: 'Discard post' }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -258,8 +258,9 @@ async def delete_post(call: ToolCall[User], post_id: str) -> DiscardedPostToolRe
     """
     Discard one of the user's drafts for good: the post, every version and its media are deleted,
     and its idea stays on its brief as not written, so the brief's page in the web app (`brief_url`)
-    offers it again. The generations it used stay used. A scheduled, published or failed post is refused, and so is a
-    post still being written or with no version yet. It can't be undone, so ask the user first.
+    offers it again. The generations it used stay used. A scheduled, published or failed post is
+    refused, and so is a post still being written or with no version yet. It can't be undone, so
+    ask the user first.
     """
     brief_id = await mediator.discard_post(
         db=call.db,

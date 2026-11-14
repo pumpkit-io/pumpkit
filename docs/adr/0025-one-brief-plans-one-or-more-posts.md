@@ -2,7 +2,7 @@
 
 A Brief often holds material for several Posts. A User who dictated five lessons got one Post that picked one lesson or crammed all five in, and had to split the Brief by hand to get the others. Pumpkit now plans a Brief before writing it: it finds the Ideas worth posting, gives each a Plan, and writes one Post per Idea the User picks. The Brief becomes a record of its own, and a Post belongs to one Idea of one Brief.
 
-This amends ADR 0016's premise of one Brief per Post, and ADR 0012 for the tools. Their other decisions continue to apply.
+This amends ADR 0016's premise of one Brief per Post, ADR 0012 for the tools, and ADR 0021 for a discarded Draft's Media. Their other decisions continue to apply.
 
 ## The model
 
@@ -30,7 +30,7 @@ A Brief's Posts are the Posts of its Ideas, in the order of those Ideas: the sin
 
 Each Idea's Post is an ordinary Post: one Text, an append-only History, Feedback on the Text as it is, and at most one Scheduled post (ADR 0015). What changes is where the first Version comes from: the Post's Idea and its Brief, which several Posts may share. Feedback revises the Text against the Positioning the Brief kept, not the User's current one.
 
-Only a Draft can be discarded. Discarding deletes the Post and its Versions for good, the one case where Versions are removed. Every other Post is refused: a Scheduled, Published or Failed one, and a Post still waiting for its first Version. A discarded Post's Generation is not refunded. A Post still waiting for its first Version is one being written or one whose first write failed or was lost: Retry is its way forward, and it was charged nothing. A Draft whose next Version is being written from Feedback is refused too, until that write ends. The Post's Media go with it, records and files, and so do its Upload links; the files are deleted only once the deletion commits, and the publisher's file sweep deletes any it missed. This amends ADR 0021, whose sweep of unreferenced Media no longer waits an hour for a discarded Post's. Its version attempts stay, their texts cleared, with only what counts them: the User, the outcome, the time, the models and the usage. So the Generations it used, a Top-up's charge included, and the hourly attempt limit keep counting them.
+Only a Draft can be discarded. Discarding deletes the Post and its Versions for good, the one case where Versions are removed. Every other Post is refused: a Scheduled, Published or Failed one, and a Post still waiting for its first Version. A discarded Post's Generation is not refunded. A Post still waiting for its first Version is one being written or one whose first write failed or was lost: Retry is its way forward, and it was charged nothing. A Draft whose next Version is being written from Feedback is refused too, until that write ends. The Post's Media go with it, records and files, and so do its Upload links; the files are deleted only once the deletion commits, and the publisher's file sweep deletes any it missed. They don't wait the hour ADR 0021's sweep gives unreferenced Media. The Post's version attempts stay, their texts cleared, with only what counts them: the User, the outcome, the time, the models and the usage. So the Generations it used, a Top-up's charge included, and the hourly attempt limit keep counting them.
 
 A Post written before this change gets a Brief and an Idea of its own, so every Post belongs to an Idea. It gets no Plan, so it is refused Feedback, with a message saying so.
 

@@ -43,8 +43,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # A discarded Post's attempts have no Post to go back to.
-    op.execute("DELETE FROM version_attempts WHERE post_id IS NULL")
+    # Deleting a discarded Post's attempts would give back the Generations and Top-ups they used.
+    if op.get_bind().scalar(
+        sa.text("SELECT 1 FROM version_attempts WHERE post_id IS NULL LIMIT 1")
+    ):
+        raise RuntimeError(
+            "Version attempts of discarded posts have no post to go back to: "
+            "restore a backup taken before 0066 to downgrade."
+        )
     with op.batch_alter_table("version_attempts", schema=None) as batch_op:
         batch_op.drop_constraint(batch_op.f(_POST_FK), type_="foreignkey")
         batch_op.create_foreign_key(

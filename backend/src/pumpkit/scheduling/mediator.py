@@ -689,9 +689,9 @@ async def discard_post(
 ) -> str:
     """
     Delete the User's Draft and its Versions for good, leaving its Idea on its Brief not written;
-    its Media files go once that commits. A Post with no Version yet or one being written is
-    refused, since a write would land on it. The Generations it used stay used. Returns the
-    Brief's id.
+    its Media files go once that commits. One being written is refused, since the write would land
+    on it, and one with no Version yet too: Retry is its way forward, and it was charged nothing.
+    The Generations it used stay used. Returns the Brief's id.
     """
     # User before Post, as every path that takes both locks them.
     await users_service.lock_user_id(db, user_id=user.id)
@@ -973,6 +973,8 @@ async def _record_failed_feedback(
     error: Exception,
 ) -> None:
     async with sessions() as db:
+        # User before Post, as every path that takes both locks them: the attempt names the User.
+        await users_service.lock_user_id(db, user_id=write.user_id)
         now = clock()
         post = await version_writing.post_still_writing(
             db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now

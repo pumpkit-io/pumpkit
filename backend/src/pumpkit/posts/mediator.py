@@ -387,6 +387,8 @@ async def _record_failed_first_version(
     error: Exception,
 ) -> None:
     async with sessions() as db:
+        # Before the Post: the attempt's key share on the User deadlocks a request holding both.
+        await users_service.lock_user_id(db, user_id=write.user_id)
         now = clock()
         post = await post_still_writing(
             db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now

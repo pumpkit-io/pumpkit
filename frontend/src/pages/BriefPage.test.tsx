@@ -685,6 +685,9 @@ describe('Brief page', () => {
       expect(within(cards[1]!).getByText('2')).toBeInTheDocument();
       expect(screen.getByText('2 of 4 written')).toBeInTheDocument();
       expect(track).toHaveBeenCalledWith('post_discarded', { from: 'brief_page' });
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { name: 'Not written' })).toHaveFocus(),
+      );
     });
 
     it('keeps the post when the User changes their mind', async () => {

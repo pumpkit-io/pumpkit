@@ -94,4 +94,6 @@ def check_discardable(status: PostStatus) -> None:
     if status == PUBLISHED_STATUS:
         raise NotDiscardable("This post is published, so it can't be discarded.")
     if status == FAILED_STATUS:
-        raise NotDiscardable("This post failed, so it can't be discarded.")
+        raise NotDiscardable(
+            "This post failed, so it can't be discarded. Post it again, or unschedule it first."
+        )

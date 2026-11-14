@@ -313,7 +313,7 @@ async def delete_text_media(db: AsyncSession, *, post: Post) -> list[str]:
 async def delete_files(storage: FileStorage, keys: list[str]) -> None:
     """
     Best effort, for files whose records are already deleted and committed: the publisher's file
-    sweep deletes what is left, since no record names it.
+    sweep deletes what is left, since no record names it, once the database holds any Media.
     """
     for key in keys:
         try:

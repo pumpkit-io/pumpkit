@@ -32,16 +32,17 @@ export function DiscardPostButton({
 }: {
   postId: string;
   from: 'brief_page' | 'post_page';
-  /** The accessible name, when "Discard" alone wouldn't say which post. */
+  /** The accessible name, when the button's own words wouldn't say which post. */
   label?: string;
   /** A trash icon among the Post card's tools, inside `HoverLabels`, in place of the word. */
   icon?: boolean;
   disabled?: boolean;
-  onDiscarded: () => unknown;
+  onDiscarded: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const iconName = label ?? 'Discard post';
 
   const close = () => {
     if (busy) return;
@@ -73,10 +74,10 @@ export function DiscardPostButton({
   return (
     <>
       {icon ? (
-        <HoverLabel label="Discard post">
+        <HoverLabel label={iconName}>
           <button
             type="button"
-            aria-label={label ?? 'Discard'}
+            aria-label={iconName}
             disabled={disabled}
             onClick={() => setOpen(true)}
             className={ICON_BUTTON}

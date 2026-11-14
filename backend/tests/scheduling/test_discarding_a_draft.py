@@ -149,7 +149,10 @@ async def test_a_scheduled_post_is_refused(client, draft):
     [
         (PUBLISHING, "This post is scheduled, so it can't be discarded. Unschedule it first."),
         (PUBLISHED, "This post is published, so it can't be discarded."),
-        (FAILED, "This post failed, so it can't be discarded."),
+        (
+            FAILED,
+            "This post failed, so it can't be discarded. Post it again, or unschedule it first.",
+        ),
     ],
 )
 async def test_a_post_publishing_published_or_failed_is_refused(client, db, draft, state, detail):
