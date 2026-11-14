@@ -38,7 +38,7 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
         f"{POSTS}/{started.json()['id']}/versions",
         json={"feedback": "expand it", "format": "thread"},
     )
-    assert given.status_code == 201, given.text
+    assert given.status_code == 202, given.text
     return (await client.get(f"{POSTS}/{started.json()['id']}")).json()
 
 

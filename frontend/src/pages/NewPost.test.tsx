@@ -135,6 +135,7 @@ function postWith(final: string): PostDetail {
       },
     ],
     status: 'draft',
+    writing: false,
     scheduledPost: null,
     textMedia: [],
   };

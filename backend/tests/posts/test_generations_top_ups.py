@@ -145,7 +145,7 @@ async def test_feedback_is_charged_to_a_top_up_too(
 
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "shorter"})
 
-    assert response.status_code == 201
+    assert response.status_code == 202
     assert await _generations_left(client) == (0, [1])
 
 

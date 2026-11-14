@@ -28,7 +28,15 @@ export type { TextSaveState };
 export interface TextBackend {
   saveText: (parts: string[], firstReply: boolean) => Promise<PostText>;
   restoreVersion: (versionNumber: number) => Promise<PostText>;
-  addVersion: (feedback: string, format: Format, parts: string[]) => Promise<Version>;
+  /** Resolves with the new Version once it is the Text, which can take a minute or two. */
+  addVersion: (
+    feedback: string,
+    format: Format,
+    parts: string[],
+    signal: AbortSignal,
+  ) => Promise<Version>;
+  /** Resolves with the Version being written after Version `after`, once it is the Text. */
+  awaitVersion: (after: number, signal: AbortSignal) => Promise<Version>;
 }
 
 /** One change to highlight: the Parts before it and after it, `key` telling changes apart. */
@@ -111,6 +119,8 @@ export class TextController {
   private readonly saver: TextSaver;
   private gate: TextGate;
   private writing = false;
+  // Stops waiting for the Version being written when the page goes away.
+  private waiting: AbortController | null = null;
   private restoring: Promise<void> | null = null;
   private save: TextSaveState = { kind: 'saved' };
   private restoreError: string | null = null;
@@ -230,25 +240,57 @@ export class TextController {
       if (!(await this.settle())) return 'notSaved';
       this.deps.track('post_version_requested', { kind: 'feedback' });
       const parts = textsOf(this.text?.parts ?? []);
-      try {
-        const version = await this.deps.backend.addVersion(feedback, format, parts);
-        this.versions = [...this.versions, version];
-        this.stored(textOf(version));
-        this.commit(textsOf(version.parts), 'rewrite', version.number);
-        return 'sent';
-      } catch (e) {
-        if (!isRefusal(e)) this.deps.track('post_version_failed', { kind: 'feedback' });
-        return { failed: e };
-      }
+      return await this.land((signal) =>
+        this.deps.backend.addVersion(feedback, format, parts, signal),
+      );
     } finally {
       this.writing = false;
       this.emit();
     }
   }
 
+  /** Waits for the Version Feedback was writing when the Post was read, then shows it. */
+  async resumeWriting(): Promise<FeedbackOutcome> {
+    if (this.writing) return 'notSaved';
+    this.writing = true;
+    this.emit();
+    try {
+      const after = this.versions[this.versions.length - 1]?.number ?? 0;
+      return await this.land((signal) => this.deps.backend.awaitVersion(after, signal));
+    } finally {
+      this.writing = false;
+      this.emit();
+    }
+  }
+
+  /** Stops waiting for a Version being written; the server goes on writing it. */
+  stopWaiting() {
+    this.waiting?.abort();
+  }
+
   /** Sends any edit the pause still holds, as the page goes away. */
   dispose() {
+    this.stopWaiting();
     this.saver.dispose();
+  }
+
+  /** Makes the Version `written` resolves with the Text; 'notSaved' when the wait was stopped. */
+  private async land(written: (signal: AbortSignal) => Promise<Version>): Promise<FeedbackOutcome> {
+    const waiting = new AbortController();
+    this.waiting = waiting;
+    try {
+      const version = await written(waiting.signal);
+      this.versions = [...this.versions, version];
+      this.stored(textOf(version));
+      this.commit(textsOf(version.parts), 'rewrite', version.number);
+      return 'sent';
+    } catch (e) {
+      if (waiting.signal.aborted) return 'notSaved';
+      if (!isRefusal(e)) this.deps.track('post_version_failed', { kind: 'feedback' });
+      return { failed: e };
+    } finally {
+      if (this.waiting === waiting) this.waiting = null;
+    }
   }
 
   private historyOf(post: PostDetail): TextHistory | null {

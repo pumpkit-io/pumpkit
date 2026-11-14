@@ -12,6 +12,7 @@ from pumpkit.main import app
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.positioning.positioning import save_positioning
+from tests.posts.feedback import latest_version
 from tests.posts.writing_replies import REVISED_POST, revised
 from tests.scheduling.reading import scheduled_posts
 
@@ -108,8 +109,8 @@ async def test_a_failed_post_cannot_be_scheduled_again_until_its_scheduled_post_
 async def test_feedback_on_a_draft_writes_the_next_version(client, fake_llm, post):
     response = await _give_feedback(client, fake_llm, post)
 
-    assert response.status_code == 201, response.text
-    assert response.json()["number"] == 2
+    assert response.status_code == 202, response.text
+    assert (await latest_version(client, post["id"]))["number"] == 2
 
 
 async def test_feedback_on_a_scheduled_post_is_refused_naming_the_fix(client, fake_llm, post):
@@ -160,8 +161,8 @@ async def test_feedback_on_a_failed_post_writes_the_next_version(
 
     response = await _give_feedback(client, fake_llm, post)
 
-    assert response.status_code == 201, response.text
-    assert response.json()["number"] == 2
+    assert response.status_code == 202, response.text
+    assert (await latest_version(client, post["id"]))["number"] == 2
 
 
 async def test_unscheduling_makes_the_post_a_draft_again(client, fake_llm, post):
@@ -177,7 +178,7 @@ async def test_unscheduling_makes_the_post_a_draft_again(client, fake_llm, post)
     )
 
     assert deleted.status_code == 204
-    assert feedback.status_code == 201, feedback.text
+    assert feedback.status_code == 202, feedback.text
     assert again.status_code == 201, again.text
     assert again.json()["parts"][0]["text"] == "Version after punchier."
 
@@ -217,6 +218,6 @@ async def test_a_post_scheduled_while_its_feedback_version_is_written_does_not_t
     read = await client.get(f"/api/v1/posts/{post['id']}")
 
     assert scheduled_mid_write[0].status_code == 201, scheduled_mid_write[0].text
-    assert response.status_code == 409
-    assert response.json()["detail"] == SCHEDULED_TAKES_NO_FEEDBACK
+    assert response.status_code == 202, response.text
     assert [version["number"] for version in read.json()["versions"]] == [1]
+    assert read.json()["writing_state"] is None

@@ -45,6 +45,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     start: vi.fn(),
     retry: vi.fn(),
     addVersion: vi.fn(),
+    awaitVersion: vi.fn(),
     restoreVersion: vi.fn(),
     saveText: vi.fn(),
   },
@@ -102,6 +103,7 @@ import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import {
   postService,
+  VersionNotWritten,
   textOf,
   type Part,
   type Plan,
@@ -176,6 +178,7 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
       text: null,
       versions: [],
       status: 'draft',
+      writing: false,
       scheduledPost: null,
       textMedia: [],
     },
@@ -276,6 +279,7 @@ describe('Post page', () => {
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
     vi.mocked(postService.get).mockReset();
     vi.mocked(postService.addVersion).mockReset();
+    vi.mocked(postService.awaitVersion).mockReset();
     vi.mocked(postService.restoreVersion).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
@@ -3828,9 +3832,13 @@ describe('Post page', () => {
       expect(dock.getByRole('button', { name: 'Writing…' })).toBeDisabled();
       expect(card().getByText('Writing version 2 from your feedback…')).toBeInTheDocument();
       expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'true');
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post', [
-        'the first final',
-      ]);
+      expect(postService.addVersion).toHaveBeenCalledWith(
+        'post_01',
+        'make it shorter',
+        'post',
+        ['the first final'],
+        expect.any(AbortSignal),
+      );
       expect(track).toHaveBeenCalledWith('post_version_requested', { kind: 'feedback' });
 
       answer(versionTwo);
@@ -3858,9 +3866,13 @@ describe('Post page', () => {
       fireEvent.click(format().getByRole('radio', { name: 'Thread' }));
       await sendFeedback('expand it');
 
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'expand it', 'thread', [
-        'the first final',
-      ]);
+      expect(postService.addVersion).toHaveBeenCalledWith(
+        'post_01',
+        'expand it',
+        'thread',
+        ['the first final'],
+        expect.any(AbortSignal),
+      );
       expect(
         await (await textCard()).findAllByRole('listitem', { name: /^Part \d of 3$/ }),
       ).toHaveLength(3);
@@ -3890,9 +3902,13 @@ describe('Post page', () => {
       await waitFor(() => expect(format.getByRole('radio', { name: 'Single post' })).toBeChecked());
       vi.mocked(postService.addVersion).mockResolvedValue(version(3, ['the third text']));
       await sendFeedback('shorter');
-      expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'shorter', 'post', [
-        'the first text',
-      ]);
+      expect(postService.addVersion).toHaveBeenCalledWith(
+        'post_01',
+        'shorter',
+        'post',
+        ['the first text'],
+        expect.any(AbortSignal),
+      );
     });
 
     it('shows a failure in the dock with a way to try again, keeping the Feedback', async () => {
@@ -3919,8 +3935,69 @@ describe('Post page', () => {
         'make it shorter',
         'post',
         ['the first final'],
+        expect.any(AbortSignal),
       );
       expect(dock.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('keeps the Text and the Feedback, with a way to send it again, when the version could not be written', async () => {
+      vi.mocked(postService.addVersion)
+        .mockRejectedValueOnce(new VersionNotWritten())
+        .mockResolvedValueOnce(versionTwo);
+      renderPost(postWith('the first final'));
+      await textCard();
+
+      await sendFeedback('make it shorter');
+
+      const alert = within(await panel('Draft').findByRole('alert'));
+      expect(
+        alert.getByText(
+          "Pumpkit couldn't write the next version, so your text hasn't changed. Try again.",
+        ),
+      ).toBeInTheDocument();
+      expect((await textCard()).getByText('the first final')).toBeInTheDocument();
+      expect(feedbackBox()).toHaveValue('make it shorter');
+      expect(feedbackBox()).toBeEnabled();
+      expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'feedback' });
+
+      fireEvent.click(alert.getByRole('button', { name: /try again/i }));
+
+      expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
+      expect(postService.addVersion).toHaveBeenCalledTimes(2);
+    });
+
+    it('opens a Post that Feedback is rewriting in the writing state, then shows the new version', async () => {
+      let answer: (v: Version) => void = () => {};
+      vi.mocked(postService.awaitVersion).mockReturnValue(
+        new Promise((resolve) => (answer = resolve)),
+      );
+      renderPost({ ...postWith('the first final'), writing: true });
+
+      expect(
+        await (await textCard()).findByText('Writing version 2 from your feedback…'),
+      ).toBeInTheDocument();
+      expect(feedbackBox()).toBeDisabled();
+      expect(screen.getByRole('article', { name: 'Text' })).toHaveAttribute('aria-busy', 'true');
+      expect(postService.awaitVersion).toHaveBeenCalledWith('post_01', 1, expect.any(AbortSignal));
+
+      answer(versionTwo);
+
+      expect(await (await textCard()).findByText('the second final')).toBeInTheDocument();
+      expect(feedbackBox()).toBeEnabled();
+    });
+
+    it('opens a Post whose Feedback then fails with the Text as it was and the failure', async () => {
+      vi.mocked(postService.awaitVersion).mockRejectedValue(new VersionNotWritten());
+      renderPost({ ...postWith('the first final'), writing: true });
+      await textCard();
+
+      expect(
+        await panel('Draft').findByText(
+          "Pumpkit couldn't write the next version, so your text hasn't changed. Try again.",
+        ),
+      ).toBeInTheDocument();
+      expect((await textCard()).getByText('the first final')).toBeInTheDocument();
+      expect(feedbackBox()).toBeEnabled();
     });
 
     it.each([
@@ -4040,9 +4117,13 @@ describe('Post page', () => {
       fireEvent.keyDown(feedbackBox(), { key: 'Enter', ...keys });
 
       await waitFor(() =>
-        expect(postService.addVersion).toHaveBeenCalledWith('post_01', 'make it shorter', 'post', [
-          'the first final',
-        ]),
+        expect(postService.addVersion).toHaveBeenCalledWith(
+          'post_01',
+          'make it shorter',
+          'post',
+          ['the first final'],
+          expect.any(AbortSignal),
+        ),
       );
     });
 

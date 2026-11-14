@@ -321,6 +321,7 @@ describe('Posts page', () => {
         brief: 'ship small things',
         plan: null,
         status: 'scheduled',
+        writing: false,
         textMedia: [],
         text: {
           format: 'post',
@@ -600,6 +601,7 @@ describe('Posts page', () => {
           createdAt: at(0, 7 + number),
         })),
         status: 'draft',
+        writing: false,
         scheduledPost: null,
         textMedia: [],
         ...extra,

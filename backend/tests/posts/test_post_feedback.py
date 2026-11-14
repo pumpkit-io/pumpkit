@@ -14,6 +14,7 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.models import Idea, Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import POSITIONING, TEXT, save_positioning
+from tests.posts.feedback import latest_version, written_version
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     MERGED_SKETCH,
@@ -241,10 +242,8 @@ async def _generations_used(client) -> int:
 async def test_feedback_returns_a_new_version_with_the_next_number(client, post_id, fake_llm):
     fake_llm.replies = [{"post": "final 2"}]
 
-    response = await _feedback(client, post_id, "make it shorter")
+    version = await written_version(client, post_id, "make it shorter")
 
-    assert response.status_code == 201, response.text
-    version = response.json()
     assert version["number"] == 2
     assert version["feedback"] == "make it shorter"
     assert version["format"] == "post"
@@ -432,7 +431,7 @@ async def test_feedback_of_exactly_100000_characters_is_accepted(client, post_id
 
     response = await _feedback(client, post_id, "a" * 100_000)
 
-    assert response.status_code == 201
+    assert response.status_code == 202
 
 
 async def test_blank_feedback_returns_422(client, post_id, fake_llm):
@@ -484,14 +483,16 @@ async def test_feedback_on_a_post_with_no_version_returns_409(client, db, subscr
     assert len(humanizer_calls(fake_llm)) == 1
 
 
-async def test_a_failed_revision_humanizer_is_stored_as_a_failed_attempt_and_returns_502(
-    client, db, post_id, fake_llm, assert_reported_502, clock
+async def test_a_failed_revision_humanizer_is_stored_as_a_failed_attempt_and_reported(
+    client, db, post_id, fake_llm, fake_posthog, clock
 ):
     fake_llm.replies = [LLMError("provider timed out")]
 
     response = await _feedback(client, post_id, "shorter")
 
-    assert_reported_502(response)
+    assert response.status_code == 202, response.text
+    fake_posthog.capture_exception.assert_called_once()
+    assert (await latest_version(client, post_id))["number"] == 1
     post = await _stored_post(db, post_id)
     assert [a.status for a in post.attempts] == ["succeeded", "failed"]
     failed = post.attempts[1]
@@ -508,7 +509,7 @@ async def test_a_failed_revision_humanizer_is_stored_as_a_failed_attempt_and_ret
     ids=["the revise call", "the revision humanizer"],
 )
 async def test_a_post_blank_after_the_scrub_fails_the_attempt_and_uses_no_generation(
-    client, db, post_id, fake_llm, assert_reported_502, revised_post, humanized_post
+    client, db, post_id, fake_llm, fake_posthog, revised_post, humanized_post
 ):
     fake_llm.standing[REVISED_POST] = revised(revised_post)
     fake_llm.replies = [{"post": humanized_post}]
@@ -516,7 +517,8 @@ async def test_a_post_blank_after_the_scrub_fails_the_attempt_and_uses_no_genera
 
     response = await _feedback(client, post_id, "shorter")
 
-    assert_reported_502(response)
+    assert response.status_code == 202, response.text
+    fake_posthog.capture_exception.assert_called_once()
     post = await _stored_post(db, post_id)
     assert [a.status for a in post.attempts] == ["succeeded", "failed"]
     assert await _generations_used(client) == used
@@ -528,9 +530,9 @@ async def test_a_failed_attempt_stays_out_of_the_conversation_and_the_numbering(
     fake_llm.replies = [LLMError("provider down"), {"post": "final 2"}]
     await _feedback(client, post_id, "shorter")
 
-    response = await _feedback(client, post_id, "shorter")
+    version = await written_version(client, post_id, "shorter")
 
-    assert response.json()["number"] == 2
+    assert version["number"] == 2
     [_, second] = _calls(fake_llm, REVISED_POST)
     assert second.messages[1:] == [
         _user(INPUTS),
@@ -566,10 +568,9 @@ async def test_feedback_after_restoring_a_version_says_the_user_went_back_to_it(
     _revise_with(fake_llm, "revised 3")
     fake_llm.replies = [{"post": "final 3"}]
 
-    response = await _feedback(client, two_versions, "warmer")
+    version = await written_version(client, two_versions, "warmer")
 
-    assert response.status_code == 201
-    assert response.json()["starting_text"] == _starting("final 1", 1)
+    assert version["starting_text"] == _starting("final 1", 1)
     revise, humanizer = fake_llm.calls
     assert revise.messages[2:] == [
         _assistant("final 1"),
@@ -593,9 +594,9 @@ async def test_feedback_after_hand_edits_says_what_the_user_changed_the_text_to(
     _revise_with(fake_llm, "revised 2")
     fake_llm.replies = [{"post": "final 2"}]
 
-    response = await _feedback(client, post_id, "warmer")
+    version = await written_version(client, post_id, "warmer")
 
-    assert response.json()["starting_text"] == _starting(edited, 1)
+    assert version["starting_text"] == _starting(edited, 1)
     revise, humanizer = fake_llm.calls
     assert revise.messages[2:] == [
         _assistant("final 1"),
@@ -676,9 +677,9 @@ async def test_feedback_on_the_latest_version_as_written_stores_no_starting_text
     await client.post(_restore_url(two_versions, 2))
     fake_llm.replies = [{"post": "final 3"}]
 
-    response = await _feedback(client, two_versions, "warmer")
+    version = await written_version(client, two_versions, "warmer")
 
-    assert response.json()["starting_text"] is None
+    assert version["starting_text"] is None
     [revise] = _calls(fake_llm, REVISED_POST)
     assert revise.messages[-1] == _user(_framed("warmer", 2))
 
@@ -721,9 +722,9 @@ async def test_feedback_sent_with_the_saved_text_is_written(client, post_id, fak
     await client.put(_text_url(post_id), json={"parts": ["saved by hand"]})
     fake_llm.replies = [{"post": "final 2"}]
 
-    response = await _feedback(client, post_id, "warmer", text=["saved by hand"])
+    version = await written_version(client, post_id, "warmer", text=["saved by hand"])
 
-    assert response.status_code == 201
+    assert version["number"] == 2
 
 
 async def test_feedback_after_switching_to_a_thread_and_back_reads_both_switches(

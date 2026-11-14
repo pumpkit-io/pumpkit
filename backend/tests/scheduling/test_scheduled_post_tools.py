@@ -802,8 +802,10 @@ async def test_feedback_on_a_draft_or_failed_post_writes_the_next_version(
     result = await _give_feedback(mcp, fake_llm, written_post["id"])
 
     assert result["isError"] is False, result
-    assert result["structuredContent"]["number"] == 2
-    assert result["structuredContent"]["parts"][0]["text"] == "The final, version two."
+    assert result["structuredContent"]["writing_state"] == "writing"
+    post = (await mcp.call_tool("get_post", post_id=written_post["id"]))["structuredContent"]
+    assert post["versions"][-1]["number"] == 2
+    assert post["versions"][-1]["parts"][0]["text"] == "The final, version two."
 
 
 async def test_feedback_on_an_unscheduled_post_writes_the_next_version(

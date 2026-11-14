@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import BinaryIO, Literal, Optional
+from typing import BinaryIO, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -16,12 +16,11 @@ from pumpkit.core.errors import (
 )
 from pumpkit.core.llm import LLM
 from pumpkit.core.storage import FileStorage
-from pumpkit.core.time import Clock, as_utc
+from pumpkit.core.time import Clock
 from pumpkit.positioning import service as positioning_service
 from pumpkit.posts import media as media_service
 from pumpkit.posts import service
 from pumpkit.posts.media_files import PREVIEW_CONTENT_TYPE
-from pumpkit.posts.models import Post
 from pumpkit.posts.plans import Plan
 from pumpkit.posts.schemas import PostResponse
 from pumpkit.posts.version_writing import (
@@ -30,6 +29,7 @@ from pumpkit.posts.version_writing import (
     check_attempt_limit,
     check_generation_left,
     plan_response,
+    post_still_writing,
     record_failed_attempt,
     user_post,
 )
@@ -195,7 +195,9 @@ async def _write_first_version(
         )
     except Exception as error:
         async with sessions() as db:
-            post = await _post_still_writing(db, write)
+            post = await post_still_writing(
+                db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at
+            )
             if post is not None:
                 await record_failed_attempt(
                     db,
@@ -214,7 +216,9 @@ async def _write_first_version(
     async with sessions() as db:
         # Before the Post: its key share on the User deadlocks two writes upgrading it to charge.
         await users_service.lock_user_id(db, user_id=write.user_id)
-        post = await _post_still_writing(db, write)
+        post = await post_still_writing(
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at
+        )
         if post is None:
             return
         now = clock()
@@ -229,18 +233,6 @@ async def _write_first_version(
         )
         await charge_generation(db, user_id=write.user_id, version=version, now=now)
         await db.commit()
-
-
-async def _post_still_writing(db: AsyncSession, write: _FirstVersionWrite) -> Optional[Post]:
-    """The Post, locked, unless it was deleted or a Retry started another write of it."""
-    post = await service.get_user_post(
-        db, user_id=write.user_id, post_id=write.post_id, for_update=True
-    )
-    if post is None or post.writing_since is None:
-        return None
-    if as_utc(post.writing_since) != write.started_at:
-        return None
-    return post
 
 
 @dataclass(frozen=True)

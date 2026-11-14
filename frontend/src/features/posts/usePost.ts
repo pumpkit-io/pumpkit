@@ -11,6 +11,8 @@ import { errorAllowanceUsedUp, errorMessage, errorStatus } from '@/services/apiE
 import {
   isUnwritten,
   postService,
+  WRITING_POLL_MAX_MS,
+  WRITING_POLL_MS,
   type Format,
   type PostDetail,
   type UnwrittenPost,
@@ -24,10 +26,7 @@ import { useWritingFailure } from './useWritingFailure';
 
 /** How long "Newer rewrites are in History" stays in the origin line. */
 export const REWRITES_DROPPED_MS = 4_000;
-/** How often the page reads a Post again while its first Version is being written. */
-export const WRITING_POLL_MS = 3_000;
-/** The longest wait between reads, which doubles after each read that fails. */
-export const WRITING_POLL_MAX_MS = 60_000;
+export { WRITING_POLL_MAX_MS, WRITING_POLL_MS };
 
 export type PostLoad =
   | { kind: 'loading' }
@@ -42,12 +41,16 @@ function controllerFor(post: PostDetail): TextController {
     backend: {
       saveText: (parts, firstReply) => postService.saveText(id, parts, firstReply),
       restoreVersion: (versionNumber) => postService.restoreVersion(id, versionNumber),
-      addVersion: (feedback, format, parts) => postService.addVersion(id, feedback, format, parts),
+      addVersion: (feedback, format, parts, signal) =>
+        postService.addVersion(id, feedback, format, parts, signal),
+      awaitVersion: (after, signal) => postService.awaitVersion(id, after, signal),
     },
     clock: browserClock,
     track,
   });
 }
+
+const FEEDBACK_FAILED = "Couldn't write the next version. Try again.";
 
 const noSubscribe = () => () => {};
 const noSnapshot = () => null;
@@ -152,6 +155,20 @@ export function usePost(postId: string) {
 
   useEffect(() => (controller ? () => controller.dispose() : undefined), [controller]);
 
+  // A Post read while Feedback's Version is being written shows the writing state until it lands.
+  const rewriting = load.kind === 'loaded' && load.post.writing ? load.controller : null;
+  useEffect(() => {
+    if (!rewriting) return;
+    let live = true;
+    void rewriting.resumeWriting().then((outcome) => {
+      if (live && typeof outcome === 'object') fail(outcome.failed, FEEDBACK_FAILED);
+    });
+    return () => {
+      live = false;
+      rewriting.stopWaiting();
+    };
+  }, [rewriting, fail]);
+
   // Before paint, so the Text's tools never show a gate a step behind the page.
   useLayoutEffect(() => {
     if (controller && status) controller.setGate({ status });
@@ -197,8 +214,7 @@ export function usePost(postId: string) {
       if (!controller) return false;
       clear();
       const outcome = await controller.sendFeedback(feedback, format);
-      if (typeof outcome === 'object')
-        fail(outcome.failed, "Couldn't write the next version. Try again.");
+      if (typeof outcome === 'object') fail(outcome.failed, FEEDBACK_FAILED);
       return outcome === 'sent';
     },
     [controller, clear, fail],

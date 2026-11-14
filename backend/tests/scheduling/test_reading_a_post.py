@@ -81,7 +81,7 @@ async def test_feedback_makes_the_new_version_the_text(client, post, fake_llm):
     given = await client.post(
         f"{POSTS}/{post['id']}/versions", json={"feedback": "expand it", "format": "thread"}
     )
-    assert given.status_code == 201, given.text
+    assert given.status_code == 202, given.text
 
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 

@@ -15,6 +15,7 @@ import pumpkit.x_connection.service as x_connections_service
 from pumpkit.auth.models import User
 from pumpkit.billing.allowance import Draw
 from pumpkit.core.errors import ConflictError, NotFoundError, RetryLaterError
+from pumpkit.core.logging import logger
 from pumpkit.core.text import drop_unstorable
 from pumpkit.core.time import as_utc
 from pumpkit.posts import media as media_service
@@ -245,6 +246,25 @@ async def user_post(
     post = await service.get_user_post(db, user_id=user.id, post_id=post_id, for_update=for_update)
     if post is None:
         raise NotFoundError("Post not found.")
+    return post
+
+
+async def post_still_writing(
+    db: AsyncSession, *, user_id: str, post_id: str, started_at: datetime
+) -> Optional[Post]:
+    """
+    The Post, locked, for the write that started at `started_at` to record its outcome. None, and
+    the write records nothing, when the Post was deleted or moved on: a Retry or another Feedback
+    started another write, or the Text changed after this one outlived the timeout.
+    """
+    post = await service.get_user_post(db, user_id=user_id, post_id=post_id, for_update=True)
+    if post is None or post.writing_since is None or as_utc(post.writing_since) != started_at:
+        logger.info(
+            "Write of post %s started at %s recorded nothing: the post moved on",
+            post_id,
+            started_at.isoformat(),
+        )
+        return None
     return post
 
 
