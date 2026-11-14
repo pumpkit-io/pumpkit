@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users can write and save their Positioning on the Persona page, above their inspiration authors: a few sentences on who they are on X, what they post about, who they write for, what they post for and what they can point readers to, up to 4,000 characters. AI apps read and save it with the new `get_positioning` and `set_positioning` MCP tools, and the API with `GET` and `PUT /api/v1/positioning`. Writing doesn't use it yet. The backend adds the table Positionings are kept in with a database migration when it starts, so an upgrade needs nothing done by hand.
+
 - Self-hosters can test personally at `http://localhost:5173` with real X sign-in, Stripe sandbox billing and coupons, and separate persistent local data through `make dev-personal`. A development-only X callback relay preserves localhost sessions; agent stacks stay emulated. Existing local stacks keep their data.
 
 ## [0.11.1] - 2026-11-10

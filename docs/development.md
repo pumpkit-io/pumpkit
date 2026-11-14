@@ -29,13 +29,14 @@ backend/src/pumpkit/
   authors/         Inspiration authors, their posts and the Author directory; the X reader (twitterapi.io)
   x_connection/    X sign-in and same-account publishing authorization; the X publisher port (X's API) and X's weighted length count
   support/         the support contact redirect (a router only)
+  positioning/     each User's Positioning: the free text saying who they are on X and what they post for
   posts/           Posts and Versions; the LLM port and OpenAI-compatible client
   onboarding/      where the web app sends a signed-in User next: the Paywall, then Onboarding
   posts/writing/   the pumpkit-v6 writing workflow: prompts, corpus framing, scrub, writing a Version
   scheduling/      Scheduled posts: rules, publish steps, publishing, and the publisher process
 backend/tests/     pytest suite, mirroring the package tree; fixtures in conftest.py
 frontend/src/
-  features/        self-contained feature modules (account, analyticsConsent, billing, connectedApps, inspirationAuthors, instance, legal, onboarding, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
+  features/        self-contained feature modules (account, analyticsConsent, billing, connectedApps, inspirationAuthors, instance, legal, onboarding, positioning, posts, scheduledPosts, sidebar, theme, topbar, xConnection)
   components/      shared UI: auth, blocks, brand, ui primitives, the Settings card
   services/        API clients (apiService handles tokens and refresh)
   lib/             analytics, storage, app constants and helpers
@@ -60,12 +61,12 @@ Every other page renders inside `pages/AppLayout.tsx` (the providers, the sideba
 - `/new` (`pages/NewPost.tsx`): the Brief and Format form, `features/posts/PostWriter.tsx`.
 - `/posts/scheduled`, `/posts/drafts`, `/posts/published` and `/posts/failed` (`pages/Posts.tsx`): one tab per status, built from `features/posts/list/`. `/posts` opens the Scheduled tab.
 - `/posts/:id` (`pages/PostPage.tsx`): the Text card (`features/posts/TextCard.tsx`) and, pinned below it, one dock per status from `features/posts/panels/`; the "Post to…" dialog is `features/posts/postTo/` and the inline edit of a Scheduled post is `features/posts/edit/`.
-- `/persona` (`pages/Persona.tsx`): the Inspiration authors, `features/inspirationAuthors/`.
+- `/persona` (`pages/Persona.tsx`): the Positioning panel (`features/positioning/`), a textarea saved through `GET` and `PUT /api/v1/positioning`, then the Inspiration authors, `features/inspirationAuthors/`. Writing doesn't read the Positioning yet.
 - `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile) and `features/connectedApps/` (Connect AI apps). `features/xConnection/` supplies the shared connection provider and recovery banner, not a separate account card.
 
 `features/scheduledPosts/` keeps what those pages share about Scheduled posts: Destinations and Communities, the X length counter, live Parts and local time.
 
-ADR 0008 orders the areas `core` <- `auth` <- {`billing`, `connected_apps`} <- {`authors`, `x_connection`, `support`} <- {`posts`, `onboarding`} <- `scheduling`: an area imports only areas to its left, and only their service, models, schemas and domain modules, never a router or mediator. `core` imports no area. `cd backend && uv run --extra dev lint-imports` checks these rules with the contracts in `backend/pyproject.toml`, and CI runs it. When an endpoint belongs to one area but needs a higher area's data, serve it from the higher area: `GET /x-connection` and `POST /x-connection/authorizations/complete` answer with the count of waiting Scheduled posts, so `scheduling/router.py` serves them, and `x_connection/router.py` starts only authenticated same-account reconnect. Unauthenticated sign-in start/completion live in `x_connection/sign_in_router.py`, using auth services without reversing the area order. There are no active disconnect or photo-choice endpoints.
+ADR 0008 orders the areas `core` <- `auth` <- {`billing`, `connected_apps`} <- {`authors`, `x_connection`, `support`} <- `positioning` <- {`posts`, `onboarding`} <- `scheduling`: an area imports only areas to its left, and only their service, models, schemas and domain modules, never a router or mediator. `core` imports no area. `cd backend && uv run --extra dev lint-imports` checks these rules with the contracts in `backend/pyproject.toml`, and CI runs it. When an endpoint belongs to one area but needs a higher area's data, serve it from the higher area: `GET /x-connection` and `POST /x-connection/authorizations/complete` answer with the count of waiting Scheduled posts, so `scheduling/router.py` serves them, and `x_connection/router.py` starts only authenticated same-account reconnect. Unauthenticated sign-in start/completion live in `x_connection/sign_in_router.py`, using auth services without reversing the area order. There are no active disconnect or photo-choice endpoints.
 
 ## Recipes
 

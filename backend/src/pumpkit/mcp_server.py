@@ -26,6 +26,7 @@ import pumpkit.authors.tools as authors_tools
 import pumpkit.billing.service as billing_service
 import pumpkit.billing.tools as billing_tools
 import pumpkit.connected_apps.mediator as connected_apps_mediator
+import pumpkit.positioning.tools as positioning_tools
 import pumpkit.posts.tools as posts_tools
 import pumpkit.scheduling.tools as scheduling_tools
 from pumpkit.auth.dependencies import CREDENTIALS_INVALID
@@ -40,6 +41,7 @@ from pumpkit.core.time import get_clock
 
 TOOLS: list[McpTool] = [
     *authors_tools.TOOLS,
+    *positioning_tools.TOOLS,
     *posts_tools.TOOLS,
     *scheduling_tools.TOOLS,
     *billing_tools.TOOLS,

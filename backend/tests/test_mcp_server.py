@@ -181,6 +181,8 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link_from_gate
         ("list_inspiration_authors", {}),
         ("add_inspiration_author", {"handle": "levelsio"}),
         ("remove_inspiration_author", {"handle": "levelsio"}),
+        ("get_positioning", {}),
+        ("set_positioning", {"text": "I post about bootstrapping."}),
         ("manage_subscription", {}),
     ]:
         result = await mcp.call_tool(name, **arguments)

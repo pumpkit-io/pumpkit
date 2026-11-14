@@ -16,6 +16,8 @@ SUBSCRIPTION_NEEDED = "This needs a subscription. Subscribe to continue."
 GATED_ROUTES = [
     ("GET", "/api/v1/inspiration-authors"),
     ("POST", "/api/v1/oauth/authorizations/request_unknown/approve"),
+    ("GET", "/api/v1/positioning"),
+    ("PUT", "/api/v1/positioning"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/posts/post_unknown"),
     ("GET", "/api/v1/scheduled-posts/communities"),
@@ -25,6 +27,7 @@ GATED_ROUTES = [
 # The gated routes a new User, with nothing stored yet, reads successfully.
 READS_OF_NOTHING_YET = [
     ("GET", "/api/v1/inspiration-authors"),
+    ("GET", "/api/v1/positioning"),
     ("GET", "/api/v1/posts"),
     ("GET", "/api/v1/scheduled-posts/communities"),
     ("GET", "/api/v1/usage"),

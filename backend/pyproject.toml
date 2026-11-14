@@ -106,6 +106,7 @@ type = "layers"
 layers = [
     "pumpkit.scheduling",
     "pumpkit.posts | pumpkit.onboarding",
+    "pumpkit.positioning",
     "pumpkit.authors | pumpkit.x_connection | pumpkit.support",
     "pumpkit.billing | pumpkit.connected_apps",
     "pumpkit.auth",
@@ -123,6 +124,7 @@ forbidden_modules = [
     "pumpkit.authors",
     "pumpkit.x_connection",
     "pumpkit.support",
+    "pumpkit.positioning",
     "pumpkit.posts",
     "pumpkit.onboarding",
     "pumpkit.scheduling",
@@ -166,6 +168,12 @@ protected_modules = ["pumpkit.support.router"]
 allowed_importers = ["pumpkit.support", "pumpkit.main"]
 
 [[tool.importlinter.contracts]]
+name = "Only positioning and pumpkit.main import positioning.router or positioning.mediator"
+type = "protected"
+protected_modules = ["pumpkit.positioning.router", "pumpkit.positioning.mediator"]
+allowed_importers = ["pumpkit.positioning", "pumpkit.main"]
+
+[[tool.importlinter.contracts]]
 name = "Only posts and pumpkit.main import posts.router or posts.mediator"
 type = "protected"
 protected_modules = ["pumpkit.posts.router", "pumpkit.posts.mediator"]
@@ -189,6 +197,7 @@ type = "protected"
 protected_modules = [
     "pumpkit.billing.tools",
     "pumpkit.authors.tools",
+    "pumpkit.positioning.tools",
     "pumpkit.posts.tools",
     "pumpkit.scheduling.tools",
 ]
@@ -210,6 +219,7 @@ containers = [
     "pumpkit.authors",
     "pumpkit.x_connection",
     "pumpkit.support",
+    "pumpkit.positioning",
     "pumpkit.posts",
     "pumpkit.onboarding",
     "pumpkit.scheduling",
