@@ -141,6 +141,7 @@ import {
   apiError,
   renderSignedIn,
   currentPath,
+  goTo,
   usageWith,
 } from './testing/signedInApp';
 
@@ -6042,6 +6043,49 @@ describe('A post before its first version', () => {
     expect(await screen.findByRole('button', { name: 'Retry' })).toBeEnabled();
     expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'retry' });
     expect(track).not.toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+  });
+
+  it('reads again at the normal pace after a retry, whatever reads failed before', async () => {
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('writing'))
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(postWith('written on retry'));
+    vi.mocked(postService.retry).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+    await screen.findByText('Writing…');
+    await poll();
+    await poll();
+    await poll();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    await screen.findByText('Writing…');
+    await poll();
+
+    expect((await textCard()).getByText('written on retry')).toBeInTheDocument();
+  });
+
+  it('reads another post afresh after moving to it from a retried one', async () => {
+    const other = (writingState: UnwrittenPost['writingState']) => ({
+      ...unwritten(writingState),
+      id: 'post_02',
+    });
+    vi.mocked(postService.get)
+      .mockResolvedValueOnce(unwritten('not_written'))
+      .mockResolvedValueOnce(other('writing'))
+      .mockResolvedValueOnce(other('not_written'));
+    vi.mocked(postService.retry).mockResolvedValue(unwritten('writing'));
+    renderSignedIn('/posts/post_01');
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+    await screen.findByText('Writing…');
+
+    goTo('/posts/post_02');
+    await waitFor(() => expect(postService.get).toHaveBeenLastCalledWith('post_02'));
+    await poll();
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeEnabled();
+    expect(track).toHaveBeenCalledWith('post_version_failed', { kind: 'brief' });
+    expect(track).not.toHaveBeenCalledWith('post_version_failed', { kind: 'retry' });
   });
 
   it('shows the text when a retry finds the late write already finished', async () => {

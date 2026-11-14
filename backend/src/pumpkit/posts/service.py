@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, cast
+from typing import Optional
 
 from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,7 @@ from pumpkit.posts.models import (
 from pumpkit.posts.writing.planning import PlannedBrief
 from pumpkit.posts.writing.starting_text import StartingText
 from pumpkit.posts.writing.versions import WrittenVersion
-from pumpkit.posts.writing_state import WRITING_TIMEOUT, is_writing
+from pumpkit.posts.writing_state import FEEDBACK_WRITING_TIMEOUT, is_writing
 
 
 async def get_user_post(
@@ -63,12 +63,20 @@ async def writes_started_since(
     rows = await db.execute(
         select(Post.writing_since).where(Post.user_id == user_id, Post.writing_since > since)
     )
-    return [as_utc(cast(datetime, started)) for started in rows.scalars()]
+    return [as_utc(started) for started in rows.scalars() if started is not None]
 
 
 async def count_writes_in_flight(db: AsyncSession, *, user_id: str, now: datetime) -> int:
-    """The User's writes started within the timeout, each charged a Generation if it succeeds."""
-    return len(await writes_started_since(db, user_id=user_id, since=now - WRITING_TIMEOUT))
+    """
+    The User's writes still within their timeout, each charged a Generation if it succeeds: a
+    write holds its Generation as long as it holds the Post's Text.
+    """
+    rows = await db.execute(
+        select(Post).where(
+            Post.user_id == user_id, Post.writing_since > now - FEEDBACK_WRITING_TIMEOUT
+        )
+    )
+    return sum(is_writing(post, now=now) for post in rows.scalars())
 
 
 async def count_versions_between(

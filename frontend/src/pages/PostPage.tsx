@@ -395,6 +395,11 @@ function LoadedPost({
 /** One Post at /posts/:id, read from the server, so a reload shows the same Post. */
 export function PostPage() {
   const { id = '' } = useParams();
+  // Moving to another Post keeps this route mounted; the key starts its reads and retry afresh.
+  return <PostPageFor key={id} id={id} />;
+}
+
+function PostPageFor({ id }: { id: string }) {
   const {
     load,
     reload,

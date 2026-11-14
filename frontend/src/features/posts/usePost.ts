@@ -107,10 +107,8 @@ export function usePost(postId: string) {
       postService.get(postId).then(
         (post) => {
           if (stopped) return;
-          if (isUnwritten(post) && post.writingState === 'writing') {
-            setPoll(({ count }) => ({ count: count + 1, failures: 0 }));
-            return;
-          }
+          setPoll(({ count }) => ({ count: count + 1, failures: 0 }));
+          if (isUnwritten(post) && post.writingState === 'writing') return;
           if (isUnwritten(post))
             track('post_version_failed', { kind: retried.current ? 'retry' : 'brief' });
           show(post);
