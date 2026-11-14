@@ -10,6 +10,7 @@ from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import MERGED_SKETCH, merged
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 COLUMNS = {"hook_levers", "hook_types", "cta_type", "sketches", "merge"}
 
 
@@ -45,7 +46,7 @@ async def test_a_single_post_written_after_the_upgrade_keeps_its_sketches(
     fake_llm.standing[MERGED_SKETCH] = merged(hook_types=["story"], reasoning="Sketch 2's story.")
     fake_llm.replies = [{"post": "The final.", "first_reply": None}]
 
-    started = await client.post(POSTS, json={"brief": "ship small things"})
+    started = await client.post(BRIEFS, json={"brief": "ship small things"})
 
     assert started.status_code == 201, started.text
     [version] = (await db.scalars(select(VersionAttempt))).all()

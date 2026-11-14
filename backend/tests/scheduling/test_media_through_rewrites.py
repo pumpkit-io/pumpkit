@@ -14,9 +14,15 @@ from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import png
 from tests.positioning.positioning import save_positioning
 from tests.posts.feedback import latest_version, written_version
-from tests.posts.writing_replies import REVISED_THREAD, revised_thread, start_thread
+from tests.posts.writing_replies import (
+    REVISED_THREAD,
+    revised_thread,
+    start_thread,
+    started_post_id,
+)
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
 
@@ -30,7 +36,7 @@ async def with_positioning(client, subscribed, connect_x):
 async def _start_thread(client, fake_llm, *parts: str) -> str:
     started = await start_thread(client, fake_llm, list(parts))
     assert started.status_code == 201, started.text
-    return started.json()["id"]
+    return started_post_id(started)
 
 
 async def _attach(client, post_id: str, *, part: int, name: str = "photo.png") -> str:
@@ -221,8 +227,8 @@ async def test_restoring_a_version_that_would_put_media_on_a_part_already_on_x_i
     client, with_positioning, fake_llm, fake_x_publisher
 ):
     fake_llm.replies = [{"post": "one post"}]
-    started = await client.post(POSTS, json={"brief": "ship small things"})
-    post_id = started.json()["id"]
+    started = await client.post(BRIEFS, json={"brief": "ship small things"})
+    post_id = started_post_id(started)
     fake_llm.replies = [{"parts": ["a", "b", "c"]}]
     await _feedback(client, post_id, "three parts", "thread")
     on_three = await _attach(client, post_id, part=3)

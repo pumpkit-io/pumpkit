@@ -25,9 +25,11 @@ from tests.posts.writing_replies import (
     merged,
     revised,
     sketched,
+    started_post_id,
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 USAGE = "/api/v1/usage"
 # The revise call's default, the model v5's revise prompt was tuned against.
 REVISING_MODEL = "openai/gpt-6.1-terra"
@@ -66,10 +68,10 @@ async def post_id(client, subscribed, fake_llm) -> str:
     fake_llm.standing[SKETCHED_POST] = sketched("A sketch.")
     fake_llm.standing[MERGED_SKETCH] = merged("The merged sketch.")
     fake_llm.replies = [{"post": "final 1"}]
-    response = await client.post(POSTS, json={"brief": "ship small things"})
+    response = await client.post(BRIEFS, json={"brief": "ship small things"})
     assert response.status_code == 201, response.text
     fake_llm.calls.clear()
-    return response.json()["id"]
+    return started_post_id(response)
 
 
 def _feedback(client, post_id: str, feedback: str, **body):
@@ -474,7 +476,7 @@ async def test_a_user_who_is_not_subscribed_gets_403(client, post_id, db, subscr
 async def test_feedback_on_a_post_with_no_version_returns_409(client, db, subscribed, fake_llm):
     await save_positioning(client)
     fake_llm.replies = [LLMError("provider down")]
-    await client.post(POSTS, json={"brief": "ship"})
+    await client.post(BRIEFS, json={"brief": "ship"})
     failed_post_id = (await db.execute(select(Post.id))).scalar_one()
 
     response = await _feedback(client, failed_post_id, "shorter")

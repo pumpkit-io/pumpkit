@@ -32,6 +32,8 @@ export interface ComposerProps {
   onSend: () => void;
   /** Locks the box and the Format with the text kept, and turns the arrow into a spinner. */
   isWriting?: boolean;
+  /** The spinner's accessible name. */
+  busyLabel?: string;
   /** Keeps the arrow greyed out for a reason outside the text, such as data still loading. */
   sendDisabled?: boolean;
   /** Locks the box and the Format without a spinner, such as while the page loads. */
@@ -69,6 +71,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
     sendOnEnter = false,
     onSend,
     isWriting = false,
+    busyLabel = 'Writing…',
     sendDisabled = false,
     disabled = false,
     gate,
@@ -127,7 +130,7 @@ export const Composer = forwardRef<HTMLTextAreaElement, ComposerProps>(function 
           {gate ?? (
             <button
               type="button"
-              aria-label={isWriting ? 'Writing…' : sendLabel}
+              aria-label={isWriting ? busyLabel : sendLabel}
               aria-keyshortcuts={sendOnEnter ? 'Enter' : 'Meta+Enter Control+Enter'}
               onClick={onSend}
               disabled={!canSend}

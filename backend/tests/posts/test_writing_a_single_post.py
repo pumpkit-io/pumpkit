@@ -29,6 +29,7 @@ from tests.posts.writing_replies import (
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 USAGE = "/api/v1/usage"
 BRIEF = "I shipped a pricing page in a weekend and trials went from 12 to 31 a week."
 CACHED = {"type": "ephemeral", "ttl": "1h"}
@@ -76,7 +77,7 @@ async def _write(client, fake_llm, final: str = "The final.", **plan):
     if plan:
         fake_llm.standing[POST_IDEAS] = ideas(planned_post(**plan))
     fake_llm.replies = [{"post": final, "first_reply": None}]
-    return await client.post(POSTS, json={"brief": BRIEF})
+    return await client.post(BRIEFS, json={"brief": BRIEF})
 
 
 def _calls(fake_llm, schema: type) -> list[LLMCall]:
@@ -336,7 +337,7 @@ async def test_a_failed_humanizer_call_fails_the_attempt_and_uses_no_generation(
 ):
     fake_llm.replies = [LLMError("acme: APIConnectionError: down")]
 
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
 
     assert (await written_post(client, response))["writing_state"] == "not_written"
     fake_posthog.capture_exception.assert_called_once()

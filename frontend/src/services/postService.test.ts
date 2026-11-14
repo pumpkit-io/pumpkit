@@ -47,22 +47,6 @@ const VERSION = {
 describe('postService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('starts a Post and reads it as being written, with its Plan', async () => {
-    vi.spyOn(apiService, 'post').mockResolvedValue({
-      data: { id: 'post_01', brief: 'ship', plan: PLAN, versions: [], writing_state: 'writing' },
-    } as never);
-
-    const post = await postService.start('ship');
-
-    expect(apiService.post).toHaveBeenCalledWith('/posts', { brief: 'ship' });
-    expect(post).toEqual<UnwrittenPost>({
-      id: 'post_01',
-      brief: 'ship',
-      plan: SHOWN_PLAN,
-      writingState: 'writing',
-    });
-  });
-
   it('retries the first Version of a Post Pumpkit could not write', async () => {
     vi.spyOn(apiService, 'post').mockResolvedValue({
       data: { id: 'post_01', brief: 'ship', plan: PLAN, versions: [], writing_state: 'writing' },

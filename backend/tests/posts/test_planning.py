@@ -24,6 +24,7 @@ from tests.posts.writing_replies import (
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 BRIEF = "I shipped a pricing page in a weekend and trials went from 12 to 31 a week."
 
 
@@ -48,7 +49,7 @@ def premium(fake_x_publisher, connect_x):
 
 async def _start(client, fake_llm, brief: str = BRIEF):
     fake_llm.replies = [{"post": "the final"}]
-    return await client.post(POSTS, json={"brief": brief})
+    return await client.post(BRIEFS, json={"brief": brief})
 
 
 def _system_text(call) -> str:
@@ -198,7 +199,7 @@ async def test_the_post_is_returned_and_read_back_with_its_plan(client, ready, f
         )
     )
 
-    started = (await _start(client, fake_llm)).json()
+    started = await written_post(client, await _start(client, fake_llm))
 
     plan = {
         "core_idea": "A weekend pricing page took trials from 12 to 31 a week.",
@@ -219,7 +220,7 @@ async def test_the_plan_of_a_thread_the_planner_chose_has_the_thread_format_and_
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread(structure="hook_playbook_closer"))
     fake_llm.replies = [{"parts": ["final one", "final two"]}]
 
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
 
     started = await written_post(client, response)
     assert started["versions"][0]["format"] == "thread"
@@ -255,7 +256,7 @@ async def test_the_funnel_is_stored_in_plain_words(client, ready, fake_llm, funn
         planned_post(funnel=funnel, desired_action="click", format="short", structure="one_line")
     )
 
-    started = (await _start(client, fake_llm)).json()
+    started = await written_post(client, await _start(client, fake_llm))
 
     assert started["plan"]["funnel"] == stored
 
@@ -282,7 +283,7 @@ async def test_the_brief_stores_the_positioning_it_was_planned_with_and_the_plan
     }
 
 
-async def test_the_post_is_written_from_the_single_post_idea_and_split_plans_are_only_stored(
+async def test_a_split_brief_stores_every_plan_and_writes_nothing_until_the_user_picks(
     client, ready, fake_llm, db, premium
 ):
     await premium()
@@ -298,7 +299,7 @@ async def test_the_post_is_written_from_the_single_post_idea_and_split_plans_are
         ],
     )
 
-    started = (await _start(client, fake_llm)).json()
+    planned = (await _start(client, fake_llm)).json()
 
     single, first, second = await _ideas(db)
     assert (single.whole_brief, single.posting_order) == (True, 1)
@@ -318,11 +319,12 @@ async def test_the_post_is_written_from_the_single_post_idea_and_split_plans_are
     )
     [brief] = list(await db.scalars(select(Brief).options(selectinload(Brief.ideas))))
     assert [idea.id for idea in brief.ideas] == [single.id, first.id, second.id]
-    [post] = list(await db.scalars(select(Post)))
-    assert (post.id, post.idea_id) == (started["id"], single.id)
-    assert started["plan"]["core_idea"] == "Everything I learned from two failed products."
-    # One plan call and one Post's writing: five sketches, the merge, the humanizer.
-    assert len(fake_llm.calls) == 8
+    assert await _count(db, Post) == 0
+    assert [idea["id"] for idea in planned["ideas"]] == [single.id, first.id, second.id]
+    assert planned["ideas"][0]["plan"]["core_idea"] == (
+        "Everything I learned from two failed products."
+    )
+    assert len(fake_llm.calls) == 1
 
 
 async def test_at_most_five_split_plans_are_kept_in_the_planners_order(client, ready, fake_llm, db):
@@ -362,8 +364,9 @@ async def test_choices_that_pull_against_each_other_are_logged_and_the_post_is_s
         f"A plan's choices pull against each other for User {user.id}: desired_action=buy is "
         "unusual for the top of the funnel (usual: dwell_time, follow, reply, repost, share).",
     ]
-    assert response.json()["plan"]["length"] == "short"
-    assert (await written_post(client, response))["versions"][0]["parts"][0]["text"] == "the final"
+    post = await written_post(client, response)
+    assert post["plan"]["length"] == "short"
+    assert post["versions"][0]["parts"][0]["text"] == "the final"
 
 
 async def test_a_list_planned_short_is_logged_as_tight(
@@ -387,7 +390,7 @@ async def test_a_list_planned_short_is_logged_as_tight(
 async def test_starting_a_post_with_no_positioning_is_refused_with_the_persona_page_as_the_fix(
     client, subscribed, fake_llm, db
 ):
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
 
     assert response.status_code == 422
     assert response.json() == {
@@ -415,7 +418,7 @@ async def test_a_failed_plan_call_stores_nothing_and_charges_nothing(
     fake_llm.standing[POST_IDEAS] = LLMError("gpt-6-luna: APIConnectionError: down")
     fake_llm.replies = [{"post": "the final"}]
 
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
 
     assert_reported_502(response)
     assert len(fake_llm.calls) == 1
@@ -431,7 +434,7 @@ async def test_a_plan_call_that_runs_out_of_time_fails_like_any_other(
     app.dependency_overrides[get_llm] = lambda: FakeLLM(latency=60)
     monkeypatch.setattr(planning, "PLAN_CALL_SECONDS", 0.01)
 
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
 
     assert_reported_502(response)
     assert await _count(db, Brief) == 0
@@ -440,7 +443,7 @@ async def test_a_plan_call_that_runs_out_of_time_fails_like_any_other(
 async def test_a_post_whose_writing_failed_keeps_its_brief_and_plan(client, ready, fake_llm, db):
     fake_llm.replies = [LLMError("no reply")]
 
-    assert (await client.post(POSTS, json={"brief": BRIEF})).status_code == 201
+    assert (await client.post(BRIEFS, json={"brief": BRIEF})).status_code == 201
 
     [idea] = await _ideas(db)
     [post] = list(await db.scalars(select(Post)))
@@ -455,6 +458,6 @@ async def test_text_postgres_cannot_store_is_dropped_from_the_planners_answer(
         planned_post("Ship\x00 small \ud83d things. ", format="short", structure="one_line")
     )
 
-    started = (await _start(client, fake_llm)).json()
+    started = await written_post(client, await _start(client, fake_llm))
 
     assert started["plan"]["core_idea"] == "Ship small  things."

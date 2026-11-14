@@ -13,9 +13,10 @@ from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
 from tests.posts.feedback import written_version
-from tests.posts.writing_replies import start_thread, written_post
+from tests.posts.writing_replies import start_thread, started_post_id, written_post
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 # The model the merge and the humanizer were tuned against, unless a setting says otherwise.
 DEFAULT_MODEL = "openai/gpt-6.1-terra"
 
@@ -42,7 +43,7 @@ async def test_starting_a_post_returns_it_with_its_first_version(
 ):
     fake_llm.replies = [{"post": "the final"}]
 
-    response = await client.post(POSTS, json={"brief": "ship small things"})
+    response = await client.post(BRIEFS, json={"brief": "ship small things"})
 
     body = await written_post(client, response)
     assert body["id"].startswith("post_")
@@ -69,7 +70,7 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
         {"post": "final one"},
         {"post": "final two"},
     ]
-    post = await written_post(client, await client.post(POSTS, json={"brief": "ship"}))
+    post = await written_post(client, await client.post(BRIEFS, json={"brief": "ship"}))
     [first] = post["versions"]
 
     second = await written_version(client, post["id"], "shorter")
@@ -97,13 +98,13 @@ async def test_no_version_is_written_from_the_inspiration_authors_posts(
         db=db, reader=fake_x_reader, user=user, handle="levelsio", now=clock()
     )
     await db.commit()
-    post_id = (await start_thread(client, fake_llm, ["a", "b"], brief="ship")).json()["id"]
+    post_id = started_post_id(await start_thread(client, fake_llm, ["a", "b"], brief="ship"))
     fake_llm.replies = [{"parts": ["c", "d"]}, {"post": "one"}, {"post": "two"}]
     for body in ({"feedback": "shorter"}, {"feedback": "condense", "format": "post"}):
         response = await client.post(f"{POSTS}/{post_id}/versions", json=body)
         assert response.status_code == 202, response.text
     fake_llm.replies = [{"post": "a post"}]
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
+    assert (await client.post(BRIEFS, json={"brief": "ship"})).status_code == 201
 
     prompts = "\n".join(str(m["content"]) for call in fake_llm.calls for m in call.messages)
     assert "levelsio" not in prompts
@@ -117,7 +118,7 @@ async def test_the_final_is_counted_as_x_counts_it_and_kept_when_over_the_limit(
     long_final = "🚀" + "a" * 300
     fake_llm.replies = [{"post": long_final}]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     version = (await written_post(client, response))["versions"][0]
     assert version["parts"] == [
@@ -128,7 +129,7 @@ async def test_the_final_is_counted_as_x_counts_it_and_kept_when_over_the_limit(
 async def test_a_brief_over_200000_characters_returns_422_without_calling_the_model(
     client, with_positioning, fake_llm
 ):
-    response = await client.post(POSTS, json={"brief": "a" * 200_001})
+    response = await client.post(BRIEFS, json={"brief": "a" * 200_001})
 
     assert response.status_code == 422
     assert fake_llm.calls == []
@@ -137,20 +138,20 @@ async def test_a_brief_over_200000_characters_returns_422_without_calling_the_mo
 async def test_a_brief_of_exactly_200000_characters_is_accepted(client, with_positioning, fake_llm):
     fake_llm.replies = [{"post": "final"}]
 
-    response = await client.post(POSTS, json={"brief": "a" * 200_000})
+    response = await client.post(BRIEFS, json={"brief": "a" * 200_000})
 
     assert response.status_code == 201
 
 
 async def test_a_blank_brief_returns_422(client, with_positioning, fake_llm):
-    response = await client.post(POSTS, json={"brief": "  \n "})
+    response = await client.post(BRIEFS, json={"brief": "  \n "})
 
     assert response.status_code == 422
     assert fake_llm.calls == []
 
 
 async def test_a_user_who_is_not_subscribed_gets_403(client, fake_llm):
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert response.status_code == 403
     assert fake_llm.calls == []
@@ -162,7 +163,7 @@ async def test_a_user_without_a_subscription_writes_a_post_where_no_plans_are_so
     await save_positioning(client)
     fake_llm.replies = [{"post": "final"}]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert (await written_post(client, response))["versions"][0]["parts"][0]["text"] == "final"
 
@@ -177,10 +178,10 @@ async def test_a_post_stores_its_brief_and_version_with_models_and_usage(
 ):
     fake_llm.replies = [{"post": "final"}]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     [post] = await _stored_posts(db)
-    assert post.id == response.json()["id"]
+    assert post.id == started_post_id(response)
     assert post.brief == "ship"
     assert post.corpus_post_ids is None
     [attempt] = post.attempts
@@ -206,7 +207,7 @@ async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_reports
 ):
     fake_llm.replies = [LLMError("provider timed out")]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert (await written_post(client, response))["writing_state"] == "not_written"
     fake_posthog.capture_exception.assert_called_once()
@@ -221,9 +222,9 @@ async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_reports
 
 async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_positioning, fake_llm):
     fake_llm.replies = [LLMError("provider down"), {"post": "final"}]
-    await client.post(POSTS, json={"brief": "ship"})
+    await client.post(BRIEFS, json={"brief": "ship"})
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert response.status_code == 201
     posts = await _stored_posts(db)
@@ -236,7 +237,7 @@ async def test_a_write_without_the_llm_key_leaves_the_post_not_written_and_store
 ):
     fake_llm.replies = [LLMNotConfiguredError("LLM_API_KEY is not set. Add it to .env.")]
 
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await client.post(BRIEFS, json={"brief": "ship"})
 
     assert (await written_post(client, response))["writing_state"] == "not_written"
     [post] = await _stored_posts(db)

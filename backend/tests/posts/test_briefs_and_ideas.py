@@ -12,8 +12,10 @@ from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Brief, Idea, Post
 from tests.connected_apps.conftest import foreign_keys_session as foreign_keys_session
 from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import written_post
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
 
 
@@ -37,7 +39,9 @@ async def test_starting_a_post_stores_its_brief_with_one_idea_the_post_belongs_t
 ):
     fake_llm.replies = [{"post": "the final"}]
 
-    started = (await client.post(POSTS, json={"brief": "ship small things"})).json()
+    started = await written_post(
+        client, await client.post(BRIEFS, json={"brief": "ship small things"})
+    )
 
     assert await _stored(db) == [(user.id, "ship small things", 1, started["id"])]
 
@@ -47,7 +51,7 @@ async def test_a_post_whose_first_version_failed_still_has_its_brief(
 ):
     fake_llm.replies = [LLMError("no reply")]
 
-    assert (await client.post(POSTS, json={"brief": "ship small things"})).status_code == 201
+    assert (await client.post(BRIEFS, json={"brief": "ship small things"})).status_code == 201
 
     assert [(text, order) for _, text, order, _ in await _stored(db)] == [("ship small things", 1)]
 
@@ -55,8 +59,8 @@ async def test_a_post_whose_first_version_failed_still_has_its_brief(
 async def test_each_post_started_gets_a_brief_of_its_own(client, with_positioning, fake_llm, db):
     fake_llm.replies = [{"post": "one"}, {"post": "two"}]
 
-    first = (await client.post(POSTS, json={"brief": "the same words"})).json()
-    second = (await client.post(POSTS, json={"brief": "the same words"})).json()
+    first = await written_post(client, await client.post(BRIEFS, json={"brief": "the same words"}))
+    second = await written_post(client, await client.post(BRIEFS, json={"brief": "the same words"}))
 
     assert sorted(post_id for *_, post_id in await _stored(db)) == sorted(
         [first["id"], second["id"]]

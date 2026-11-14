@@ -27,10 +27,12 @@ from tests.posts.writing_replies import (
     planned_thread,
     revised_thread,
     sketched_thread,
+    started_post_id,
     written_post,
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 USAGE = "/api/v1/usage"
 BRIEF = (
     "Five things I learned shipping every week for a year: ship on Fridays, keep a public "
@@ -71,7 +73,7 @@ def premium(fake_x_publisher, connect_x):
 async def _write_thread(client, fake_llm, final: list[str] = FINAL, **plan):
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread(**plan))
     fake_llm.replies = [{"parts": final}]
-    return await client.post(POSTS, json={"brief": BRIEF})
+    return await client.post(BRIEFS, json={"brief": BRIEF})
 
 
 def _calls(fake_llm, schema: type) -> list[LLMCall]:
@@ -175,7 +177,7 @@ async def test_a_thread_planned_short_only_is_refused_by_the_schema(
 ):
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread(structure="few_lines"))
 
-    assert_reported_502(await client.post(POSTS, json={"brief": BRIEF}))
+    assert_reported_502(await client.post(BRIEFS, json={"brief": BRIEF}))
 
 
 # A written Thread
@@ -468,7 +470,7 @@ async def test_no_thread_prompt_is_a_single_post_prompt(client, ready, fake_llm)
     fake_llm.standing[POST_IDEAS] = ideas(planned_post())
     fake_llm.replies = [{"post": "A post.", "first_reply": None}]
 
-    assert (await client.post(POSTS, json={"brief": BRIEF})).status_code == 201
+    assert (await client.post(BRIEFS, json={"brief": BRIEF})).status_code == 201
 
     post_prompts = {_system_text(call) for call in fake_llm.calls[1:]}
     assert len(thread_prompts) == 3 and len(post_prompts) == 3
@@ -565,7 +567,7 @@ async def test_a_failed_thread_humanizer_call_fails_the_attempt(
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread())
     fake_llm.replies = [LLMError("acme: APIConnectionError: down")]
 
-    response = await client.post(POSTS, json={"brief": BRIEF})
+    response = await client.post(BRIEFS, json={"brief": BRIEF})
     assert (await written_post(client, response))["writing_state"] == "not_written"
     fake_posthog.capture_exception.assert_called_once()
     assert (await _version(db)).format == "thread"
@@ -575,7 +577,7 @@ async def test_a_failed_thread_humanizer_call_fails_the_attempt(
 
 
 async def test_starting_a_post_takes_no_format(client, ready, fake_llm):
-    response = await client.post(POSTS, json={"brief": BRIEF, "format": "thread"})
+    response = await client.post(BRIEFS, json={"brief": BRIEF, "format": "thread"})
 
     assert response.status_code == 422
     assert fake_llm.calls == []
@@ -605,7 +607,7 @@ FINAL_PARTS = '<part number="1">\nShip on Fridays.\n</part>\n\n<part number="2">
 
 
 async def _thread_with_feedback(client, fake_llm, feedback: str = "shorter", **plan):
-    post_id = (await _write_thread(client, fake_llm, **plan)).json()["id"]
+    post_id = started_post_id(await _write_thread(client, fake_llm, **plan))
     fake_llm.calls.clear()
     fake_llm.replies = [{"parts": ["Fridays.", "Changelog."]}]
     return post_id, await written_version(client, post_id, feedback)
@@ -755,7 +757,7 @@ async def test_the_thread_revision_humanizer_uses_the_thread_humanizer_prompt(
 
 
 async def test_feedback_on_a_hand_edited_thread_keeps_the_users_sentences(client, ready, fake_llm):
-    post_id = (await _write_thread(client, fake_llm)).json()["id"]
+    post_id = started_post_id(await _write_thread(client, fake_llm))
     edited = ["Ship on Fridays. I mean it!", "Keep a public changelog."]
     assert (await client.put(f"{POSTS}/{post_id}/text", json={"parts": edited})).is_success
     fake_llm.calls.clear()
@@ -802,7 +804,7 @@ async def test_a_thread_version_stores_the_revised_parts_the_reasoning_and_the_c
 async def test_thread_feedback_over_mcp_is_written_from_the_thread_prompts(
     client, ready, fake_llm, mcp
 ):
-    post_id = (await _write_thread(client, fake_llm)).json()["id"]
+    post_id = started_post_id(await _write_thread(client, fake_llm))
     fake_llm.calls.clear()
     fake_llm.replies = [{"parts": ["Fridays.", "Changelog."]}]
 

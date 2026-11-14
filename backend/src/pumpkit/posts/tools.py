@@ -7,14 +7,16 @@ from pumpkit.core.llm import get_llm
 from pumpkit.core.mcp_tools import ADDITIVE, McpTool, ToolCall
 from pumpkit.core.time import get_clock
 from pumpkit.posts import mediator
-from pumpkit.posts.schemas import WRITE_RATE, PostResponse, PostStartRequest
+from pumpkit.posts.schemas import WRITE_RATE, BriefRequest, PostResponse
 
 
 async def start_post(call: ToolCall[User], brief: str) -> PostResponse:
     """
     Start a post from a brief, what the post is about and what the user thinks about it. Pumpkit
     plans the post around the user's positioning, then writes its first version from that plan.
-    It is refused until the user has a positioning, which `set_positioning` saves. `plan` says
+    When the brief holds several separate ideas, Pumpkit still writes one post covering all of
+    them; the web app's New post can write one post per idea instead. It is refused until the
+    user has a positioning, which `set_positioning` saves. `plan` says
     what the post is built for: its core idea, the takeaway, the funnel stage (`top` for reach,
     `middle` for trust, `bottom` for conversion), the desired action, the format and the length.
     The format is "post" for a single X post or "thread" for a thread: several parts, each one
@@ -26,7 +28,7 @@ async def start_post(call: ToolCall[User], brief: str) -> PostResponse:
     user the text, meant for X, with every part and its character count. "not_written" means
     Pumpkit couldn't write it; the user can retry from the post's page in the web app.
     """
-    start_request = PostStartRequest(brief=brief)
+    start_request = BriefRequest(brief=brief)
     return await mediator.start_post(
         db=call.db,
         llm=await call.provide(get_llm),

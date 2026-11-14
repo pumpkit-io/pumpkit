@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import exists, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -15,6 +15,7 @@ from pumpkit.posts.models import (
     ATTEMPT_SUCCEEDED,
     Brief,
     Idea,
+    PlanCall,
     Post,
     VersionAttempt,
 )
@@ -98,12 +99,58 @@ async def count_versions_between(
     return result.scalar_one()
 
 
+async def plan_calls_since(db: AsyncSession, *, user_id: str, since: datetime) -> list[datetime]:
+    """When the User made each plan call after `since`, oldest first."""
+    query = (
+        select(PlanCall.called_at)
+        .where(PlanCall.user_id == user_id, PlanCall.called_at > since)
+        .order_by(PlanCall.called_at)
+    )
+    return [as_utc(called_at) for called_at in (await db.execute(query)).scalars()]
+
+
+async def log_plan_call(
+    db: AsyncSession, *, user_id: str, now: datetime, counted_since: datetime
+) -> None:
+    """
+    Record one plan call, and drop the User's plan calls the cap no longer counts: those made at
+    or before `counted_since`. Flushes.
+    """
+    await db.execute(
+        delete(PlanCall).where(PlanCall.user_id == user_id, PlanCall.called_at <= counted_since)
+    )
+    db.add(PlanCall(user_id=user_id, called_at=now))
+    await db.flush()
+
+
+async def get_user_brief(db: AsyncSession, *, user_id: str, brief_id: str) -> Optional[Brief]:
+    """The User's Brief with its Ideas in order, or None when it isn't theirs."""
+    result = await db.execute(
+        select(Brief)
+        .where(Brief.id == brief_id, Brief.user_id == user_id)
+        .options(selectinload(Brief.ideas))
+        # Read afresh: a write in the background may have changed it since the session read it.
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def posts_of_ideas(db: AsyncSession, *, idea_ids: list[str]) -> dict[str, Post]:
+    """The Posts written from these Ideas, by Idea id; an Idea not written has none."""
+    if not idea_ids:
+        return {}
+    result = await db.execute(
+        select(Post).where(Post.idea_id.in_(idea_ids)).options(selectinload(Post.attempts))
+    )
+    return {post.idea_id: post for post in result.scalars()}
+
+
 async def store_planned_brief(
     db: AsyncSession, *, user_id: str, text: str, planned: PlannedBrief, now: datetime
-) -> Idea:
+) -> Brief:
     """
-    Store the Brief as it was planned, with its single-post Idea and its split Ideas in posting
-    order, and return the single-post Idea. Flushes.
+    Store the Brief as it was planned, with its single-post Idea first and its split Ideas in
+    posting order. Flushes.
     """
     single = Idea(posting_order=1, whole_brief=True, plan=planned.single)
     split = [
@@ -122,7 +169,7 @@ async def store_planned_brief(
     )
     db.add(brief)
     await db.flush()
-    return single
+    return brief
 
 
 async def create_post(db: AsyncSession, *, user_id: str, idea: Idea, now: datetime) -> Post:

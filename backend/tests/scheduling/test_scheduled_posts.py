@@ -17,7 +17,7 @@ from pumpkit.x_connection.x_publisher import (
     XReconnectNeededError,
 )
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import start_thread
+from tests.posts.writing_replies import start_thread, started_post_id
 from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -488,9 +488,9 @@ async def post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post written through the API, its Text the first Version, "Version one."."""
     await save_positioning(client)
     fake_llm.replies = [{"post": "Version one."}]
-    started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
+    started = await client.post("/api/v1/briefs", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def test_scheduling_a_post_records_its_text_and_time(
@@ -561,7 +561,7 @@ async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     await save_positioning(client)
     started = await start_thread(client, fake_llm, THREAD_VERSION)
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def test_scheduling_a_thread_copies_its_parts_in_order_and_publishes_a_chain(

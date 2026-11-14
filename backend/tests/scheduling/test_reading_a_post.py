@@ -18,6 +18,7 @@ from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import PLAN, start_thread, written_post
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
 
@@ -33,7 +34,9 @@ async def with_positioning(client, subscribed, connect_x) -> None:
 async def post(client, with_positioning, fake_llm, fixed_clock) -> dict:
     """A Post written through the API, with one Version."""
     fake_llm.replies = [{"post": "Version one."}]
-    return await written_post(client, await client.post(POSTS, json={"brief": "ship small things"}))
+    return await written_post(
+        client, await client.post(BRIEFS, json={"brief": "ship small things"})
+    )
 
 
 async def _schedule(client, post_id: str, **when) -> dict:
@@ -144,7 +147,9 @@ async def test_a_published_post_reads_as_published_with_its_link_on_x(client, po
 async def test_a_thread_that_failed_partway_reads_as_failed_with_its_live_part(
     client, with_positioning, fake_llm, fake_x_publisher
 ):
-    post = (await start_thread(client, fake_llm, ["Live one.", "Refused two."])).json()
+    post = await written_post(
+        client, await start_thread(client, fake_llm, ["Live one.", "Refused two."])
+    )
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
     fake_x_publisher.fail_publish_on = 2
 

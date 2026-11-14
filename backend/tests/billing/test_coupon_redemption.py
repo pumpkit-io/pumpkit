@@ -384,7 +384,7 @@ async def test_cardless_writing_spends_the_full_monthly_allowance_and_resets(
     assert (await client.post(REDEEM, json=confirmation(offer))).status_code == 200
     await save_positioning(client)
     fake_llm.replies = [{"post": "Written during free access"}]
-    response = await client.post("/api/v1/posts", json={"brief": "Write a useful note"})
+    response = await client.post("/api/v1/briefs", json={"brief": "Write a useful note"})
     assert response.status_code == 201, response.text
     usage = (await client.get("/api/v1/usage")).json()["allowance"]
     assert usage["generations"]["limit"] == 500
@@ -561,7 +561,7 @@ async def test_distinct_coupons_append_from_january_anchor_without_resetting_usa
     first_result = (await client.post(REDEEM, json=confirmation(offer))).json()
     await save_positioning(client)
     fake_llm.replies = [{"post": "Before appending"}]
-    assert (await client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
+    assert (await client.post("/api/v1/briefs", json={"brief": "A note"})).status_code == 201
     before = (await client.get("/api/v1/usage")).json()
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 700)
     second = await coupons("--months", "1")

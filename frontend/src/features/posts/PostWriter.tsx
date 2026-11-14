@@ -3,7 +3,10 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useHasPositioning } from '@/features/positioning/useHasPositioning';
 import { track } from '@/lib/analytics';
-import { BRIEF_MAX_CHARS, postService } from '@/services/postService';
+import { BRIEF_MAX_CHARS } from '@/services/postService';
+import { errorCode } from '@/services/apiErrors';
+import { briefPosts, briefService, splitIdeas, type Brief } from '@/services/briefService';
+import { IdeasStep, type IdeasChoice } from '@/features/briefs/IdeasStep';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Composer } from './Composer';
 import { Notice } from '@/components/Notice';
@@ -13,13 +16,15 @@ import { useUsage } from '@/features/billing/useUsage';
 import { isRefusal, useWritingFailure } from './useWritingFailure';
 
 /**
- * Starts a Post from a Brief and goes to its page once the Brief is planned, where the first
- * Version appears when it is written. On a failure it stays, with the Brief kept, so trying again
- * is one click.
+ * Plans a Brief. With one Idea its Post is usually already being written, so it goes to the Post's
+ * page; with several, or one the User had no room to write, it shows them to pick from. On a
+ * failure it stays, with the Brief kept, so trying again is one click.
  */
-function useStartPost() {
+function usePlanBrief() {
   const navigate = useNavigate();
-  const [isWriting, setIsWriting] = useState(false);
+  const [isPlanning, setIsPlanning] = useState(false);
+  const [ideasOf, setIdeasOf] = useState<Brief | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
   const { error, notice, allowanceUsedUp, fail, clear } = useWritingFailure();
   // A User who leaves New post while the Brief is planned is not pulled back to the Post.
   const mounted = useRef(true);
@@ -30,26 +35,74 @@ function useStartPost() {
     };
   }, []);
 
-  /** Every call starts a new Post, a retry after a failure included. */
-  const start = useCallback(
-    async (brief: string) => {
-      setIsWriting(true);
+  /** Every call plans a new Brief, a retry after a failure included. */
+  const plan = useCallback(
+    async (text: string) => {
+      setIsPlanning(true);
       clear();
-      track('post_version_requested', { kind: 'brief' });
       try {
-        const post = await postService.start(brief);
-        if (mounted.current) navigate(`/posts/${post.id}`);
+        const brief = await briefService.plan(text);
+        const split = splitIdeas(brief).length;
+        track('brief_planned', { split_ideas: split });
+        const [started] = briefPosts(brief);
+        if (split === 0 && started) track('post_version_requested', { kind: 'brief' });
+        if (!mounted.current) return;
+        if (split === 0 && started) navigate(`/posts/${started.post.id}`);
+        else setIdeasOf(brief);
       } catch (e) {
-        if (!isRefusal(e)) track('post_version_failed', { kind: 'brief' });
+        if (!isRefusal(e)) track('brief_plan_failed');
         fail(e, "Couldn't plan the post. Try again.");
       } finally {
-        if (mounted.current) setIsWriting(false);
+        if (mounted.current) setIsPlanning(false);
       }
     },
     [clear, fail, navigate],
   );
 
-  return { start, isWriting, error, notice, allowanceUsedUp, clear };
+  /** Writes the Ideas picked: one Post opens its page, several open the Brief's. */
+  const write = useCallback(
+    async (brief: Brief, ideaIds: string[], choice: IdeasChoice) => {
+      setIsStarting(true);
+      clear();
+      track('ideas_write_requested', { count: ideaIds.length, choice });
+      try {
+        const written = briefPosts(await briefService.write(brief.id, ideaIds));
+        for (let i = 0; i < ideaIds.length; i++) track('post_version_requested', { kind: 'brief' });
+        if (!mounted.current) return;
+        const [only] = written;
+        if (written.length === 1 && only) navigate(`/posts/${only.post.id}`);
+        else navigate(`/briefs/${brief.id}`);
+      } catch (e) {
+        // An earlier request wrote them and its answer was lost: the Brief's page has the Posts.
+        if (errorCode(e) === 'IDEAS_ALREADY_WRITTEN') {
+          if (mounted.current) navigate(`/briefs/${brief.id}`);
+          return;
+        }
+        if (!isRefusal(e)) track('ideas_write_failed');
+        fail(e, "Couldn't start writing the posts. Try again.");
+      } finally {
+        if (mounted.current) setIsStarting(false);
+      }
+    },
+    [clear, fail, navigate],
+  );
+
+  const editBrief = useCallback(() => {
+    clear();
+    setIdeasOf(null);
+  }, [clear]);
+
+  return {
+    plan,
+    write,
+    editBrief,
+    ideasOf,
+    isPlanning,
+    isStarting,
+    error,
+    notice,
+    allowanceUsedUp,
+  };
 }
 
 /**
@@ -58,7 +111,17 @@ function useStartPost() {
  */
 export function PostWriter() {
   const hasPositioning = useHasPositioning();
-  const { start, isWriting, error, notice, allowanceUsedUp, clear } = useStartPost();
+  const {
+    plan,
+    write,
+    editBrief,
+    ideasOf,
+    isPlanning,
+    isStarting,
+    error,
+    notice,
+    allowanceUsedUp,
+  } = usePlanBrief();
   const { usage } = useUsage();
   const [brief, setBrief] = useState('');
   const briefRef = useRef<HTMLTextAreaElement>(null);
@@ -70,14 +133,35 @@ export function PostWriter() {
   useEffect(() => {
     if (shownKey.current === key) return;
     shownKey.current = key;
-    if (isWriting) return;
+    if (isPlanning) return;
     setBrief('');
-    clear();
+    editBrief();
     briefRef.current?.focus();
-  }, [key, isWriting, clear]);
+  }, [key, isPlanning, editBrief]);
 
   const typed = brief.trim();
-  const send = () => void start(typed);
+  const send = () => void plan(typed);
+
+  const failure = (
+    <>
+      {error && <ErrorBanner message={error} />}
+      {notice && <Notice message={notice} />}
+      {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
+    </>
+  );
+
+  if (ideasOf)
+    return (
+      <IdeasStep
+        brief={ideasOf}
+        allowance={usage?.allowance}
+        writing={isStarting}
+        onWrite={(ideaIds, choice) => void write(ideasOf, ideaIds, choice)}
+        onEditBrief={editBrief}
+      >
+        {failure}
+      </IdeasStep>
+    );
 
   const gate =
     hasPositioning === false ? (
@@ -102,14 +186,15 @@ export function PostWriter() {
         value={brief}
         onChange={setBrief}
         maxLength={BRIEF_MAX_CHARS}
-        sendLabel="Write the post"
+        sendLabel="Plan posts"
+        busyLabel="Reading your brief…"
         onSend={send}
-        isWriting={isWriting}
+        isWriting={isPlanning}
         sendDisabled={hasPositioning === null}
         gate={gate}
       />
       {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}
-      {isWriting && (
+      {isPlanning && (
         <p role="status" className="font-sans text-[13px] text-muted-foreground">
           Reading your brief…
         </p>

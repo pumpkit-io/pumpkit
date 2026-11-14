@@ -23,9 +23,10 @@ from pumpkit.scheduling.models import (
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import start_thread
+from tests.posts.writing_replies import start_thread, started_post_id, written_post
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 T0 = datetime(2026, 10, 1, 9, 0, tzinfo=timezone.utc)
 NO_POSTS = {"draft": 0, "scheduled": 0, "published": 0, "failed": 0}
@@ -321,7 +322,9 @@ async def test_a_published_post_carries_its_link_on_x(client, seed_post):
 async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_parts_link(
     client, with_positioning_and_x, fake_llm, fake_x_publisher
 ):
-    post = (await start_thread(client, fake_llm, ["Live one.", "Refused two."])).json()
+    post = await written_post(
+        client, await start_thread(client, fake_llm, ["Live one.", "Refused two."])
+    )
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
     fake_x_publisher.fail_publish_on = 2
     failed = await client.post(
@@ -338,7 +341,7 @@ async def test_a_thread_that_failed_partway_carries_its_reason_and_its_first_par
 
 async def test_unscheduling_moves_the_post_back_to_drafts(client, with_positioning_and_x, fake_llm):
     fake_llm.replies = [{"post": "Version one."}]
-    post = (await client.post(POSTS, json={"brief": "ship"})).json()
+    post = {"id": started_post_id(await client.post(BRIEFS, json={"brief": "ship"}))}
     scheduled = (
         await client.post(
             SCHEDULED_POSTS,

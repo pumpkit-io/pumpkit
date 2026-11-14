@@ -12,7 +12,7 @@ from pumpkit.scheduling import service
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.positioning.positioning import save_positioning
 from tests.posts.feedback import latest_version
-from tests.posts.writing_replies import REVISED_POST
+from tests.posts.writing_replies import REVISED_POST, started_post_id
 from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -32,9 +32,9 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
     await connect_x()
     await save_positioning(client)
     fake_llm.replies = [{"post": "Version one."}]
-    started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
+    started = await client.post("/api/v1/briefs", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def _give_feedback(client, fake_llm, post: dict, feedback: str = "punchier"):

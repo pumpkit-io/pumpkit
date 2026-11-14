@@ -52,8 +52,9 @@ Pumpkit writes X posts from the user's positioning and publishes them on X.
 a brief plans it around the user's positioning, then writes its first version in the \
 background: `get_post` says `writing_state` "writing" until it is written, and "not_written" \
 when Pumpkit couldn't write it, which the user retries from the post's page in the web app. A \
-user with no positioning can't start a post: save one with `set_positioning`, or send them to \
-the Persona page of the web app.
+brief that holds several separate ideas still gets one post, covering all of them; the web app's \
+New post lets the user write one post per idea instead. A user with no positioning can't start \
+a post: save one with `set_positioning`, or send them to the Persona page of the web app.
 - A post has one text, the text meant for X, with one text per part for a thread. It is what \
 the user sees and edits by hand in the web app, and `get_post` says whether it was `edited` \
 since the version it came from.

@@ -9,9 +9,10 @@ from sqlalchemy import Connection
 from alembic import command
 from tests.migrations import migrate
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import PLAN
+from tests.posts.writing_replies import PLAN, started_post_id
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 PLAN_COLUMNS = {
     "whole_brief",
     "core_idea",
@@ -83,8 +84,8 @@ async def test_a_post_started_after_the_upgrade_is_read_back_with_its_plan(
     await save_positioning(client)
     fake_llm.replies = [{"post": "the final"}]
 
-    started = await client.post(POSTS, json={"brief": "ship small things"})
+    started = await client.post(BRIEFS, json={"brief": "ship small things"})
 
     assert started.status_code == 201
-    read = await client.get(f"{POSTS}/{started.json()['id']}")
+    read = await client.get(f"{POSTS}/{started_post_id(started)}")
     assert read.json()["plan"] == PLAN

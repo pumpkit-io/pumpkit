@@ -154,11 +154,27 @@ export const EVENTS = {
   },
   post_version_requested: {
     description:
-      "New post (brief) or the Post page (feedback, or retry of a first Version Pumpkit couldn't write): asked for a Version. Props: kind (brief | feedback | retry).",
+      "New post (brief: once per Post a request started, so a Brief planned with no split and no room, or with split Ideas, sends none until its Ideas are written) or the Post page (feedback, or retry of a first Version Pumpkit couldn't write): asked for a Version. Props: kind (brief | feedback | retry).",
+  },
+  brief_planned: {
+    description:
+      'New post: a Brief was planned. Props: split_ideas (number of separate ideas found, 0 when the Brief holds one).',
+  },
+  brief_plan_failed: {
+    description:
+      'New post: planning a Brief failed with no response or a 5xx; a refusal (4xx) is not sent.',
+  },
+  ideas_write_requested: {
+    description:
+      'New post, ideas step: asked to write the ideas picked. Props: count (posts asked for), choice (each | whole).',
+  },
+  ideas_write_failed: {
+    description:
+      'New post, ideas step: asking to write the ideas picked failed with no response or a 5xx; a refusal (4xx) is not sent.',
   },
   post_version_failed: {
     description:
-      'New post (brief), the Post page (feedback), or a Post page that watched its first Version fail (brief, or retry when that page retried it): writing a Version failed. Props: kind (brief | feedback | retry).',
+      'The Post page (feedback), or a Post page that watched its first Version fail (brief, or retry when that page retried it): writing a Version failed. Props: kind (brief | feedback | retry).',
   },
   allowance_used_up: {
     description:

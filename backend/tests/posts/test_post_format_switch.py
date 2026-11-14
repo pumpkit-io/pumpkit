@@ -25,9 +25,11 @@ from tests.posts.writing_replies import (
     revised,
     revised_thread,
     start_thread,
+    started_post_id,
 )
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 CACHED = {"type": "ephemeral", "ttl": "1h"}
 
 
@@ -63,10 +65,10 @@ async def _start(client, fake_llm, format: str) -> str:
         response = await start_thread(client, fake_llm, ["final a", "final b"])
     else:
         fake_llm.replies = [{"post": "final 1"}]
-        response = await client.post(POSTS, json={"brief": "ship small things"})
+        response = await client.post(BRIEFS, json={"brief": "ship small things"})
     assert response.status_code == 201, response.text
     fake_llm.calls.clear()
-    return response.json()["id"]
+    return started_post_id(response)
 
 
 async def _feedback(client, post_id: str, feedback: str, format: str | None = None):

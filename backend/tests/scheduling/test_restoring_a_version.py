@@ -12,8 +12,10 @@ from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import started_post_id
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
 SCHEDULED_TEXT_IS_SET = (
@@ -31,15 +33,15 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
     await connect_x()
     await save_positioning(client)
     fake_llm.replies = [{"post": "Version one."}]
-    started = await client.post(POSTS, json={"brief": "ship small things"})
+    started = await client.post(BRIEFS, json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
     fake_llm.replies = [{"parts": ["Part one.", "Part two."]}]
     given = await client.post(
-        f"{POSTS}/{started.json()['id']}/versions",
+        f"{POSTS}/{started_post_id(started)}/versions",
         json={"feedback": "expand it", "format": "thread"},
     )
     assert given.status_code == 202, given.text
-    return (await client.get(f"{POSTS}/{started.json()['id']}")).json()
+    return (await client.get(f"{POSTS}/{started_post_id(started)}")).json()
 
 
 async def _restore(client, post_id: str, number: int):

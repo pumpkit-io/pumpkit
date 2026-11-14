@@ -12,8 +12,6 @@ import {
   isUnwritten,
   postService,
   VersionNotWritten,
-  WRITING_POLL_MAX_MS,
-  WRITING_POLL_MS,
   type FailedFeedback,
   type Format,
   type PostDetail,
@@ -24,6 +22,7 @@ import { statusFrom } from './postStatus';
 import { browserClock } from './text/clock';
 import { TextController, type DroppedRewrites, type TextSnapshot } from './text/textController';
 import { usePostCounts } from './usePostCounts';
+import { useReadWhileWriting } from './useReadWhileWriting';
 import { useWritingFailure } from './useWritingFailure';
 
 /** How long "Newer rewrites are in History" stays in the origin line. */
@@ -120,34 +119,17 @@ export function usePost(postId: string) {
 
   // The write runs on the server whether or not the page is open, so leaving only stops reading.
   const writingPost = load.kind === 'unwritten' && load.post.writingState === 'writing';
-  const [poll, setPoll] = useState({ count: 0, failures: 0 });
-  useEffect(() => {
-    if (!writingPost) return;
-    let stopped = false;
-    const delay = Math.min(WRITING_POLL_MS * 2 ** poll.failures, WRITING_POLL_MAX_MS);
-    const timer = setTimeout(() => {
-      postService.get(postId).then(
-        (post) => {
-          if (stopped) return;
-          setPoll(({ count }) => ({ count: count + 1, failures: 0 }));
-          if (isUnwritten(post) && post.writingState === 'writing') return;
-          if (isUnwritten(post))
-            track('post_version_failed', { kind: retried.current ? 'retry' : 'brief' });
-          show(post);
-        },
-        (e: unknown) => {
-          if (stopped) return;
-          const status = errorStatus(e);
-          if (status === 404 || status === 403) loadFailed(e);
-          else setPoll(({ count, failures }) => ({ count: count + 1, failures: failures + 1 }));
-        },
-      );
-    }, delay);
-    return () => {
-      stopped = true;
-      clearTimeout(timer);
-    };
-  }, [writingPost, poll, postId, show, loadFailed]);
+  const readPost = useCallback(() => postService.get(postId), [postId]);
+  const readWhileWriting = useCallback(
+    (post: PostDetail | UnwrittenPost) => {
+      if (isUnwritten(post) && post.writingState === 'writing') return;
+      if (isUnwritten(post))
+        track('post_version_failed', { kind: retried.current ? 'retry' : 'brief' });
+      show(post);
+    },
+    [show],
+  );
+  useReadWhileWriting(writingPost, readPost, readWhileWriting, loadFailed);
 
   const [retrying, setRetrying] = useState(false);
   /** Writes the first Version again, after Pumpkit couldn't write it. */
