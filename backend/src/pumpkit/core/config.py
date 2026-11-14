@@ -312,6 +312,22 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _personal_development_providers(self) -> Self:
+        if not self.X_LOCAL_CALLBACK_RELAY:
+            return self
+        overrides = [key for key in _PROVIDER_URL_OVERRIDES if getattr(self, key)]
+        if overrides:
+            raise ValueError(
+                f"Personal development refuses provider override: {', '.join(overrides)}"
+            )
+        if self.is_stripe_billing_configured() and (
+            not (self.STRIPE_SECRET_KEY or "").startswith("sk_test_")
+            or not (self.STRIPE_PUBLISHABLE_KEY or "").startswith("pk_test_")
+        ):
+            raise ValueError("Personal development requires Stripe sandbox credentials")
+        return self
+
+    @model_validator(mode="after")
     def _x_sign_in_prerequisites(self) -> Self:
         missing = [
             key

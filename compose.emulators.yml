@@ -1,5 +1,6 @@
 # Added only by scripts/dev-stack: the backend reaches this stack's Emulators with throwaway credentials.
 x-emulator-environment: &emulator-environment
+  X_LOCAL_CALLBACK_RELAY: 'false'
   GOOGLE_ISSUER: ${GOOGLE_ISSUER:-}
   GOOGLE_API_URL: ${GOOGLE_API_URL:-}
   GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -26,3 +27,8 @@ services:
     environment:
       <<: *emulator-environment
       PUBLIC_URL: ${DEV_STAGED_X_URL:-http://localhost:5174}
+  frontend:
+    environment:
+      X_LOCAL_CALLBACK_RELAY: 'false'
+    ports: !override
+      - ${DEV_WEB_BIND:-127.0.0.1:}:5173

@@ -2,6 +2,13 @@
 
 Every setting comes from one `.env` file at the repo root, copied from `.env.example`. `sh scripts/setup.sh` writes it with database, signing and encryption secrets plus a persistent trial identity key ring generated, asking for (or, without a terminal, naming) each missing required value and keeping every value already there; `--help` lists its flags. Every service reads it: the dev stack in `compose.dev.yml` passes it to the backend and the publisher, and the Vite dev server reads it from the repo root.
 
+For personal development, `docker compose -f compose.dev.yml up --build` defaults
+to `http://localhost:5173` without `DEV_PUBLIC_URL` or `DEV_PUBLIC_PORT`. Register
+`http://127.0.0.1:5173/oauth/x/callback` on X: the development relay returns it to
+localhost. Billing is optional; configured billing requires Stripe sandbox keys.
+See [personal testing](agents/dev-stack.md#personal-testing-on-localhost-with-real-providers).
+Agent stacks use the emulator override and generated URLs instead.
+
 Only the settings under [Required](#required) must be set. Everything else is optional: leave it unset or empty and the app boots with the default shown, or with that provider off.
 
 Active optional provider groups are Stripe billing (`STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `BILLING_PLAN_KEYS`), operator details (`OPERATOR_NAME`) and PostHog (`POSTHOG_PROJECT_API_KEY`). With all required group settings present, the provider is on; with none it is off; a partial group refuses startup. Retained inactive Google and SMTP groups are still validated for coherence, but credentials never activate their routes. X is required separately. `SUPPORT_EMAIL` stands alone, except that operator details require it for the company footer's contact address.
@@ -50,12 +57,12 @@ procedure. Migration `0056` refuses downgrade while retained eligibility exists.
 
 ## Personal local development
 
-Use `scripts/dev-stack up --personal` for persistent personal data, real X and
+Use `docker compose -f compose.dev.yml up --build` for persistent personal data, real X and
 Stripe's sandbox at `http://localhost:5173`. Agent stacks remain emulated.
 [Setup and webhook forwarding](agents/dev-stack.md#personal-testing-on-localhost-with-real-providers)
-cover the sandbox catalog, coupon settings and separate volumes.
+cover the sandbox catalog, coupon settings and data isolation.
 
-`X_LOCAL_CALLBACK_RELAY` defaults to `false`. Personal mode enables it for both
+`X_LOCAL_CALLBACK_RELAY` defaults to `false` outside development Compose. Plain Compose enables it for both
 the backend and Vite: the X redirect URI becomes
 `http://127.0.0.1:PORT/oauth/x/callback`, while `PUBLIC_URL` and all other app URLs
 remain `http://localhost:PORT`. It requires `ENV=local` and an HTTP localhost

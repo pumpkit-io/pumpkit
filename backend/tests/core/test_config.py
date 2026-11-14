@@ -460,3 +460,52 @@ def test_local_x_relay_keeps_app_on_localhost_and_callback_on_loopback(instance_
 def test_local_x_relay_refuses_other_environments_and_origins(instance_env, env, url):
     with pytest.raises(ValidationError, match="X_LOCAL_CALLBACK_RELAY"):
         instance_env(ENV=env, PUBLIC_URL=url, X_LOCAL_CALLBACK_RELAY="true")
+
+
+@pytest.mark.parametrize("stripe", [{}, _STRIPE_ENV])
+def test_personal_development_accepts_sandbox_or_no_billing(instance_env, stripe):
+    s = instance_env(
+        ENV="local", PUBLIC_URL="http://localhost:5173", X_LOCAL_CALLBACK_RELAY="true", **stripe
+    )
+    assert s.is_stripe_billing_configured() == bool(stripe)
+
+
+@pytest.mark.parametrize(
+    "key,prefix", [("STRIPE_SECRET_KEY", "sk_live_"), ("STRIPE_PUBLISHABLE_KEY", "pk_live_")]
+)
+def test_personal_development_refuses_live_billing_credentials(instance_env, key, prefix):
+    with pytest.raises(ValidationError, match="sandbox"):
+        instance_env(
+            ENV="local",
+            PUBLIC_URL="http://localhost:5173",
+            X_LOCAL_CALLBACK_RELAY="true",
+            **{**_STRIPE_ENV, key: prefix + "do-not-print"},
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"X_AUTHORIZE_URL": "http://fake/authorize", "X_API_URL": "http://fake"},
+        {"STRIPE_API_URL": "http://fake"},
+    ],
+)
+def test_personal_development_refuses_emulator_overrides(instance_env, overrides):
+    with pytest.raises(ValidationError, match="provider override"):
+        instance_env(
+            ENV="local",
+            PUBLIC_URL="http://localhost:5173",
+            X_LOCAL_CALLBACK_RELAY="true",
+            **overrides,
+        )
+
+
+def test_production_still_accepts_live_billing_credentials(instance_env):
+    s = instance_env(
+        **{
+            **_STRIPE_ENV,
+            "STRIPE_SECRET_KEY": "sk_live_example",
+            "STRIPE_PUBLISHABLE_KEY": "pk_live_example",
+        }
+    )
+    assert s.is_stripe_billing_configured()
