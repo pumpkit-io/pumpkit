@@ -1,4 +1,4 @@
-import { PersonaChip } from '@/features/inspirationAuthors/PersonaChip';
+import { PersonaLink } from '@/features/positioning/PersonaLink';
 import { COMPOSER_COLUMN } from '@/features/posts/Composer';
 import { PostWriter } from '@/features/posts/PostWriter';
 import { Topbar } from '@/features/topbar/Topbar';
@@ -7,7 +7,7 @@ import { Topbar } from '@/features/topbar/Topbar';
 export function NewPost() {
   return (
     <>
-      <Topbar title="New post" actions={<PersonaChip />} />
+      <Topbar title="New post" actions={<PersonaLink />} />
       <div className="flex flex-1 flex-col overflow-y-auto">
         {/* Splitting the free space 2:3 sets the line and composer about 40% down the page. */}
         <div className="min-h-8 flex-[2]" />

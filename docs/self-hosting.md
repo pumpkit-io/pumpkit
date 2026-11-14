@@ -147,7 +147,7 @@ curl -sI http://pumpkit.example.org/ | head -1
 
 ### 6. Sign in
 
-Open `PUBLIC_URL`, choose **Get started**, then **Continue with X**. X must return a confirmed email and all requested sign-in and publishing permissions. With plans configured, the paywall comes first; otherwise you go directly to **Persona**. Choose your inspiration authors and Continue to finish onboarding, then write a brief on **New post**.
+Open `PUBLIC_URL`, choose **Get started**, then **Continue with X**. X must return a confirmed email and all requested sign-in and publishing permissions. With plans configured, the paywall comes first; otherwise you go directly to **Persona**. Edit the positioning Pumpkit drafts from your X profile, or write one, and Continue to finish onboarding, then write a brief on **New post**.
 
 **Check:** metadata at `PUBLIC_URL/api/v1/instance` lists only `"sign_in_methods":["x"]`; returning with the same X account opens the same Pumpkit account. Changing its email or handle does not create another account. Confirm an email on X and retry if the sign-in page says one is missing.
 
@@ -163,23 +163,23 @@ Pumpkit needs X, an LLM endpoint and twitterapi.io. Every other one is optional:
 
 ### LLM endpoint (required)
 
-Writes every Post. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](https://openrouter.ai) by default.
+Writes every Post and drafts each Positioning. Pumpkit calls any OpenAI-compatible endpoint, [OpenRouter](https://openrouter.ai) by default.
 
 - Get a key: [openrouter.ai/settings/keys](https://openrouter.ai/settings/keys).
-- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit's default model is [`openai/gpt-5.6-luna`](https://openrouter.ai/openai/gpt-5.6-luna), whose page lists its price per token. Each Version makes two model calls.
-- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the three models it serves: `LLM_SKETCHING_MODEL`, `LLM_HUMANIZING_MODEL` and `LLM_REVISING_MODEL`.
+- Pricing: [OpenRouter pricing](https://openrouter.ai/pricing); Pumpkit writes and revises with [`openai/gpt-6.1-terra`](https://openrouter.ai/openai/gpt-6.1-terra) by default, whose page lists its price per token. A first Version makes seven model calls, a single post's or a Thread's, and each Version from Feedback two. Planning a Brief makes one more, however many Posts it plans, and a Positioning draft makes one, both on [`openai/gpt-6-luna`](https://openrouter.ai/openai/gpt-6-luna) by default.
+- Settings: `LLM_API_KEY`. For another endpoint, also set `LLM_BASE_URL` and the six models it serves: `LLM_SKETCHING_MODEL`, `LLM_MERGING_MODEL`, `LLM_HUMANIZING_MODEL`, `LLM_REVISING_MODEL`, `LLM_PLANNING_MODEL` and `LLM_POSITIONING_MODEL`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, writing a Post fails.
 - **Check:** a Post you write gets a Version ([step 6](#6-sign-in)).
 
 ### twitterapi.io (required)
 
-Reads the recent posts of each Inspiration author, which set the style Pumpkit writes in (ADR 0005), and the name of each Community a User pastes to post into.
+Reads a User's newest posts to draft their Positioning (ADR 0005), and the name of each Community a User pastes to post into.
 
 - Get a key: sign up at [twitterapi.io](https://twitterapi.io/dashboard); the key is on the dashboard.
 - Pricing: [twitterapi.io pricing](https://twitterapi.io/pricing).
 - Settings: `TWITTERAPI_IO_API_KEY`.
-- Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, adding an Inspiration author fails, and a User with no Inspiration author cannot write a Post. A pasted Community shows its ID instead of its name, and posting into it still works.
-- **Check:** adding an X handle on the **Persona** page lists it.
+- Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, the Positioning draft comes back empty and the User writes their Positioning themselves. A pasted Community shows its ID instead of its name, and posting into it still works.
+- **Check:** **Draft again from my X profile** on the **Persona** page fills the textarea.
 
 ### Inactive legacy sign-in implementations
 
@@ -198,7 +198,7 @@ Not a provider, but set it before you share the address if only some people may 
 X alone signs users in and authorizes publishing for the same stable X account (ADR 0023). Your X app pays for every publish. Verify access to `tweet.read tweet.write users.read offline.access media.write users.email` and confirmed email, name and photo fields with the configured real app before rollout. A local stand-in does not prove X entitlement.
 
 - Get credentials: in the [X developer portal](https://developer.x.com/en/portal/dashboard), create an app and set up its user authentication: OAuth 2.0, app type **Web App, Automated App or Bot** (a confidential client), permissions **Read and write**. Register this callback URL: `PUBLIC_URL/oauth/x/callback` (for example `https://pumpkit.example.org/oauth/x/callback`), and use `PUBLIC_URL` as the website URL. Copy the OAuth 2.0 client ID and client secret.
-- Pricing: [X API pricing](https://docs.x.com/x-api/getting-started/pricing). `X_POSTS_MONTHLY_CAP` (default 100 X posts per User per month, each Part of a Thread counting as one) and `X_LINK_POSTS_MONTHLY_CAP` (default 10 of them with a link, which X charges far more for) bound what each User can cost you; set either empty for no cap. With Plans they count per Allowance period, a quarter for the Trial; without, per UTC calendar month.
+- Pricing: [X API pricing](https://docs.x.com/x-api/getting-started/pricing). `X_POSTS_MONTHLY_CAP` (default 100 X posts per User per month, each Part of a Thread and each First reply counting as one) and `X_LINK_POSTS_MONTHLY_CAP` (default 10 of them with a link, which X charges far more for) bound what each User can cost you; set either empty for no cap. With Plans they count per Allowance period, a quarter for the Trial; without, per UTC calendar month.
 - Settings: `X_CLIENT_ID` and `X_CLIENT_SECRET`.
 - Without it: startup refuses to run. There is no alternate sign-in during an X outage. Existing valid sessions continue under their usual rules.
 - **Check:** `curl -s PUBLIC_URL/api/v1/instance` shows `"sign_in_methods":["x"]`. Complete first and returning sign-in, then same-account reconnect, with the exact registered `PUBLIC_URL/oauth/x/callback`. Missing confirmed-email support blocks rollout rather than enabling a fallback.
@@ -448,7 +448,7 @@ A line such as `Value error, SMTP is partly configured; missing: EMAIL_FROM` nam
 
 **X sign-in is refused or loops.** Check the exact registered `PUBLIC_URL/oauth/x/callback`, confidential-client credentials and all required scopes, including `users.email`. A user without confirmed email must confirm it on X and retry. A cancelled, expired or pre-upgrade authorization needs a fresh **Continue with X**. Google and magic link routes are inactive regardless of credentials or SMTP.
 
-**Adding an Inspiration author shows "X can't be read right now. Please try again later."** twitterapi.io refused the request. `docker compose logs backend | grep "twitterapi.io returned" | tail -1` prints the status: `twitterapi.io returned HTTP 401` means `TWITTERAPI_IO_API_KEY` is wrong; for another status, check your account and credit on the twitterapi.io dashboard.
+**The Persona page can't draft a Positioning from the X profile.** twitterapi.io may have refused the request. `docker compose logs backend | grep "twitterapi.io returned" | tail -1` prints the status: `twitterapi.io returned HTTP 401` means `TWITTERAPI_IO_API_KEY` is wrong; for another status, check your account and credit on the twitterapi.io dashboard.
 
 **Writing a Post fails.** The LLM key is wrong or has no credit, or `LLM_BASE_URL` and the three models don't match. `docker compose logs --tail 50 backend` shows the endpoint's error.
 

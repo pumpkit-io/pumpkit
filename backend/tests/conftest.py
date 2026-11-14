@@ -70,8 +70,11 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 )
 from sqlalchemy.orm import selectinload  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
+from starlette.routing import Route  # noqa: E402
 
+import pumpkit.authors.tools as authors_tools  # noqa: E402
 import pumpkit.core.errors as errors_module  # noqa: E402
+import pumpkit.mcp_server as mcp_server  # noqa: E402
 import pumpkit.models  # noqa: E402,F401  (registers every table on Base.metadata)
 from pumpkit.auth.dependencies import get_current_user  # noqa: E402
 from pumpkit.auth.google_sign_in import (  # noqa: E402
@@ -84,6 +87,7 @@ from pumpkit.auth.models import MagicLink, User  # noqa: E402
 from pumpkit.auth.router import legacy_router  # noqa: E402
 from pumpkit.auth.router import router as auth_router  # noqa: E402
 from pumpkit.auth.service import sessions as auth_sessions  # noqa: E402
+from pumpkit.authors.router import router as authors_router  # noqa: E402
 from pumpkit.authors.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from pumpkit.billing.models import Subscription  # noqa: E402
@@ -92,28 +96,47 @@ from pumpkit.connected_apps.service.client_metadata import (  # noqa: E402
     FakeClientMetadataFetcher,
     get_client_metadata_fetcher,
 )
+from pumpkit.core.background import TaskRegistry, get_background_tasks  # noqa: E402
 from pumpkit.core.classifier import FakeClassifier, get_classifier  # noqa: E402
 from pumpkit.core.config import settings  # noqa: E402
 from pumpkit.core.db.base import Base  # noqa: E402
-from pumpkit.core.db.session import get_async_db  # noqa: E402
+from pumpkit.core.db.session import get_async_db, get_session_maker  # noqa: E402
+from pumpkit.core.errors import report_background_exception  # noqa: E402
+from pumpkit.core.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.core.photos import FakePhotoFetcher, get_photo_fetcher  # noqa: E402
 from pumpkit.core.rate_limit import limiter  # noqa: E402
 from pumpkit.core.storage import LocalDirectoryStorage, get_file_storage  # noqa: E402
 from pumpkit.core.time import get_clock  # noqa: E402
 from pumpkit.main import app  # noqa: E402
 from pumpkit.posts.formats import format_of  # noqa: E402
-from pumpkit.posts.llm import FakeLLM, get_llm  # noqa: E402
 from pumpkit.posts.media_fetcher import FakeMediaUrlFetcher, get_media_url_fetcher  # noqa: E402
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt  # noqa: E402
 from pumpkit.posts.service import set_text_from_version  # noqa: E402
 from pumpkit.x_connection.service import save_connection  # noqa: E402
 from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
+from tests.mcp_client import MCP as MCP_PATH  # noqa: E402
 from tests.mcp_client import McpClient  # noqa: E402
 from tests.oauth_app import (  # noqa: E402
     REDIRECT,
     approved_code,
     exchange,
     register,
+)
+from tests.posts.writing_replies import (  # noqa: E402
+    MERGED_SKETCH,
+    MERGED_THREAD,
+    POST_IDEAS,
+    REVISED_POST,
+    REVISED_THREAD,
+    SKETCHED_POST,
+    SKETCHED_THREAD,
+    ideas,
+    merged,
+    merged_thread,
+    revised,
+    revised_thread,
+    sketched,
+    sketched_thread,
 )
 
 
@@ -257,13 +280,57 @@ def fake_x_publisher():
 @pytest.fixture(autouse=True)
 def fake_llm():
     """
-    Every test calls models through a scripted fake instead of a real endpoint. Request it by name
-    to queue `fake_llm.replies` (field dicts or exceptions) and read `fake_llm.calls`.
+    Every test calls a scripted fake model: queue `fake_llm.replies`, read `fake_llm.calls`.
+    The plan, sketch, merge and revise calls have standing answers, so a single post or a Thread
+    needs only its humanizer's reply queued; set `fake_llm.standing[...]` to answer them otherwise.
     """
-    fake = FakeLLM()
+    fake = FakeLLM(
+        standing={
+            POST_IDEAS: ideas(),
+            SKETCHED_POST: sketched(),
+            MERGED_SKETCH: merged(),
+            REVISED_POST: revised(),
+            REVISED_THREAD: revised_thread(),
+            SKETCHED_THREAD: sketched_thread(),
+            MERGED_THREAD: merged_thread(),
+        }
+    )
     app.dependency_overrides[get_llm] = lambda: fake
     yield fake
     app.dependency_overrides.pop(get_llm, None)
+
+
+class InlineTasks(TaskRegistry):
+    """Runs each task to its end before the request goes on, so the next step reads its outcome."""
+
+    async def start(self, name, work) -> None:
+        try:
+            await work
+        except Exception as error:
+            report_background_exception(name, error)
+
+
+@pytest.fixture(autouse=True)
+def inline_tasks():
+    """
+    Every test runs the work a request starts in the background inside that request. Request
+    `background_tasks` to run it apart from the request, as the app does.
+    """
+    app.dependency_overrides[get_background_tasks] = InlineTasks
+    yield
+    app.dependency_overrides.pop(get_background_tasks, None)
+
+
+@pytest_asyncio.fixture
+async def background_tasks(db_session_maker):
+    """
+    The app's own registry of background tasks, which a test awaits with `wait()`. Tasks still
+    running when the test ends are cancelled, as a restart would stop them.
+    """
+    tasks = TaskRegistry()
+    app.dependency_overrides[get_background_tasks] = lambda: tasks
+    yield tasks
+    await tasks.cancel()
 
 
 @pytest.fixture(autouse=True)
@@ -460,9 +527,38 @@ def legacy_auth_app():
 
 
 @pytest.fixture
+def authors_app():
+    """
+    Test-owned assembly for the inactive Inspiration authors: the application's routes, plus the
+    author routes, and an MCP endpoint whose tools include the author tools.
+    """
+    isolated = FastAPI()
+    for route in app.router.routes:
+        if getattr(route, "path", None) != MCP_PATH:
+            isolated.router.routes.append(route)
+    isolated.include_router(authors_router, prefix="/api/v1")
+    endpoint = mcp_server.McpEndpoint(
+        mcp_server.build_server([*authors_tools.TOOLS, *mcp_server.TOOLS])
+    )
+    isolated.router.routes.append(
+        Route(MCP_PATH, endpoint=endpoint, methods=["POST", "GET", "DELETE"])
+    )
+    isolated.state.limiter = limiter
+    isolated.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
+    errors_module.register_exception_handlers(isolated)
+    isolated.dependency_overrides = app.dependency_overrides
+    return isolated
+
+
+# Each test-owned assembly a test can request in place of the application.
+_ASSEMBLIES = ("legacy_auth_app", "authors_app")
+
+
+@pytest.fixture
 def http_app(request):
-    if "legacy_auth_app" in request.fixturenames:
-        return request.getfixturevalue("legacy_auth_app")
+    for assembly in _ASSEMBLIES:
+        if assembly in request.fixturenames:
+            return request.getfixturevalue(assembly)
     return app
 
 
@@ -479,6 +575,7 @@ async def client(db_session_maker, user, http_app):
         return db_user
 
     app.dependency_overrides[get_async_db] = _get_db
+    app.dependency_overrides[get_session_maker] = lambda: db_session_maker
     app.dependency_overrides[get_current_user] = _get_user
     transport = ASGITransport(app=http_app, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
@@ -498,6 +595,7 @@ async def new_browser(db_session_maker, http_app):
             yield session
 
     app.dependency_overrides[get_async_db] = _get_db
+    app.dependency_overrides[get_session_maker] = lambda: db_session_maker
     browsers: list[AsyncClient] = []
 
     def _new() -> AsyncClient:
@@ -510,6 +608,7 @@ async def new_browser(db_session_maker, http_app):
     for browser in browsers:
         await browser.aclose()
     app.dependency_overrides.pop(get_async_db, None)
+    app.dependency_overrides.pop(get_session_maker, None)
 
 
 @dataclass(frozen=True)
@@ -603,22 +702,24 @@ def post_with(db, user) -> Callable[..., Awaitable[str]]:
     """
     Store a new Post of `user` whose one Version, and so its Text, is the given Parts, as writing
     it would, and return the Post's id: what a Scheduled post is copied from. Several Parts make a
-    Thread.
+    Thread, or with `first_reply` a single post and its first reply.
     """
 
-    async def _post_with(*parts: str) -> str:
+    async def _post_with(*parts: str, first_reply: bool = False) -> str:
         now = datetime.now(timezone.utc)
         post = Post(
             user_id=user.id, brief="Seeded", corpus_post_ids=[], created_at=now, text_media=[]
         )
         version = VersionAttempt(
+            user_id=post.user_id,
             post=post,
             sequence=1,
-            format=format_of(parts),
+            format=format_of(parts, first_reply=first_reply),
             status=ATTEMPT_SUCCEEDED,
             version_number=1,
             sketch_parts=list(parts),
             parts=list(parts),
+            first_reply=first_reply,
             created_at=now,
         )
         set_text_from_version(post, version)
@@ -633,20 +734,22 @@ def post_with(db, user) -> Callable[..., Awaitable[str]]:
 def next_version(db) -> Callable[..., Awaitable[None]]:
     """Store the next Version of the Post, as Feedback would, with the given Parts as its Text."""
 
-    async def _next_version(post_id: str, *parts: str) -> None:
+    async def _next_version(post_id: str, *parts: str, first_reply: bool = False) -> None:
         now = datetime.now(timezone.utc)
         post = await db.get(Post, post_id, options=[selectinload(Post.attempts)])
         assert post is not None
         previous = post.attempts[-1]
         version = VersionAttempt(
+            user_id=post.user_id,
             post_id=post_id,
             sequence=previous.sequence + 1,
-            format=format_of(parts),
+            format=format_of(parts, first_reply=first_reply),
             status=ATTEMPT_SUCCEEDED,
             version_number=(previous.version_number or 0) + 1,
             feedback="Try again",
             sketch_parts=list(parts),
             parts=list(parts),
+            first_reply=first_reply,
             created_at=now,
         )
         set_text_from_version(post, version)

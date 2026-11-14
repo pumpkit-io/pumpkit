@@ -1,31 +1,34 @@
 """The Post MCP tools, writing with the faked LLM and refusing what the web routes refuse."""
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import select
 
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.llm import LLMError
+from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written, written_thread
+from tests.posts.mcp_writing import single_post_id
+from tests.posts.writing_replies import (
+    HUMANIZED_POST,
+    PLAN,
+    POST_IDEAS,
+    REVISED_POST,
+    ideas,
+    planned_thread,
+    revised,
+)
 
 
 @pytest.fixture
-async def with_author(subscribed, mcp, fake_x_reader):
-    """`levelsio` on the User's list, with one stored post."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    assert (await mcp.call_tool("add_inspiration_author", handle="levelsio"))["isError"] is False
+async def with_positioning(subscribed, mcp):
+    """A Positioning saved, which writing a Post needs."""
+    assert (await mcp.call_tool("set_positioning", text="I post about bootstrapping."))[
+        "isError"
+    ] is False
 
 
 async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscribed, mcp):
@@ -40,43 +43,38 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
     assert "sketch" not in json.dumps(tools["get_post"]["outputSchema"])
 
 
-async def test_starting_a_post_returns_its_first_versions_final_and_character_count(
-    with_author, mcp, fake_llm, fixed_clock
+async def test_writing_a_post_returns_its_first_versions_final_and_character_count(
+    with_positioning, mcp, fake_llm, fixed_clock
 ):
-    fake_llm.replies = [written("the sketch"), {"post": "the final"}]
+    fake_llm.replies = [{"post": "the final"}]
 
-    result = await mcp.call_tool("start_post", brief="  ship small things ")
+    post_id = await single_post_id(mcp, "  ship small things ")
 
-    assert result["isError"] is False
-    post = result["structuredContent"]
-    assert post["id"].startswith("post_")
-    assert post == {
-        "id": post["id"],
-        "brief": "ship small things",
-        "versions": [
-            {
-                "id": post["versions"][0]["id"],
-                "number": 1,
-                "feedback": None,
-                "format": "post",
-                "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
-                "starting_text": None,
-                "created_at": "2026-10-10T12:00:30Z",
-            }
-        ],
-    }
-
-
-async def test_starting_a_post_as_a_thread_returns_its_parts(with_author, mcp, fake_llm):
-    fake_llm.replies = [
-        written_thread(["sketch one", "sketch two"]),
-        {"parts": ["final one", "final two 🚀"]},
+    post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
+    assert (post["brief"], post["plan"], post["writing_state"]) == ("ship small things", PLAN, None)
+    assert post["versions"] == [
+        {
+            "id": post["versions"][0]["id"],
+            "number": 1,
+            "feedback": None,
+            "format": "post",
+            "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
+            "first_reply": False,
+            "starting_text": None,
+            "created_at": "2026-10-10T12:00:30Z",
+        }
     ]
 
-    result = await mcp.call_tool("start_post", brief="ship small things", format="thread")
 
-    assert result["isError"] is False
-    [version] = result["structuredContent"]["versions"]
+async def test_writing_a_post_the_planner_makes_a_thread_returns_its_parts(
+    with_positioning, mcp, fake_llm
+):
+    fake_llm.standing[POST_IDEAS] = ideas(planned_thread())
+    fake_llm.replies = [{"parts": ["final one", "final two 🚀"]}]
+
+    post_id = await single_post_id(mcp, "ship small things, as a thread")
+
+    [version] = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"]
     assert (version["format"], version["parts"]) == (
         "thread",
         [
@@ -86,44 +84,35 @@ async def test_starting_a_post_as_a_thread_returns_its_parts(with_author, mcp, f
     )
 
 
-async def test_start_post_takes_an_optional_format_of_post_or_thread(subscribed, mcp):
-    schema = (await mcp.list_tools())["start_post"]["inputSchema"]
-
-    assert schema["required"] == ["brief"]
-    assert schema["properties"]["format"]["enum"] == ["post", "thread"]
-    assert schema["properties"]["format"]["default"] == "post"
-
-
-async def test_starting_a_post_without_authors_links_to_home(subscribed, mcp):
-    result = await mcp.call_tool("start_post", brief="ship small things")
-
-    assert error_text(result) == (
-        "Add an inspiration author with posts before writing a post. http://localhost:5173/persona"
-    )
-
-
 @pytest.fixture
-async def post_id(with_author, mcp, fake_llm) -> str:
+async def post_id(with_positioning, mcp, fake_llm) -> str:
     """A Post of the User's with one Version, whose text is "final 1"."""
-    fake_llm.replies = [written("sketch 1"), {"post": "final 1"}]
-    return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]
+    fake_llm.replies = [{"post": "final 1"}]
+    return await single_post_id(mcp, "ship small things")
 
 
-async def test_giving_feedback_returns_the_next_versions_final_and_character_count(
+async def _latest_version(mcp, post_id: str) -> dict:
+    """The Post's latest Version over MCP, which a Feedback the tool call wrote has made by now."""
+    return (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"][-1]
+
+
+async def test_giving_feedback_writes_the_next_versions_final_and_character_count(
     post_id, mcp, fake_llm, fixed_clock
 ):
-    fake_llm.replies = [written("sketch 2"), {"post": "shorter final"}]
+    fake_llm.replies = [{"post": "shorter final"}]
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback=" shorter\n")
 
     assert result["isError"] is False
-    version = result["structuredContent"]
+    assert result["structuredContent"]["writing_state"] == "writing"
+    version = await _latest_version(mcp, post_id)
     assert version == {
         "id": version["id"],
         "number": 2,
         "feedback": "shorter",
         "format": "post",
         "parts": [{"text": "shorter final", "char_count": 13, "char_limit": X_POST_MAX_CHARS}],
+        "first_reply": False,
         "starting_text": None,
         "created_at": "2026-10-10T12:00:30Z",
     }
@@ -132,11 +121,11 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
 async def test_giving_feedback_rewrites_the_text_as_restored_and_edited_on_the_web(
     client, post_id, mcp, fake_llm
 ):
-    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+    fake_llm.replies = [{"post": "final 2"}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="punchier")
     await mcp.call_tool("restore_version", post_id=post_id, version_number=1)
     await client.put(f"/api/v1/posts/{post_id}/text", json={"parts": ["final 1. Mine now."]})
-    fake_llm.replies = [written("sketch 3"), {"post": "final 3"}]
+    fake_llm.replies = [{"post": "final 3"}]
     fake_llm.calls.clear()
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="warmer")
@@ -146,20 +135,22 @@ async def test_giving_feedback_rewrites_the_text_as_restored_and_edited_on_the_w
         "That was Version 2. I went back to Version 1 and changed it to:\n\n"
         "<post>\nfinal 1. Mine now.\n</post>\n\nChange my post above according to this feedback"
     )
-    assert "<sentence>Mine now.</sentence>" in humanizer.messages[6]["content"]
+    assert "<sentence>Mine now.</sentence>" in humanizer.messages[5]["content"]
     starting_text = {
         "format": "post",
         "parts": [{"text": "final 1. Mine now.", "char_count": 18, "char_limit": X_POST_MAX_CHARS}],
+        "first_reply": False,
         "version_number": 1,
     }
-    assert result["structuredContent"]["starting_text"] == starting_text
+    assert result["isError"] is False
+    assert (await _latest_version(mcp, post_id))["starting_text"] == starting_text
     post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
     assert [v["starting_text"] for v in post["versions"]] == [None, None, starting_text]
     assert (post["text"]["version_number"], post["text"]["edited"]) == (3, False)
 
 
 async def test_get_post_reads_the_text_from_the_newest_version(post_id, mcp, fake_llm):
-    fake_llm.replies = [written("sketch 2"), {"post": "shorter final"}]
+    fake_llm.replies = [{"post": "shorter final"}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
 
     text = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["text"]
@@ -174,6 +165,7 @@ async def test_get_post_reads_the_text_from_the_newest_version(post_id, mcp, fak
                 "media": [],
             }
         ],
+        "first_reply": False,
         "version_number": 2,
         "edited": False,
     }
@@ -182,14 +174,14 @@ async def test_get_post_reads_the_text_from_the_newest_version(post_id, mcp, fak
 async def test_feedback_with_a_format_switches_the_post_and_keeps_earlier_versions(
     post_id, mcp, fake_llm
 ):
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+    fake_llm.replies = [{"parts": ["final one", "final two"]}]
 
     result = await mcp.call_tool(
         "give_feedback", post_id=post_id, feedback="expand it", format="thread"
     )
 
     assert result["isError"] is False
-    assert result["structuredContent"]["format"] == "thread"
+    assert (await _latest_version(mcp, post_id))["format"] == "thread"
     versions = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"]
     assert [(v["format"], [p["text"] for p in v["parts"]]) for v in versions] == [
         ("post", ["final 1"]),
@@ -198,35 +190,45 @@ async def test_feedback_with_a_format_switches_the_post_and_keeps_earlier_versio
 
 
 async def test_feedback_without_a_format_keeps_the_latest_versions_thread(post_id, mcp, fake_llm):
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["final one", "final two"]}]
+    fake_llm.replies = [{"parts": ["final one", "final two"]}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="expand it", format="thread")
-    fake_llm.replies = [written_thread(["one", "2"]), {"parts": ["final one", "final 2"]}]
+    fake_llm.replies = [{"parts": ["final one", "final 2"]}]
 
-    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter Part 2")
+    await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter Part 2")
 
-    version = result["structuredContent"]
+    version = await _latest_version(mcp, post_id)
     assert (version["format"], [p["text"] for p in version["parts"]]) == (
         "thread",
         ["final one", "final 2"],
     )
 
 
-async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_the_web_app(
+async def test_feedback_through_the_tools_is_revised_from_the_posts_plan_as_on_the_web_app(
     db, post_id, mcp, fake_llm
 ):
-    reasoning = "The feedback asks to open with a rule, so my_rule fits."
-    fake_llm.replies = [written("My rule.\n\nsketch 2", "my_rule", reasoning), {"post": "final 2"}]
+    reasoning = "The feedback asks to open with a rule; the rest stays."
+    fake_llm.standing[REVISED_POST] = revised("My rule.\n\nsketch 2", reasoning=reasoning)
+    fake_llm.replies = [{"post": "final 2"}]
+    fake_llm.calls.clear()
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="open with a rule")
 
     assert result["isError"] is False
+    revise, humanizer = fake_llm.calls
+    assert (revise.response_model, humanizer.response_model) == (REVISED_POST, HUMANIZED_POST)
+    assert revise.messages[1]["content"].startswith(
+        "<raw_input>\nship small things\n</raw_input>\n\n"
+        "<positioning>\nI post about bootstrapping.\n</positioning>"
+    )
     version = await db.scalar(
-        select(VersionAttempt).where(VersionAttempt.id == result["structuredContent"]["id"])
+        select(VersionAttempt).where(
+            VersionAttempt.id == (await _latest_version(mcp, post_id))["id"]
+        )
     )
     assert version is not None
-    assert (version.sketch_parts, version.hook_name, version.hook_reasoning) == (
+    assert (version.sketch_parts, version.parts, version.hook_reasoning) == (
         ["My rule.\n\nsketch 2"],
-        "my_rule",
+        ["final 2"],
         reasoning,
     )
 
@@ -234,7 +236,7 @@ async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_t
 async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post_id, mcp, fake_llm):
     fake_llm.replies = [LLMError("provider down")]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
-    fake_llm.replies = [written("sketch 2"), {"post": "final two"}]
+    fake_llm.replies = [{"post": "final two"}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="warmer")
 
     result = await mcp.call_tool("get_post", post_id=post_id)
@@ -261,6 +263,7 @@ async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post
         "feedback",
         "format",
         "parts",
+        "first_reply",
         "starting_text",
         "created_at",
     }
@@ -289,25 +292,31 @@ async def test_another_users_post_reads_as_not_found(
     assert fake_llm.calls == []
 
 
-def _writing_call(tool: str, post_id: str) -> dict[str, str]:
-    """The arguments of a call to the writing `tool`, on `post_id` when it takes one."""
-    if tool == "start_post":
-        return {"brief": "ship"}
-    return {"post_id": post_id, "feedback": "shorter"}
+WRITING_TOOLS = ["plan_posts", "write_posts", "give_feedback"]
 
 
-WRITING_TOOLS = ["start_post", "give_feedback"]
-
-
-@pytest.mark.parametrize("tool", WRITING_TOOLS)
-async def test_a_model_failure_is_a_reported_tool_error(post_id, mcp, fake_llm, fake_posthog, tool):
+async def test_a_feedback_the_model_failed_leaves_the_text_and_is_reported(
+    post_id, mcp, fake_llm, fake_posthog
+):
     fake_llm.replies = [LLMError("provider down")]
 
-    result = await mcp.call_tool(tool, **_writing_call(tool, post_id))
+    result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
 
-    assert error_text(result) == "Writing the post failed. Please try again."
-    error_id = result["structuredContent"]["error_id"]
-    assert fake_posthog.capture_exception.call_args.kwargs["properties"]["error_id"] == error_id
+    assert result["isError"] is False
+    post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
+    assert post["writing_state"] is None
+    assert [version["number"] for version in post["versions"]] == [1]
+    assert post["text"]["parts"][0]["text"] == "final 1"
+    fake_posthog.capture_exception.assert_called_once()
+
+
+def _writing_call(tool: str, post_id: str, planned: dict) -> dict:
+    """The arguments of a call to the writing `tool`: a Brief, the `planned` one's Idea or `post_id`."""
+    if tool == "plan_posts":
+        return {"brief": "ship"}
+    if tool == "write_posts":
+        return {"brief_id": planned["brief_id"], "idea_ids": [planned["single_post"]["id"]]}
+    return {"post_id": post_id, "feedback": "shorter"}
 
 
 @pytest.mark.parametrize("tool", WRITING_TOOLS)
@@ -321,6 +330,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
     for sequence in range(1, 29):
         db.add(
             VersionAttempt(
+                user_id=earlier.user_id,
                 post_id=earlier.id,
                 sequence=sequence,
                 format="post",
@@ -331,11 +341,12 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
         )
     await db.commit()
     fixed_clock.advance(timedelta(minutes=10))
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
-    assert (await client.post("/api/v1/posts", json={"brief": "ship"})).status_code == 201
+    planned = (await mcp.call_tool("plan_posts", brief="ship"))["structuredContent"]
+    fake_llm.replies = [{"post": "final"}]
+    assert (await client.post("/api/v1/briefs", json={"brief": "ship"})).status_code == 201
     fake_llm.calls.clear()
 
-    result = await mcp.call_tool(tool, **_writing_call(tool, post_id))
+    result = await mcp.call_tool(tool, **_writing_call(tool, post_id, planned))
 
     assert error_text(result) == "You've made 30 attempts at a version in the last hour."
     assert result["structuredContent"] == {"retry_at": "2026-10-10T13:00:30Z"}
@@ -345,7 +356,8 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
 @pytest.mark.parametrize(
     ("tool", "arguments", "per_minute"),
     [
-        ("start_post", {"brief": "ship"}, 20),
+        ("plan_posts", {"brief": "ship"}, 20),
+        ("write_posts", {"brief_id": "brief_missing", "idea_ids": ["idea_missing"]}, 20),
         ("give_feedback", {"post_id": "post_missing", "feedback": "shorter"}, 20),
         ("list_posts", {}, 60),
         ("get_post", {"post_id": "post_missing"}, 60),

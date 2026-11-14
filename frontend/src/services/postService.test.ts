@@ -1,6 +1,46 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiService } from './apiService';
-import { postService } from './postService';
+import {
+  isUnwritten,
+  postService,
+  type Plan,
+  type PostDetail,
+  type UnwrittenPost,
+  VersionNotWritten,
+  WRITING_POLL_MS,
+} from './postService';
+
+// The second of a Brief's three Posts.
+const PLACE_API = {
+  position: 2,
+  post_count: 3,
+  previous_post_id: 'post_00',
+  next_post_id: 'post_02',
+};
+const PLAN = {
+  core_idea: 'Ship small.',
+  takeaway: 'Ship this week.',
+  funnel: 'middle',
+  desired_action: 'bookmark',
+  format: 'post',
+  length: 'short',
+  structure: 'few_lines',
+};
+const SHOWN_PLAN: Plan = {
+  coreIdea: 'Ship small.',
+  takeaway: 'Ship this week.',
+  funnel: 'middle',
+  desiredAction: 'bookmark',
+  format: 'post',
+  length: 'short',
+  structure: 'few_lines',
+};
+
+/** The Post `get` read, which the test expects written. */
+function written(post: PostDetail | UnwrittenPost): PostDetail {
+  if (isUnwritten(post)) throw new Error('Expected a written post.');
+  return post;
+}
 
 const VERSION = {
   id: 'version_attempt_01',
@@ -14,31 +54,60 @@ const VERSION = {
 describe('postService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("reads a version's Format and the Parts of its text", async () => {
+  it('retries the first Version of a Post Pumpkit could not write', async () => {
     vi.spyOn(apiService, 'post').mockResolvedValue({
-      data: { id: 'post_01', brief: 'ship', versions: [VERSION] },
+      data: { id: 'post_01', brief: 'ship', plan: PLAN, versions: [], writing_state: 'writing' },
     } as never);
 
-    const post = await postService.start('ship', 'post');
+    const post = await postService.retry('post_01');
 
-    expect(apiService.post).toHaveBeenCalledWith('/posts', { brief: 'ship', format: 'post' });
-    expect(post.versions).toEqual([
-      {
-        id: 'version_attempt_01',
-        number: 1,
-        feedback: null,
-        format: 'post',
-        parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
-        createdAt: '2026-10-10T12:00:30Z',
-      },
-    ]);
+    expect(apiService.post).toHaveBeenCalledWith('/posts/post_01/retry');
+    expect(post.writingState).toBe('writing');
   });
+
+  it.each(['writing', 'not_written'] as const)(
+    'reads a Post with no status as unwritten, %s',
+    async (writingState) => {
+      vi.spyOn(apiService, 'get').mockResolvedValue({
+        data: {
+          id: 'post_01',
+          brief: 'ship',
+          brief_id: 'brief_01',
+          place_in_brief: PLACE_API,
+          plan: PLAN,
+          text: null,
+          versions: [],
+          writing_state: writingState,
+          status: null,
+          scheduled_post: null,
+        },
+      } as never);
+
+      const post = await postService.get('post_01');
+
+      expect(post).toEqual<UnwrittenPost>({
+        id: 'post_01',
+        brief: 'ship',
+        briefId: 'brief_01',
+        placeInBrief: {
+          position: 2,
+          postCount: 3,
+          previousPostId: 'post_00',
+          nextPostId: 'post_02',
+        },
+        plan: SHOWN_PLAN,
+        writingState,
+      });
+    },
+  );
 
   it("reads a Post's Text, its status and its Scheduled post", async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
       data: {
         id: 'post_01',
         brief: 'ship',
+        brief_id: 'brief_01',
+        place_in_brief: PLACE_API,
         text: {
           format: 'post',
           parts: [{ text: 'the final', char_count: 9, char_limit: 280, media: [] }],
@@ -70,7 +139,7 @@ describe('postService', () => {
       },
     } as never);
 
-    const post = await postService.get('post_01');
+    const post = written(await postService.get('post_01'));
 
     expect(apiService.get).toHaveBeenCalledWith('/posts/post_01');
     expect(post.text).toEqual({
@@ -98,11 +167,55 @@ describe('postService', () => {
     });
   });
 
+  it("reads a Post's Plan, and none on a Post written before Briefs were planned", async () => {
+    const read = {
+      id: 'post_01',
+      brief: 'ship',
+      brief_id: 'brief_01',
+      place_in_brief: PLACE_API,
+      text: null,
+      versions: [],
+      status: 'draft',
+    };
+    const get = vi.spyOn(apiService, 'get');
+    get.mockResolvedValueOnce({
+      data: {
+        ...read,
+        scheduled_post: null,
+        plan: {
+          core_idea: 'Shipping small things beats planning big ones.',
+          takeaway: 'Ship the smallest thing that works this week.',
+          funnel: 'middle',
+          desired_action: 'bookmark',
+          format: 'post',
+          length: 'medium',
+          structure: 'hook_problem_insight_closer',
+        },
+      },
+    } as never);
+    get.mockResolvedValueOnce({
+      data: { ...read, scheduled_post: null, plan: null },
+    } as never);
+
+    expect((await postService.get('post_01')).plan).toEqual({
+      coreIdea: 'Shipping small things beats planning big ones.',
+      takeaway: 'Ship the smallest thing that works this week.',
+      funnel: 'middle',
+      desiredAction: 'bookmark',
+      format: 'post',
+      length: 'medium',
+      structure: 'hook_problem_insight_closer',
+    });
+    expect((await postService.get('post_01')).plan).toBeNull();
+  });
+
   it("reads a Post's Text with the Version it came from and whether it was edited, and its Media", async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
       data: {
         id: 'post_01',
         brief: 'ship',
+        brief_id: 'brief_01',
+        place_in_brief: PLACE_API,
         text: {
           format: 'thread',
           parts: [
@@ -132,7 +245,7 @@ describe('postService', () => {
       },
     } as never);
 
-    const post = await postService.get('post_01');
+    const post = written(await postService.get('post_01'));
 
     expect(post.text).toEqual({
       format: 'thread',
@@ -163,6 +276,8 @@ describe('postService', () => {
       data: {
         id: 'post_01',
         brief: 'ship',
+        brief_id: 'brief_01',
+        place_in_brief: PLACE_API,
         text: null,
         versions: [VERSION],
         status: 'draft',
@@ -170,7 +285,7 @@ describe('postService', () => {
       },
     } as never);
 
-    const post = await postService.get('post_01');
+    const post = written(await postService.get('post_01'));
 
     expect(post.scheduledPost).toBeNull();
     expect(post.status).toBe('draft');
@@ -183,6 +298,8 @@ describe('postService', () => {
           {
             id: 'post_01',
             brief: 'ship',
+            brief_id: 'brief_01',
+            place_in_brief: PLACE_API,
             status: 'published',
             parts: ['Out now.'],
             format: 'post',
@@ -216,6 +333,13 @@ describe('postService', () => {
         {
           id: 'post_01',
           brief: 'ship',
+          briefId: 'brief_01',
+          placeInBrief: {
+            position: 2,
+            postCount: 3,
+            previousPostId: 'post_00',
+            nextPostId: 'post_02',
+          },
           status: 'published',
           parts: ['Out now.'],
           format: 'post',
@@ -257,6 +381,174 @@ describe('postService', () => {
       parts: [{ text: 'the first', charCount: 9, charLimit: 280 }],
       versionNumber: 1,
       edited: false,
+    });
+  });
+
+  it('saves the Text with whether it ends with a first reply, and reads it back', async () => {
+    vi.spyOn(apiService, 'put').mockResolvedValue({
+      data: {
+        format: 'post',
+        parts: [
+          { text: 'the post', char_count: 8, char_limit: 280, media: [] },
+          { text: 'Try it: x.co', char_count: 12, char_limit: 280, media: [] },
+        ],
+        first_reply: true,
+        version_number: 1,
+        edited: true,
+      },
+    } as never);
+
+    const text = await postService.saveText('post_01', ['the post', 'Try it: x.co'], true);
+
+    expect(apiService.put).toHaveBeenCalledWith('/posts/post_01/text', {
+      parts: ['the post', 'Try it: x.co'],
+      first_reply: true,
+    });
+    expect(text.firstReply).toBe(true);
+    expect(text.format).toBe('post');
+  });
+  describe('Feedback, written in the background', () => {
+    const VERSION_TWO = {
+      ...VERSION,
+      id: 'version_attempt_02',
+      number: 2,
+      feedback: 'shorter',
+      parts: [{ text: 'shorter', char_count: 7, char_limit: 280 }],
+    };
+
+    /** The Post as `GET /posts/{id}` answers it, with `versions` and its writing state. */
+    function read(
+      versions: object[],
+      writingState: 'writing' | null,
+      failedFeedback: { feedback: string; format: string } | null = null,
+    ) {
+      const latest = versions[versions.length - 1] as typeof VERSION;
+      return {
+        data: {
+          id: 'post_01',
+          brief: 'ship',
+          brief_id: 'brief_01',
+          place_in_brief: PLACE_API,
+          plan: PLAN,
+          text: {
+            format: 'post',
+            first_reply: false,
+            parts: latest.parts.map((p) => ({ ...p, media: [] })),
+            version_number: latest.number,
+            edited: false,
+          },
+          versions,
+          writing_state: writingState,
+          failed_feedback: failedFeedback,
+          status: 'draft',
+          scheduled_post: null,
+        },
+      };
+    }
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.spyOn(apiService, 'post').mockResolvedValue(read([VERSION], 'writing') as never);
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('reads a Post that Feedback is rewriting as writing', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(read([VERSION], 'writing') as never);
+
+      const post = written(await postService.get('post_01'));
+
+      expect(post.writing).toBe(true);
+    });
+
+    it('starts the write, then reads the Post until the new Version is its Text', async () => {
+      vi.spyOn(apiService, 'get')
+        .mockResolvedValueOnce(read([VERSION], 'writing') as never)
+        .mockResolvedValueOnce(read([VERSION, VERSION_TWO], null) as never);
+
+      const adding = postService.addVersion('post_01', 'shorter', 'post', ['the final']);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+      expect(apiService.get).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      const version = await adding;
+      expect(apiService.post).toHaveBeenCalledWith('/posts/post_01/versions', {
+        feedback: 'shorter',
+        format: 'post',
+        text: ['the final'],
+      });
+      expect(version.number).toBe(2);
+      expect(version.parts).toEqual([{ text: 'shorter', charCount: 7, charLimit: 280 }]);
+    });
+
+    it('rejects when the write ends with no new Version, which leaves the Text', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(read([VERSION], null) as never);
+
+      const adding = postService.addVersion('post_01', 'shorter', 'post', ['the final']);
+      const failed = expect(adding).rejects.toBeInstanceOf(VersionNotWritten);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      await failed;
+    });
+
+    it('reads the Feedback Pumpkit could not write, to send again', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(
+        read([VERSION], null, { feedback: 'shorter', format: 'thread' }) as never,
+      );
+
+      const post = written(await postService.get('post_01'));
+
+      expect(post.failedFeedback).toEqual({ feedback: 'shorter', format: 'thread' });
+    });
+
+    it('rejects with the Feedback that could not be written', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(
+        read([VERSION], null, { feedback: 'warmer', format: 'post' }) as never,
+      );
+
+      const waiting = postService.awaitVersion('post_01', 1);
+      const failed = expect(waiting).rejects.toMatchObject({
+        failedFeedback: { feedback: 'warmer', format: 'post' },
+      });
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      await failed;
+    });
+
+    it('dismisses the failed Feedback', async () => {
+      vi.spyOn(apiService, 'delete').mockResolvedValue({ data: undefined } as never);
+
+      await postService.dismissFailedFeedback('post_01');
+
+      expect(apiService.delete).toHaveBeenCalledWith('/posts/post_01/failed-feedback');
+    });
+
+    it('waits longer after a read that fails, and stops on a 404', async () => {
+      const down = Object.assign(new Error('down'), { response: { status: 502 } });
+      const gone = Object.assign(new Error('gone'), { response: { status: 404 } });
+      vi.spyOn(apiService, 'get').mockRejectedValueOnce(down).mockRejectedValueOnce(gone);
+
+      const waiting = postService.awaitVersion('post_01', 1);
+      const failed = expect(waiting).rejects.toBe(gone);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+      expect(apiService.get).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+
+      await failed;
+    });
+
+    it('stops reading once the wait is aborted', async () => {
+      vi.spyOn(apiService, 'get').mockResolvedValue(read([VERSION], 'writing') as never);
+      const stop = new AbortController();
+
+      const waiting = postService.awaitVersion('post_01', 1, stop.signal);
+      const stopped = expect(waiting).rejects.toBeDefined();
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS);
+      stop.abort();
+      await vi.advanceTimersByTimeAsync(WRITING_POLL_MS * 4);
+
+      await stopped;
+      expect(apiService.get).toHaveBeenCalledTimes(1);
     });
   });
 });

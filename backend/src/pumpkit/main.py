@@ -8,7 +8,6 @@ from starlette.routing import Route
 import pumpkit.mcp_server as mcp_server
 import pumpkit.scheduling.router as scheduling_router
 from pumpkit.auth.router import router as auth_router
-from pumpkit.authors.router import router as authors_router
 from pumpkit.billing.dependencies import require_subscribed_user
 from pumpkit.billing.router import router as billing_router
 from pumpkit.connected_apps.router import (
@@ -19,12 +18,14 @@ from pumpkit.connected_apps.router import (
     rate_limit_exceeded_handler,
 )
 from pumpkit.core.analytics import posthog_client
+from pumpkit.core.background import get_background_tasks
 from pumpkit.core.config import settings
 from pumpkit.core.errors import register_exception_handlers
 from pumpkit.core.logging import logger, redact_access_log_paths
 from pumpkit.core.open_cors import OpenCorsMiddleware
 from pumpkit.core.rate_limit import limiter
 from pumpkit.onboarding.router import router as onboarding_router
+from pumpkit.positioning.router import router as positioning_router
 from pumpkit.posts.router import router as posts_router
 from pumpkit.scheduling.mediator import UPLOAD_LINKS_PATH
 from pumpkit.support.router import router as support_router
@@ -37,6 +38,8 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up application...")
     yield
     logger.info("Shutting down application...")
+    # Posts being written stay in their writing state, which the timeout reports as not written.
+    await get_background_tasks().cancel()
     # Flush any pending PostHog events before the process exits.
     posthog_client.shutdown()
 
@@ -58,7 +61,6 @@ app.include_router(auth_router, prefix="/api/v1")
 app.include_router(x_sign_in_router, prefix="/api/v1")
 app.include_router(billing_router, prefix="/api/v1")
 app.include_router(support_router, prefix="/api/v1")
-app.include_router(authors_router, prefix="/api/v1")
 app.include_router(posts_router, prefix="/api/v1")
 app.include_router(scheduling_router.posts_router, prefix="/api/v1")
 app.include_router(scheduling_router.x_connection_router, prefix="/api/v1")
@@ -67,6 +69,7 @@ app.include_router(scheduling_router.x_authorization_router, prefix="/api/v1")
 app.include_router(scheduling_router.router, prefix="/api/v1")
 app.include_router(scheduling_router.usage_router, prefix="/api/v1")
 app.include_router(onboarding_router, prefix="/api/v1")
+app.include_router(positioning_router, prefix="/api/v1")
 app.include_router(discovery_router)
 app.include_router(oauth_router, prefix="/api/v1")
 app.include_router(consent_router, prefix="/api/v1")

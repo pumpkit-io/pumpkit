@@ -22,10 +22,10 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import Receive, Scope, Send
 
 import pumpkit.auth.service.users as user_service
-import pumpkit.authors.tools as authors_tools
 import pumpkit.billing.service as billing_service
 import pumpkit.billing.tools as billing_tools
 import pumpkit.connected_apps.mediator as connected_apps_mediator
+import pumpkit.positioning.tools as positioning_tools
 import pumpkit.posts.tools as posts_tools
 import pumpkit.scheduling.tools as scheduling_tools
 from pumpkit.auth.dependencies import CREDENTIALS_INVALID
@@ -39,29 +39,53 @@ from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.time import get_clock
 
 TOOLS: list[McpTool] = [
-    *authors_tools.TOOLS,
+    *positioning_tools.TOOLS,
     *posts_tools.TOOLS,
     *scheduling_tools.TOOLS,
     *billing_tools.TOOLS,
 ]
 
 INSTRUCTIONS = """\
-Pumpkit writes X posts in the style of X accounts the user picks, their inspiration authors \
-(up to three), and publishes them on X.
+Pumpkit writes X posts from the user's positioning and publishes them on X.
 
-- A brief says what a post is about and what the user thinks about it. Starting a post from \
-a brief makes its first version.
+- The user's positioning is a few sentences saying who they are on X, what they post about, \
+who they write for, what they post for and what they can point readers to. Pumpkit plans every \
+post around it. `get_positioning` reads it and `set_positioning` saves it. A user with no \
+positioning can't plan a brief: help them write one and save it, or send them to the Persona \
+page of the web app.
+- Writing posts takes two steps. First, `plan_posts` takes a brief, what the user wants to post \
+about and what they think about it, and answers with the ideas Pumpkit found in it, each a \
+separate post with its plan, and `single_post`, one post covering the whole brief. It writes \
+nothing. Show the user each idea's core idea and ask which to write, or whether they want one \
+post covering everything instead. Then `write_posts` starts writing the ideas they picked, or \
+the single post alone, never both, not even in two calls. Call it only with the user's \
+choice. When the brief holds one idea, `ideas` is empty: show its single post's core idea, then \
+write it once the user agrees.
+- Pumpkit writes each post in the background, in parallel, which takes about a minute. \
+`write_posts` answers with the posts' ids: read each with `get_post` until `writing_state` is \
+null, then show the user its text. "not_written" means Pumpkit couldn't write it, which the \
+user retries from the post's page in the web app.
 - A post has one text, the text meant for X, with one text per part for a thread. It is what \
 the user sees and edits by hand in the web app, and `get_post` says whether it was `edited` \
 since the version it came from.
 - Feedback rewrites the post's text as it is, the user's hand edits included, and makes the \
 next version, which becomes the text. The writing sees every version in order, so feedback such \
 as "like version 2, with a different hook" works. A version whose feedback was given on a text \
-other than the version before keeps that text as its starting text.
+other than the version before keeps that text as its starting text. Pumpkit writes it in the \
+background: `give_feedback` answers with `writing_state` "writing", and the text can't change \
+until `get_post` says null. A new version then means it was written; none means Pumpkit couldn't \
+write it, the text is as it was, and `failed_feedback` holds the feedback to give again.
 - Each version has a format: a single X post, or a thread. A thread is several ordered parts, \
-each one X post, published on X with each part replying to the one before. A \
-post starts as a single X post unless the user asks for a thread, and feedback may switch the \
-format.
+each one X post, published on X with each part replying to the one before. Pumpkit chooses the \
+format when it plans the post: a thread when the material needs more room than one post on the \
+user's account holds, or when the brief asks for one ("as a thread"). A thread puts its link in \
+its last part and has no first reply. Feedback may switch the format: a single post's first \
+reply then moves into the thread's last part, and a thread turned into a single post gets the \
+length the user's account allows.
+- A single X post may end with a first reply, a reply the user's account posts under it, where \
+the writing puts an external link: `first_reply` on a version or the text says its last part is \
+one. Feedback may add, change or remove it. Where the writing has no real link it writes \
+`[link]`, and scheduling and Post now are refused until the user replaces it.
 - Every version stays in the post's history. `restore_version` makes an earlier one the \
 post's text again, by its number, without writing a new version; feedback then rewrites it.
 - The post's text can become a scheduled post, published at a chosen time or at once with Post \
@@ -71,9 +95,15 @@ by hand.
 - A post goes out once, so it has at most one scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
 failed post takes feedback: a scheduled or published one doesn't.
-- Each post started and each feedback uses one generation of the user's allowance, \
-and each X post published uses one X post, each part of a thread counting as one. Write a new \
-version only when the user asks for one. `get_usage` says what is left and when it resets.
+- `delete_post` discards a draft for good, with every version and its media; its idea stays on \
+its brief, and the generations it used stay used. A scheduled, published or failed post is \
+refused, and so is one still being written or one with no version yet. It can't be undone, so \
+get the user's yes first.
+- Each post written and each feedback uses one generation of the user's allowance. Planning \
+uses none, and neither does a post or a version Pumpkit couldn't write. `plan_posts` answers \
+with the generations left, so tell the user before they pick more ideas than that. Each X post \
+published uses one X post, each part of a thread and each first reply counting as one. Write a \
+new version only when the user asks for one. `get_usage` says what is left and when it resets.
 - `attach_media` attaches an image, a GIF or a video to a part from a public URL, or, without \
 one, answers with a one-time upload link and the `curl` command that sends local media to it. `remove_media` \
 takes one off. On a draft or a failed post they change the post's text, and on a scheduled \

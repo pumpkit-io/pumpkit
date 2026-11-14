@@ -5,18 +5,18 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import pumpkit.billing.service as billing_service
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.gateway import SubscriptionState
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.config import settings
 from pumpkit.posts.models import Post, VersionAttempt
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import start
 
 CUSTOMER = "cus_alice"
 SUBSCRIBE_NOW = "/api/v1/billing/subscribe-now"
 USAGE = "/api/v1/usage"
 POSTS = "/api/v1/posts"
-AUTHORS = "/api/v1/inspiration-authors"
+BRIEFS = "/api/v1/briefs"
 
 
 def _utc(*args: int) -> datetime:
@@ -70,6 +70,7 @@ async def _trial_attempts(db, user_id: str, count: int) -> None:
     for sequence in range(1, count + 1):
         db.add(
             VersionAttempt(
+                user_id=post.user_id,
                 post_id=post.id,
                 sequence=sequence,
                 version_number=sequence,
@@ -105,16 +106,13 @@ async def test_a_trial_user_at_the_trials_limit_can_write_again_once_subscribed(
     client, db, user, fake_billing, fake_x_reader, fake_llm, holds
 ):
     await holds("trialing")
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="levelsio-0", text="levelsio post", posted_at=_utc(2026, 9, 1))
-    ]
-    await client.post(AUTHORS, json={"handle": "levelsio"})
+    await save_positioning(client)
     await _trial_attempts(db, user.id, 125)
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 409
-    fake_llm.replies = [written("sketch"), {"post": "final"}]
+    assert (await start(client)).status_code == 409
+    fake_llm.replies = [{"post": "final"}]
 
     assert (await client.post(SUBSCRIBE_NOW)).status_code == 200
-    response = await client.post(POSTS, json={"brief": "ship"})
+    response = await start(client)
 
     assert response.status_code == 201
 

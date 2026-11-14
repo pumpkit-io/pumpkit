@@ -16,6 +16,7 @@ from pumpkit.core.db.session import get_async_db
 from pumpkit.core.rate_limit import limiter
 from pumpkit.core.time import Clock, get_clock
 
+# Inactive (ADR 0024): kept for deliberate adaptations, and the application never mounts it.
 router = APIRouter(tags=["inspiration-authors"])
 
 

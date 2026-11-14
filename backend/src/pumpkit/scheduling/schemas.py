@@ -4,10 +4,21 @@ from typing import Annotated, Optional
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from pumpkit.billing.allowance import WayOut
-from pumpkit.posts.formats import Format, part_name
+from pumpkit.posts.formats import Format
 from pumpkit.posts.media_files import cleaned_alt_text
-from pumpkit.posts.schemas import MediaResponse, TextResponse, VersionResponse
+from pumpkit.posts.schemas import (
+    BriefFields,
+    BriefPostResponse,
+    FailedFeedbackResponse,
+    IdeaFields,
+    MediaResponse,
+    PlaceInBriefResponse,
+    PlanResponse,
+    TextResponse,
+    VersionResponse,
+)
 from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
+from pumpkit.posts.writing_state import WritingState
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
 
@@ -22,14 +33,8 @@ Parts = Annotated[list[PartText], Field(min_length=1, max_length=SCHEDULED_POST_
 
 
 def _strip_parts(value: Optional[list[str]]) -> Optional[list[str]]:
-    if value is None:
-        return None
-    stripped = [part.strip() for part in value]
-    for number, part in enumerate(stripped, start=1):
-        if not part:
-            name = part_name(number, len(stripped))
-            raise ValueError(f"Write {name} first." if name else "Write the post first.")
-    return stripped
+    """Trims each Part; the mediator refuses a blank one, as only it knows a first reply."""
+    return None if value is None else [part.strip() for part in value]
 
 
 # Per caller, for the create route and the MCP tools that change Scheduled posts.
@@ -84,8 +89,10 @@ class ScheduledPostPartResponse(BaseModel):
 
 class ScheduledPostResponse(BaseModel):
     id: str
-    # In the order they go out; one Part is a single X post.
+    # In the order they go out; one Part, or one and its first reply, is a single X post.
     parts: list[ScheduledPostPartResponse]
+    # Whether the last Part is the single post's first reply, posted as a reply to it.
+    first_reply: bool
     state: ScheduledPostState
     publish_at: datetime
     published_at: Optional[datetime]
@@ -108,12 +115,45 @@ class PostDetailResponse(BaseModel):
 
     id: str
     brief: str
-    # None only for a Post whose first Version failed.
+    brief_id: str
+    place_in_brief: PlaceInBriefResponse
+    # None for a Post written before Briefs were planned.
+    plan: Optional[PlanResponse]
+    # None until the Post's first Version is written.
     text: Optional[TextResponse]
     versions: list[VersionResponse]
-    status: PostStatus
+    # "writing" while a Version is being written; "not_written" for a Post with no Text and no
+    # write in progress, whose first Version failed or was lost and may be retried; else None.
+    writing_state: Optional[WritingState]
+    # The last Feedback when Pumpkit couldn't write its Version, until the User sends Feedback again,
+    # changes the Text or dismisses it; None otherwise, and always while a Version is being written.
+    failed_feedback: Optional[FailedFeedbackResponse]
+    # None until the Post's first Version is written: a Post being written is not a Draft.
+    status: Optional[PostStatus]
     # None while the Post is a Draft.
     scheduled_post: Optional[ScheduledPostResponse]
+
+
+class BriefPostDetailResponse(BriefPostResponse):
+    """An Idea's Post as its Brief's page shows it, with the status its Scheduled post gives it."""
+
+    # None until the Post's first Version is written: a Post being written is not a Draft.
+    status: Optional[PostStatus]
+    # Scheduled and being published now, for the "Publishing" badge.
+    publishing: bool
+
+
+class IdeaDetailResponse(IdeaFields):
+    """An Idea as `IdeaResponse` gives it, its Post with its status."""
+
+    post: Optional[BriefPostDetailResponse]
+
+
+class BriefDetailResponse(BriefFields):
+    """A Brief as `BriefResponse` gives it, each Post with its status, for the badge on its card."""
+
+    # The single-post Idea first, then the split Ideas in posting order.
+    ideas: list[IdeaDetailResponse]
 
 
 MAX_POSTS_PAGE_SIZE = 50
@@ -146,11 +186,15 @@ class ScheduledPostSummaryResponse(BaseModel):
 class PostListItemResponse(BaseModel):
     id: str
     brief: str
+    brief_id: str
+    place_in_brief: PlaceInBriefResponse
     status: PostStatus
     # The Scheduled post's text when it has one, else the latest Version's; the first Part's
     # first line is the Post's title.
     parts: list[str]
     format: Format
+    # Whether the last Part is the single post's first reply.
+    first_reply: bool
     version_count: int
     latest_version_at: datetime
     scheduled_post: Optional[ScheduledPostSummaryResponse]
@@ -186,6 +230,13 @@ class PostNowToolResponse(ScheduledPostToolResponse):
 class PostMessageToolResponse(BaseModel):
     message: str
     post_url: str
+
+
+class DiscardedPostToolResponse(BaseModel):
+    message: str
+    # The Brief the Post came from, which offers its Idea again.
+    brief_id: str
+    brief_url: str
 
 
 URL_MAX_CHARS = 2048
@@ -274,6 +325,8 @@ class TextEditRequest(BaseModel):
 
     # Every Part of the Text in order, as typed, so a Part may be blank while the User writes it.
     parts: Parts
+    # Whether the last Part is a single post's first reply; None keeps the Text's, and its Parts.
+    first_reply: Optional[bool] = None
 
 
 class XConnectionResponse(BaseModel):

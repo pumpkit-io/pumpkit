@@ -1,9 +1,9 @@
 import { useId, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { TIME_ZONE } from '@/features/scheduledPosts/localTime';
+import { StatusBadge } from '@/features/scheduledPosts/StatusBadge';
 import { useIsPosting } from '@/features/scheduledPosts/usePosting';
 import { XLengthCounter } from '@/features/scheduledPosts/XLengthCounter';
 import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
@@ -12,6 +12,7 @@ import type { PostListItem } from '@/services/postService';
 import type { PostPageState } from '../edit/scheduledPostEdit';
 import { formatWhen } from '../panels/panelFacts';
 import { DestinationName, Facts } from '../panels/panelParts';
+import { partLabel, shapeName } from '../postShape';
 import { postTitle } from '../postStatus';
 import { rowMoment, rowWhen } from './rowWhen';
 
@@ -20,14 +21,29 @@ import { rowMoment, rowWhen } from './rowWhen';
 const EDIT_STATE: PostPageState = { edit: true };
 
 function shape(post: PostListItem): string {
-  return post.format === 'thread' ? `Thread · ${post.parts.length} parts` : 'Single post';
+  return shapeName(post.parts.length, post.firstReply);
 }
 
 /** What a row says under its title, by the Post's status. */
 function rowFacts(post: PostListItem) {
   const scheduled = post.scheduledPost;
   const versions = `${post.versionCount} ${post.versionCount === 1 ? 'version' : 'versions'}`;
-  if (!scheduled) return [shape(post), versions];
+  if (!scheduled) {
+    const { position, postCount } = post.placeInBrief;
+    if (postCount < 2) return [shape(post), versions];
+    return [
+      shape(post),
+      versions,
+      <Link
+        key="brief"
+        to={`/briefs/${post.briefId}`}
+        aria-label={`${position} of ${postCount} posts from its brief`}
+        className="whitespace-nowrap rounded-sm font-medium text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        {position} of {postCount}
+      </Link>,
+    ];
+  }
   const facts = [shape(post), <DestinationName key="destination" scheduledPost={scheduled} />];
   if (post.status === 'published' && scheduled.community && scheduled.shareWithFollowers) {
     facts.push('Shared with followers');
@@ -76,14 +92,13 @@ function Expanded({
 }) {
   const navigate = useNavigate();
   const scheduled = post.scheduledPost;
-  const thread = post.parts.length > 1;
   return (
     <div id={id} className="space-y-3 pt-2">
       <ol className="space-y-2">
         {post.parts.map((text, i) => (
           <li
             key={i}
-            aria-label={thread ? `Part ${i + 1} of ${post.parts.length}` : 'Post'}
+            aria-label={partLabel(i, post.parts.length, post.firstReply)}
             className="space-y-1 rounded-lg bg-muted/60 px-3 py-2"
           >
             <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">
@@ -139,9 +154,7 @@ export function PostRow({ post, charLimit }: { post: PostListItem; charLimit: nu
             {title}
           </Link>
           {post.status === 'scheduled' && (
-            <Badge variant={scheduled?.state === 'publishing' ? 'warning' : 'accent'}>
-              {scheduled?.state === 'publishing' ? 'Publishing' : 'Scheduled'}
-            </Badge>
+            <StatusBadge status="scheduled" publishing={scheduled?.state === 'publishing'} />
           )}
           <button
             type="button"

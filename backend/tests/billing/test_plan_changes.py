@@ -7,7 +7,6 @@ from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from pumpkit.account_deletion import run_cli as delete_cli
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.allowance import months_after
 from pumpkit.billing.gateway import Plan
 from pumpkit.billing.models import PlanChange
@@ -20,7 +19,7 @@ from tests.billing.test_monthly_coupons import monthly
 from tests.billing.test_paid_signups import SIGNUPS, _open
 from tests.billing.test_paid_signups import billing_clock as billing_clock
 from tests.billing.test_top_ups import _send
-from tests.posts.writing_replies import written
+from tests.positioning.positioning import save_positioning
 
 CHANGES = "/api/v1/billing/plan-changes"
 
@@ -447,17 +446,9 @@ async def test_interval_change_keeps_used_generation_and_captured_paid_caps(
     monkeypatch,
 ):
     await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="plan-author", text="An example", posted_at=fixed_clock())
-    ]
-    assert (
-        await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    ).status_code == 201
-    fake_llm.replies = [
-        written("Sketch"),
-        {"post": "A used generation before changing payment frequency"},
-    ]
-    assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
+    await save_positioning(authed_client)
+    fake_llm.replies = [{"post": "A used generation before changing payment frequency"}]
+    assert (await authed_client.post("/api/v1/briefs", json={"brief": "A note"})).status_code == 201
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 800)
     before = (await authed_client.get("/api/v1/usage")).json()
     assert before["allowance"]["generations"] == {"limit": 500, "used": 1, "left": 499}
