@@ -168,3 +168,41 @@ test('a draft is discarded from its card and from its page, and its idea is offe
   await expect(page.getByText('1 of 3 written')).toBeVisible();
   await expect(notWritten.getByRole('listitem')).toHaveCount(2);
 });
+
+test('a post of a brief of several ideas is scheduled through "Post to…" and shows as scheduled', async ({
+  page,
+}) => {
+  runSeedScript('connect_x.py');
+  runSeedScript('planned_brief.py', ['writing', briefId]);
+  runSeedScript('planned_brief.py', ['written', briefId]);
+  await page.goto(`/briefs/${briefId}`);
+
+  const cards = page.getByRole('list', { name: 'Posts' }).getByRole('listitem');
+  await expect(cards).toHaveCount(3);
+  await cards.nth(0).getByRole('button', { name: 'Post to…', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByText('Schedule', { exact: true }).click();
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const date = [
+    tomorrow.getFullYear(),
+    String(tomorrow.getMonth() + 1).padStart(2, '0'),
+    String(tomorrow.getDate()).padStart(2, '0'),
+  ].join('-');
+  await dialog.getByLabel('Date').fill(date);
+  await dialog.getByLabel('Time').fill('09:00');
+  await dialog.getByRole('button', { name: /^Schedule for / }).click();
+  await expect(dialog).toBeHidden();
+
+  await expect(cards.nth(0).getByText('Scheduled', { exact: true })).toBeVisible();
+  await expect(cards.nth(0).getByRole('button', { name: 'Post to…', exact: true })).toHaveCount(0);
+  await expect(cards.nth(1).getByRole('button', { name: 'Post to…', exact: true })).toBeVisible();
+
+  await cards.nth(0).getByRole('link', { name: /^Open/ }).click();
+  await expect(page).toHaveURL(/\/posts\/post_/);
+  await expect(
+    page.getByRole('region', { name: 'Scheduled' }).getByText(/^Scheduled for /),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('navigation', { name: 'Posts from your brief' }).getByText('1 of 3'),
+  ).toBeVisible();
+});
