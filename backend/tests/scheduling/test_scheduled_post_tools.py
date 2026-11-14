@@ -1,6 +1,6 @@
 """The Scheduled post MCP tools, refusing what the web routes refuse, in the same words."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -8,7 +8,6 @@ from sqlalchemy import delete
 
 import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
 from pumpkit.posts.models import Post
@@ -19,7 +18,8 @@ from pumpkit.x_connection.x_publisher import (
     XRateLimitedError,
 )
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written, written_thread
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import start_thread, started_post_id
 from tests.scheduling.reading import scheduled_posts_through_mcp
 
 POSTS_PAGE = "http://localhost:5173/posts"
@@ -34,19 +34,11 @@ async def connected(subscribed, fixed_clock, connect_x) -> None:
 @pytest.fixture
 async def written_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post written through the API, its Text "The final, version one."."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
-    fake_llm.replies = [written("sketch one"), {"post": "The final, version one."}]
-    started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
+    await save_positioning(client)
+    fake_llm.replies = [{"post": "The final, version one."}]
+    started = await client.post("/api/v1/briefs", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def test_scheduling_a_post_answers_with_the_scheduled_page_link(
@@ -76,21 +68,10 @@ THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
 @pytest.fixture
 async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post started as a Thread, its Text the three THREAD_FINAL Parts."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
-    fake_llm.replies = [written_thread(["one", "two", "three"]), {"parts": THREAD_FINAL}]
-    started = await client.post(
-        "/api/v1/posts", json={"brief": "ship small things", "format": "thread"}
-    )
+    await save_positioning(client)
+    started = await start_thread(client, fake_llm, THREAD_FINAL)
     assert started.status_code == 201, started.text
-    return started.json()
+    return (await client.get(f"/api/v1/posts/{started_post_id(started)}")).json()
 
 
 async def test_scheduling_a_thread_answers_with_each_part_in_order_and_none_live(
@@ -782,7 +763,7 @@ async def test_deleting_a_failed_scheduled_post_lets_its_post_be_scheduled_again
 
 
 async def _give_feedback(mcp, fake_llm, post_id: str) -> dict:
-    fake_llm.replies = [written("sketch two"), {"post": "The final, version two."}]
+    fake_llm.replies = [{"post": "The final, version two."}]
     return await mcp.call_tool("give_feedback", post_id=post_id, feedback="punchier")
 
 
@@ -821,8 +802,10 @@ async def test_feedback_on_a_draft_or_failed_post_writes_the_next_version(
     result = await _give_feedback(mcp, fake_llm, written_post["id"])
 
     assert result["isError"] is False, result
-    assert result["structuredContent"]["number"] == 2
-    assert result["structuredContent"]["parts"][0]["text"] == "The final, version two."
+    assert result["structuredContent"]["writing_state"] == "writing"
+    post = (await mcp.call_tool("get_post", post_id=written_post["id"]))["structuredContent"]
+    assert post["versions"][-1]["number"] == 2
+    assert post["versions"][-1]["parts"][0]["text"] == "The final, version two."
 
 
 async def test_feedback_on_an_unscheduled_post_writes_the_next_version(

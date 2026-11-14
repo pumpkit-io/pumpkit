@@ -181,6 +181,15 @@ def _day(moment: datetime) -> str:
     return f"{moment.day} {moment:%B}"
 
 
+def _fewer_posts_way_out(allowance: Allowance) -> str:
+    """What a User can do when the posts they asked for need more generations than are left."""
+    if allowance.way_out == "top_up":
+        return "Buy a top-up or write fewer."
+    if allowance.way_out == "subscribe_now":
+        return "Subscribe now or write fewer."
+    return "Write fewer."
+
+
 def _thread_way_out(allowance: Allowance) -> str:
     """What a User can do with a Thread that doesn't fit: the way out, or wait for the reset."""
     period = allowance.period
@@ -215,8 +224,15 @@ class AllowanceUsedUp(ConflictError):
                 used = f"Your trial doesn't include {noun}. Your trial ends on {_day(period.end)}."
             else:
                 used = f"Your trial doesn't include {noun}. {_thread_way_out(allowance)}"
+        elif needed > 1 and left > 0 and ran_out == "generations":
+            # Several Ideas of one Brief are refused whole, as the User asked for them at once.
+            in_trial = " in your trial" if period.trial else ""
+            used = (
+                f"Writing {needed} posts needs {needed} {noun} and you have {left} left"
+                f"{in_trial}. {_fewer_posts_way_out(allowance)}"
+            )
         elif needed > 1 and left > 0:
-            # Only a Thread needs several at once, and it is refused whole.
+            # A Thread needs several at once, and it is refused whole.
             in_trial = " in your trial" if period.trial else ""
             used = (
                 f"This thread needs {needed} {noun} and you have {left} left{in_trial}. "

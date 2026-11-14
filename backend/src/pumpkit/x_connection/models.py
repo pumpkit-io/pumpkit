@@ -36,6 +36,10 @@ class XConnection(Base):
     subscription_type: Mapped[Optional[str]] = mapped_column(String)
     # X's URL for the account's photo as users/me last reported it; None when X gave none.
     photo_url: Mapped[Optional[str]] = mapped_column(Text)
+    # The profile's bio, location and website as users/me last reported them; None when blank.
+    bio: Mapped[Optional[str]] = mapped_column(Text)
+    location: Mapped[Optional[str]] = mapped_column(Text)
+    website: Mapped[Optional[str]] = mapped_column(Text)
     # When the User answered the offer to use photo_url as their Photo; every connect clears it.
     photo_offer_answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     needs_reconnect: Mapped[bool] = mapped_column(Boolean, default=False)

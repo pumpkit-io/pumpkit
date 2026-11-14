@@ -8,7 +8,7 @@ Prerequisites: Docker with Compose, Make, Node.js 22 or newer with npm, and [uv]
 
 ```bash
 # Environment: writes .env with the secrets generated (see docs/configuration.md).
-# Placeholder keys are enough until you write a Post or add an Inspiration author.
+# Placeholder keys are enough until you write a Post or draft a Positioning.
 X_CLIENT_ID=dev X_CLIENT_SECRET=dev LLM_API_KEY=dev TWITTERAPI_IO_API_KEY=dev sh scripts/setup.sh --public-url http://localhost:5173 </dev/null
 
 # Local tooling for checks, tests and the Git hooks

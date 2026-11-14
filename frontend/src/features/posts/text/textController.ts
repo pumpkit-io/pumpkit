@@ -2,7 +2,7 @@ import type { track as trackEvent } from '@/lib/analytics';
 import { X_POST_MAX_CHARS, xWeightedLength } from '@/lib/xLength';
 import { errorMessage } from '@/services/apiErrors';
 import {
-  formatOf,
+  FORMAT_POST,
   textOf,
   type Format,
   type PostDetail,
@@ -17,6 +17,7 @@ import {
   type EditCause,
   type TextStep,
 } from '../textHistory';
+import { endsWithFirstReply, mediaPartCount } from '../postShape';
 import { isRefusal } from '../useWritingFailure';
 import type { Clock } from './clock';
 import { TextSaver, type TextSaveState } from './textSaver';
@@ -25,9 +26,17 @@ export type { TextSaveState };
 
 /** The server calls the Text needs, for one Post: `postService` in production. */
 export interface TextBackend {
-  saveText: (parts: string[]) => Promise<PostText>;
+  saveText: (parts: string[], firstReply: boolean) => Promise<PostText>;
   restoreVersion: (versionNumber: number) => Promise<PostText>;
-  addVersion: (feedback: string, format: Format, parts: string[]) => Promise<Version>;
+  /** Resolves with the new Version once it is the Text, which can take a minute or two. */
+  addVersion: (
+    feedback: string,
+    format: Format,
+    parts: string[],
+    signal: AbortSignal,
+  ) => Promise<Version>;
+  /** Resolves with the Version being written after Version `after`, once it is the Text. */
+  awaitVersion: (after: number, signal: AbortSignal) => Promise<Version>;
 }
 
 /** One change to highlight: the Parts before it and after it, `key` telling changes apart. */
@@ -61,8 +70,11 @@ export interface TextAbilities {
 
 export interface TextSnapshot {
   text: PostText | null;
-  /** How many Parts the server's Text has; an undo or redo shows its Parts before it lands. */
-  storedPartCount: number;
+  /**
+   * How many of the server's Text's Parts take Media, a first reply taking none; an undo or redo
+   * shows its Parts before it lands.
+   */
+  storedMediaPartCount: number;
   versions: Version[];
   /** The Text as the Version it came from, for what reads a Version's shape; else the latest. */
   textVersion: Version | undefined;
@@ -82,8 +94,12 @@ export interface TextGate {
   status: PostStatus;
 }
 
-/** 'notSaved' when the last edit didn't reach the server, or nothing was sent at all. */
-export type FeedbackOutcome = 'sent' | 'notSaved' | { failed: unknown };
+/**
+ * 'notSaved' when the last edit didn't reach the server, or nothing was sent at all; 'stopped' when
+ * the wait for the Version was stopped; 'alreadyWriting' when another wait already shows it.
+ */
+export type FeedbackOutcome =
+  'sent' | 'notSaved' | 'stopped' | 'alreadyWriting' | { failed: unknown };
 
 type Direction = 'undo' | 'redo';
 
@@ -101,12 +117,14 @@ function stepName(step: TextStep): string {
  */
 export class TextController {
   private text: PostText | null;
-  private storedPartCount: number;
+  private storedMediaPartCount: number;
   private versions: Version[];
   private readonly history: TextHistory | null;
   private readonly saver: TextSaver;
   private gate: TextGate;
   private writing = false;
+  // Stops waiting for the Version being written when the page goes away.
+  private waiting: AbortController | null = null;
   private restoring: Promise<void> | null = null;
   private save: TextSaveState = { kind: 'saved' };
   private restoreError: string | null = null;
@@ -122,7 +140,9 @@ export class TextController {
     private readonly deps: { backend: TextBackend; clock: Clock; track: typeof trackEvent },
   ) {
     this.text = post.text;
-    this.storedPartCount = post.text?.parts.length ?? 0;
+    this.storedMediaPartCount = post.text
+      ? mediaPartCount(post.text.parts.length, post.text.firstReply)
+      : 0;
     this.versions = post.versions;
     this.gate = { status: post.status };
     this.history = this.historyOf(post);
@@ -133,7 +153,10 @@ export class TextController {
         this.emit();
       },
       (parts) =>
-        deps.track('post_text_edited', { format: formatOf(parts), part_count: parts.length }),
+        deps.track('post_text_edited', {
+          format: this.text?.format ?? FORMAT_POST,
+          part_count: parts.length,
+        }),
       deps.clock,
     );
     this.current = this.build();
@@ -161,6 +184,20 @@ export class TextController {
     // A restore out saves the Text it lands on itself.
     if (!this.restoring) this.saver.edit(parts);
     this.emit();
+  }
+
+  /** Gives a single post an empty first reply, as an edit of its own that undo takes back. */
+  addFirstReply() {
+    const parts = textsOf(this.text?.parts ?? []);
+    if (this.text?.format !== FORMAT_POST || this.text.firstReply) return;
+    this.edit([...parts, ''], 'paste');
+  }
+
+  /** Drops the single post's first reply, as an edit of its own that undo brings back. */
+  removeFirstReply() {
+    const parts = textsOf(this.text?.parts ?? []);
+    if (!this.text?.firstReply) return;
+    this.edit(parts.slice(0, -1), 'cut');
   }
 
   undo() {
@@ -207,25 +244,65 @@ export class TextController {
       if (!(await this.settle())) return 'notSaved';
       this.deps.track('post_version_requested', { kind: 'feedback' });
       const parts = textsOf(this.text?.parts ?? []);
-      try {
-        const version = await this.deps.backend.addVersion(feedback, format, parts);
-        this.versions = [...this.versions, version];
-        this.stored(textOf(version));
-        this.commit(textsOf(version.parts), 'rewrite', version.number);
-        return 'sent';
-      } catch (e) {
-        if (!isRefusal(e)) this.deps.track('post_version_failed', { kind: 'feedback' });
-        return { failed: e };
-      }
+      return await this.land((signal) =>
+        this.deps.backend.addVersion(feedback, format, parts, signal),
+      );
     } finally {
-      this.writing = false;
-      this.emit();
+      this.doneWriting();
     }
+  }
+
+  /**
+   * Waits for the Version Feedback was writing when the Post was read, then shows it. Takes over
+   * from a wait that was stopped, as an effect that runs again stops and resumes.
+   */
+  async resumeWriting(): Promise<FeedbackOutcome> {
+    if (this.writing && !this.waiting?.signal.aborted) return 'alreadyWriting';
+    this.writing = true;
+    this.emit();
+    try {
+      const after = this.versions[this.versions.length - 1]?.number ?? 0;
+      return await this.land((signal) => this.deps.backend.awaitVersion(after, signal));
+    } finally {
+      this.doneWriting();
+    }
+  }
+
+  /** Lets the Text change again, unless a later wait took over and still waits. */
+  private doneWriting() {
+    if (this.waiting) return;
+    this.writing = false;
+    this.emit();
+  }
+
+  /** Stops waiting for a Version being written; the server goes on writing it. */
+  stopWaiting() {
+    this.waiting?.abort();
   }
 
   /** Sends any edit the pause still holds, as the page goes away. */
   dispose() {
+    this.stopWaiting();
     this.saver.dispose();
+  }
+
+  /** Makes the Version `written` resolves with the Text; 'stopped' when the wait was stopped. */
+  private async land(written: (signal: AbortSignal) => Promise<Version>): Promise<FeedbackOutcome> {
+    const waiting = new AbortController();
+    this.waiting = waiting;
+    try {
+      const version = await written(waiting.signal);
+      this.versions = [...this.versions, version];
+      this.stored(textOf(version));
+      this.commit(textsOf(version.parts), 'rewrite', version.number);
+      return 'sent';
+    } catch (e) {
+      if (waiting.signal.aborted) return 'stopped';
+      if (!isRefusal(e)) this.deps.track('post_version_failed', { kind: 'feedback' });
+      return { failed: e };
+    } finally {
+      if (this.waiting === waiting) this.waiting = null;
+    }
   }
 
   private historyOf(post: PostDetail): TextHistory | null {
@@ -312,7 +389,10 @@ export class TextController {
    * waits for the save out before it starts, so its answer always lands while the restore is out.
    */
   private async saveOnServer(parts: string[]): Promise<void> {
-    const text = await this.deps.backend.saveText(parts);
+    const text = await this.deps.backend.saveText(
+      parts,
+      endsWithFirstReply(this.text?.format ?? FORMAT_POST, parts.length),
+    );
     const onScreen = textsOf(this.text?.parts ?? []);
     if (this.restoring || !sameParts(parts, onScreen)) return;
     this.stored(text);
@@ -327,9 +407,11 @@ export class TextController {
     const { text } = this;
     if (!text) return;
     const source = this.versions.find((v) => v.number === versionNumber);
+    const format = source?.format ?? text.format;
     this.text = {
       ...text,
-      format: source?.format ?? text.format,
+      format,
+      firstReply: endsWithFirstReply(format, parts.length),
       versionNumber: source?.number ?? text.versionNumber,
       parts: parts.map((t, i) => ({
         text: t,
@@ -342,7 +424,7 @@ export class TextController {
 
   private stored(text: PostText) {
     this.text = text;
-    this.storedPartCount = text.parts.length;
+    this.storedMediaPartCount = mediaPartCount(text.parts.length, text.firstReply);
   }
 
   private commit(parts: string[], kind: CommitKind, versionNumber: number) {
@@ -389,9 +471,12 @@ export class TextController {
       : latest;
     return {
       text,
-      storedPartCount: this.storedPartCount,
+      storedMediaPartCount: this.storedMediaPartCount,
       versions,
-      textVersion: text && source ? { ...source, format: text.format, parts: text.parts } : source,
+      textVersion:
+        text && source
+          ? { ...source, format: text.format, parts: text.parts, firstReply: text.firstReply }
+          : source,
       can: {
         edit,
         undo: edit && !restoring && !!history?.canUndo,

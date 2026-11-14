@@ -3,47 +3,41 @@ Reading one Post through `GET /posts/{id}` and the `get_post` tool: its Brief, i
 status its Scheduled post gives it (ADR 0015), and that Scheduled post.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
-from pumpkit.posts.llm import LLMError
+from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import written, written_thread
+from tests.positioning.positioning import save_positioning
+from tests.posts.writing_replies import PLAN, start_thread, written_post
 
 POSTS = "/api/v1/posts"
+BRIEFS = "/api/v1/briefs"
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 LATER = "2026-10-10T14:00:00Z"
+ALONE = {"position": 1, "post_count": 1, "previous_post_id": None, "next_post_id": None}
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader, connect_x) -> None:
-    """`levelsio` in the User's Persona, and the User's X account connected."""
+async def with_positioning(client, subscribed, connect_x) -> None:
+    """A Positioning saved, and the User's X account connected."""
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
+    await save_positioning(client)
 
 
 @pytest.fixture
-async def post(client, with_author, fake_llm, fixed_clock) -> dict:
+async def post(client, with_positioning, fake_llm, fixed_clock) -> dict:
     """A Post written through the API, with one Version."""
-    fake_llm.replies = [written("sketch one"), {"post": "Version one."}]
-    started = await client.post(POSTS, json={"brief": "ship small things"})
-    assert started.status_code == 201, started.text
-    return started.json()
+    fake_llm.replies = [{"post": "Version one."}]
+    return await written_post(
+        client, await client.post(BRIEFS, json={"brief": "ship small things"})
+    )
 
 
 async def _schedule(client, post_id: str, **when) -> dict:
@@ -60,9 +54,13 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
     assert response.json() == {
         "id": post["id"],
         "brief": "ship small things",
+        "brief_id": post["brief_id"],
+        "place_in_brief": ALONE,
+        "plan": PLAN,
         "text": {
             "format": "post",
             "parts": [{**one, "media": []}],
+            "first_reply": False,
             "version_number": 1,
             "edited": False,
         },
@@ -73,21 +71,24 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
                 "feedback": None,
                 "format": "post",
                 "parts": [one],
+                "first_reply": False,
                 "starting_text": None,
                 "created_at": "2026-10-10T12:00:30Z",
             }
         ],
+        "writing_state": None,
+        "failed_feedback": None,
         "status": "draft",
         "scheduled_post": None,
     }
 
 
 async def test_feedback_makes_the_new_version_the_text(client, post, fake_llm):
-    fake_llm.replies = [written_thread(["one", "two"]), {"parts": ["Part one.", "Part two."]}]
+    fake_llm.replies = [{"parts": ["Part one.", "Part two."]}]
     given = await client.post(
         f"{POSTS}/{post['id']}/versions", json={"feedback": "expand it", "format": "thread"}
     )
-    assert given.status_code == 201, given.text
+    assert given.status_code == 202, given.text
 
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 
@@ -97,6 +98,7 @@ async def test_feedback_makes_the_new_version_the_text(client, post, fake_llm):
             {"text": "Part one.", "char_count": 9, "char_limit": X_POST_MAX_CHARS, "media": []},
             {"text": "Part two.", "char_count": 9, "char_limit": X_POST_MAX_CHARS, "media": []},
         ],
+        "first_reply": False,
         "version_number": 2,
         "edited": False,
     }
@@ -146,13 +148,11 @@ async def test_a_published_post_reads_as_published_with_its_link_on_x(client, po
 
 
 async def test_a_thread_that_failed_partway_reads_as_failed_with_its_live_part(
-    client, with_author, fake_llm, fake_x_publisher
+    client, with_positioning, fake_llm, fake_x_publisher
 ):
-    fake_llm.replies = [
-        written_thread(["sketch one", "sketch two"]),
-        {"parts": ["Live one.", "Refused two."]},
-    ]
-    post = (await client.post(POSTS, json={"brief": "ship", "format": "thread"})).json()
+    post = await written_post(
+        client, await start_thread(client, fake_llm, ["Live one.", "Refused two."])
+    )
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")
     fake_x_publisher.fail_publish_on = 2
 
@@ -209,9 +209,13 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
     assert read == {
         "id": post["id"],
         "brief": "ship small things",
+        "brief_id": post["brief_id"],
+        "place_in_brief": ALONE,
+        "plan": PLAN,
         "text": {
             "format": "post",
             "parts": [{**one, "media": []}],
+            "first_reply": False,
             "version_number": 1,
             "edited": False,
         },
@@ -222,10 +226,13 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
                 "feedback": None,
                 "format": "post",
                 "parts": [one],
+                "first_reply": False,
                 "starting_text": None,
                 "created_at": "2026-10-10T12:00:30Z",
             }
         ],
+        "writing_state": None,
+        "failed_feedback": None,
         "status": "failed",
         "scheduled_post": failed,
     }

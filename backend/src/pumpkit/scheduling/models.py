@@ -10,6 +10,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    false,
 )
 from sqlalchemy import (
     Enum as PgEnum,
@@ -77,7 +78,9 @@ class ScheduledPost(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship()
-    # One Part is a single X post; several are a Thread.
+    # Whether the last Part is the first reply of a single X post (ADR 0027), copied with the Text.
+    first_reply: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    # One Part, or one and its first reply, is a single X post; else the Parts are a Thread.
     parts: Mapped[list["ScheduledPostPart"]] = relationship(
         back_populates="scheduled_post",
         cascade="all, delete-orphan",

@@ -30,6 +30,7 @@ async def _waiting(
         post_id=await post_with(*parts),
         x_user_id=x_user_id,
         parts=list(parts),
+        first_reply=False,
         publish_at=now.replace(second=0, microsecond=0),
         now=now,
     )

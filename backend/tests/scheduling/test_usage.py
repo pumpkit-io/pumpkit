@@ -42,6 +42,7 @@ async def _attempts(db, user_id: str, start: datetime, count: int, status: str =
     for sequence in range(1, count + 1):
         db.add(
             VersionAttempt(
+                user_id=post.user_id,
                 post_id=post.id,
                 sequence=sequence,
                 version_number=sequence if status == "succeeded" else None,
@@ -155,6 +156,6 @@ async def test_get_usage_without_plans_says_there_is_no_allowance(sells_no_plans
 async def test_the_instructions_tell_claude_about_the_allowance(subscribed, mcp):
     instructions = (await mcp.initialize())["instructions"]
 
-    assert "Each post started and each feedback uses one generation" in instructions
-    assert "each X post published uses one X post" in instructions
+    assert "Each post written and each feedback uses one generation" in instructions
+    assert "Each X post published uses one X post" in instructions
     assert "`get_usage`" in instructions

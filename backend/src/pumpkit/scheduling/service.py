@@ -38,6 +38,7 @@ from pumpkit.scheduling.models import (
     ScheduledPost,
     ScheduledPostMedia,
     ScheduledPostPart,
+    ScheduledPostState,
     UnscheduledLiveParts,
 )
 from pumpkit.scheduling.post_status import (
@@ -61,6 +62,7 @@ async def create(
     x_user_id: str,
     post_id: str,
     parts: list[str],
+    first_reply: bool,
     publish_at: datetime,
     now: datetime,
     destination: Destination = Destination(),
@@ -74,6 +76,7 @@ async def create(
         user_id=user_id,
         x_user_id=x_user_id,
         parts=_parts(parts),
+        first_reply=first_reply,
         media=[ScheduledPostMedia(**row) for row in _media_rows(media)],
         **_destination_columns(destination),
         community_set_at=now if destination.community else None,
@@ -229,6 +232,20 @@ async def get_for_post(db: AsyncSession, *, post_id: str) -> Optional[ScheduledP
     return result.scalar_one_or_none()
 
 
+async def states_of_posts(
+    db: AsyncSession, *, post_ids: list[str]
+) -> dict[str, ScheduledPostState]:
+    """The state of each of these Posts' Scheduled posts, by Post id; a Draft has none."""
+    if not post_ids:
+        return {}
+    result = await db.execute(
+        select(ScheduledPost.post_id, ScheduledPost.state).where(
+            ScheduledPost.post_id.in_(post_ids)
+        )
+    )
+    return {post_id: state for post_id, state in result.tuples()}
+
+
 @dataclass(frozen=True)
 class Reschedule:
     publish_at: datetime
@@ -244,6 +261,7 @@ async def edit(
     now: datetime,
     destination: Optional[Destination] = None,
     media: Optional[Sequence[Sequence[str]]] = None,
+    first_reply: Optional[bool] = None,
 ) -> bool:
     """
     Change a scheduled or Failed Scheduled post; False if it was in neither. Rescheduling puts it
@@ -252,9 +270,11 @@ async def edit(
     A `destination` of None leaves it where it goes; moving it into another Community is a use.
     New `parts` replace every Part not live; the live ones, which open the list, stay as they
     are with their X post ids. New `media`, each Part's Media ids in order, likewise replaces the
-    Media of every Part not live.
+    Media of every Part not live. `first_reply` None leaves whether the last Part is one.
     """
     values: dict[str, object] = {"updated_at": now}
+    if first_reply is not None:
+        values["first_reply"] = first_reply
     if destination is not None:
         community = destination.community
         values.update(_destination_columns(destination))

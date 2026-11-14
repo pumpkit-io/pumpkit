@@ -4,11 +4,12 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
 import pumpkit.connected_apps.service.connections as app_connections_service
+import pumpkit.posts.brief_reading as brief_reading
 import pumpkit.posts.media as media_service
 import pumpkit.posts.media_files as media_files
 import pumpkit.posts.media_upload_links as media_upload_links
@@ -26,31 +27,43 @@ from pumpkit.authors.x_reader import (
 from pumpkit.billing.allowance import COUNT_NOUNS, check_publishes_before_end
 from pumpkit.billing.dependencies import SUBSCRIPTION_NEEDED
 from pumpkit.billing.models import AllowanceCount
+from pumpkit.core.background import TaskRegistry
 from pumpkit.core.config import settings
-from pumpkit.core.errors import BadRequestError, ConflictError, ForbiddenError, NotFoundError
+from pumpkit.core.errors import (
+    AppError,
+    BadRequestError,
+    ConflictError,
+    ForbiddenError,
+    NotFoundError,
+    report_background_exception,
+)
+from pumpkit.core.llm import LLM
 from pumpkit.core.logging import logger
 from pumpkit.core.photos import PhotoFetcher
 from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.storage import FileStorage
 from pumpkit.core.time import Clock, as_utc
 from pumpkit.posts.formats import Format, format_of
-from pumpkit.posts.llm import LLM
 from pumpkit.posts.media_fetcher import MediaUrlFetcher
 from pumpkit.posts.media_upload import ReceivedMedia
 from pumpkit.posts.media_upload_links import NewUploadLink
 from pumpkit.posts.models import Media, Post
-from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
-from pumpkit.posts.writing.versions import write_next_version
+from pumpkit.posts.schemas import MEDIA_RATE, IdeaResponse, MediaResponse, TextResponse
+from pumpkit.posts.writing.post_writing import revise_version
+from pumpkit.posts.writing.versions import WrittenVersion
+from pumpkit.posts.writing_state import is_writing, writing_state
 from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
     PUBLISHED,
+    PUBLISHING,
     SCHEDULED,
     ScheduledPost,
 )
 from pumpkit.scheduling.post_status import (
     PostStatus,
+    check_discardable,
     check_takes_feedback,
     check_text_changes,
     is_posting,
@@ -66,7 +79,10 @@ from pumpkit.scheduling.rules import (
 )
 from pumpkit.scheduling.schemas import (
     AllowanceUsageResponse,
+    BriefDetailResponse,
+    BriefPostDetailResponse,
     CommunityResponse,
+    IdeaDetailResponse,
     PastCommunitiesResponse,
     PlacedMediaResponse,
     PostCountsResponse,
@@ -90,6 +106,7 @@ from pumpkit.x_connection.x_publisher import X_SCOPES, XPublisher, XReconnectNee
 
 # Where the User sees their Posts; one Post's page is under it.
 POSTS_PAGE = "/posts"
+BRIEFS_PAGE = "/briefs"
 # Under the API URL; what follows it is a one-time upload link's token.
 UPLOAD_LINKS_PATH = "/media-uploads"
 X_CONNECTION_PAGE = x_connections_service.X_CONNECTION_PAGE
@@ -131,6 +148,7 @@ def scheduled_post_response(
             )
             for part, media in zip(scheduled_post.parts, service.media_by_part(scheduled_post))
         ],
+        first_reply=scheduled_post.first_reply,
         state=scheduled_post.state,
         publish_at=as_utc(scheduled_post.publish_at),
         published_at=as_utc(published_at) if published_at else None,
@@ -332,12 +350,19 @@ async def create_scheduled_post(
     # Serializes the User's checks and charges of X posts until the commit.
     await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=new.post_id)
+    # A failed Feedback goes too: a Scheduled post's Text takes no Feedback, so Resend would fail.
+    posts_service.take_text(post, now=now)
     if await service.get_for_post(db, post_id=post.id) is not None:
         raise _already_scheduled()
     parts = _text_of(post)
-    rules.check_length(parts, limit=x_post_max_chars(connection.subscription_type))
+    rules.check_no_link_placeholder(parts)
+    rules.check_length(
+        parts,
+        limit=x_post_max_chars(connection.subscription_type),
+        first_reply=post.text_first_reply,
+    )
     media = media_service.text_media_by_part(post)
-    await _check_media(db, media, user_id=user.id)
+    await _check_media(db, media, user_id=user.id, first_reply=post.text_first_reply)
     publish_at = now if new.publish_now else rules.check_publish_at(new.publish_at, now=now)
     await check_x_posts_room(db, user_id=user.id, publish_at=publish_at, parts=parts, now=now)
     community = await _community(reader, new.community) if new.community is not None else None
@@ -356,6 +381,7 @@ async def create_scheduled_post(
                 community=community, share_with_followers=new.share_with_followers
             ),
             media=_ids(media),
+            first_reply=post.text_first_reply,
         )
     except IntegrityError:
         # Another request scheduled the same Post between the check and the insert.
@@ -381,14 +407,21 @@ async def create_scheduled_post(
 
 
 async def _check_media(
-    db: AsyncSession, media: list[list[Media]], *, user_id: str, live_count: int = 0
+    db: AsyncSession,
+    media: list[list[Media]],
+    *,
+    user_id: str,
+    live_count: int = 0,
+    first_reply: bool,
 ) -> None:
     """The Media the Parts not live will go out with fits X, is still stored, and can go out."""
-    rules.check_media(media_service.kinds_by_part(media))
+    rules.check_media(media_service.kinds_by_part(media), first_reply=first_reply)
     rules.check_media_kept(
-        [[m.file_key is not None for m in part] for part in media], live_count=live_count
+        [[m.file_key is not None for m in part] for part in media],
+        live_count=live_count,
+        first_reply=first_reply,
     )
-    rules.check_media_once(_ids(media))
+    rules.check_media_once(_ids(media), first_reply=first_reply)
     if any(media[live_count:]):
         await x_connections_service.check_takes_media(db, user_id=user_id)
 
@@ -410,7 +443,10 @@ def _media_after_edit(
         text = media_service.text_media_by_part(post)
         return current[:live_count] + text[live_count:part_count]
     rules.check_part_count_kept_with_media(
-        [bool(part) for part in current], live_count=live_count, part_count=part_count
+        [bool(part) for part in current],
+        live_count=live_count,
+        part_count=part_count,
+        first_reply=scheduled_post.first_reply,
     )
     return current[:part_count] + [[] for _ in range(part_count - len(current))]
 
@@ -427,7 +463,7 @@ def _text_of(post: Post) -> list[str]:
     if not post.text_parts:
         raise ConflictError("This post has no text to post. Start a new post.")
     parts = [part.strip() for part in post.text_parts]
-    rules.check_parts_written(parts)
+    rules.check_parts_written(parts, first_reply=post.text_first_reply)
     return parts
 
 
@@ -491,18 +527,39 @@ async def edit_scheduled_post(
     live = [part.text for part in scheduled_post.parts if part.x_post_id is not None]
     parts = edit.parts
     post = None
-    if edit.copy_text:
-        post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
+    first_reply = scheduled_post.first_reply
+    if edit.copy_text or edit.reschedules:
+        text_post = await version_writing.user_post(db, user=user, post_id=scheduled_post.post_id)
+        # A Failed Post may be taking Feedback, whose Version replaces the Text.
+        posts_service.check_not_writing(text_post, now=now)
+        if edit.copy_text:
+            post = text_post
+    if post is not None:
         # The Text's Parts in the places of the live ones are already on X as they were.
         parts = live + _text_of(post)[len(live) :]
+        first_reply = post.text_first_reply
+    elif parts is not None:
+        # Typed Parts say nothing of a first reply: it stays only while they keep their number.
+        first_reply = first_reply and len(parts) == len(scheduled_post.parts)
+        rules.check_parts_written(parts, first_reply=first_reply)
     media = None
+    if parts is not None or edit.reschedules:
+        # Only what goes out next: a live Part is on X already, whatever it holds.
+        going_out = parts if parts is not None else [part.text for part in scheduled_post.parts]
+        rules.check_no_link_placeholder(going_out[len(live) :])
     if parts is not None:
         rules.check_live_parts_kept(live, parts)
         media = _media_after_edit(scheduled_post, post, len(parts))
-        await _check_media(db, media, user_id=user.id, live_count=len(live))
+        await _check_media(
+            db, media, user_id=user.id, live_count=len(live), first_reply=first_reply
+        )
     elif edit.reschedules:
         await _check_media(
-            db, service.media_by_part(scheduled_post), user_id=user.id, live_count=len(live)
+            db,
+            service.media_by_part(scheduled_post),
+            user_id=user.id,
+            live_count=len(live),
+            first_reply=scheduled_post.first_reply,
         )
     hand_off = edit.publish_now and rules.hands_post_now_to_publisher(
         media_service.kinds_by_part(
@@ -518,7 +575,9 @@ async def edit_scheduled_post(
     )
     if parts is not None:
         subscription_type = connection.subscription_type if connection else None
-        rules.check_length(parts, limit=x_post_max_chars(subscription_type))
+        rules.check_length(
+            parts, limit=x_post_max_chars(subscription_type), first_reply=first_reply
+        )
     current = [part.text for part in scheduled_post.parts]
     if connection is not None and edit.reschedules:
         new_publish_at = (
@@ -555,6 +614,7 @@ async def edit_scheduled_post(
         destination=destination,
         now=now,
         media=_ids(media) if media is not None else None,
+        first_reply=first_reply,
     ):
         raise _publishing_started()
     moments = [publish_at_before, reschedule.publish_at] if reschedule else [publish_at_before]
@@ -625,22 +685,84 @@ async def cancel_scheduled_post(
     return post_id
 
 
+async def discard_post(
+    db: AsyncSession, storage: FileStorage, user: User, post_id: str, now: datetime
+) -> str:
+    """
+    Delete the User's Draft and its Versions for good, leaving its Idea on its Brief not written;
+    its Media files go once that commits. One being written is refused, since the write would land
+    on it, and one with no Version yet too: Retry is its way forward, and it was charged nothing.
+    The Generations it used stay used. Returns the Brief's id.
+    """
+    # User before Post, as every path that takes both locks them.
+    await users_service.lock_user_id(db, user_id=user.id)
+    post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
+    scheduled_post = await service.get_for_post(db, post_id=post_id)
+    check_discardable(post_status(scheduled_post.state if scheduled_post else None))
+    if is_writing(post, now=now):
+        raise ConflictError("This post is still being written, so it can't be discarded yet.")
+    if post.text_version_number is None:
+        raise ConflictError(
+            "This post has no version yet, so it can't be discarded. Retry writing it instead."
+        )
+    brief_id = post.idea.brief_id
+    file_keys = await posts_service.discard(db, post=post)
+    await db.commit()
+    await media_service.delete_files(storage, file_keys)
+    return brief_id
+
+
+async def get_brief(
+    db: AsyncSession, *, user: User, brief_id: str, now: datetime
+) -> BriefDetailResponse:
+    """The Brief with its Ideas and Posts as they are now, each written Post with its status."""
+    brief = await brief_reading.read_brief(db, user=user, brief_id=brief_id, now=now)
+    written = [idea.post.id for idea in brief.ideas if idea.post and idea.post.text]
+    states = await service.states_of_posts(db, post_ids=written)
+
+    def idea_detail(idea: IdeaResponse) -> IdeaDetailResponse:
+        post = idea.post
+        return IdeaDetailResponse(
+            **idea.model_dump(exclude={"post"}),
+            post=BriefPostDetailResponse(
+                **post.model_dump(),
+                status=post_status(states.get(post.id)) if post.text else None,
+                publishing=states.get(post.id) == PUBLISHING,
+            )
+            if post
+            else None,
+        )
+
+    return BriefDetailResponse(
+        **brief.model_dump(exclude={"ideas"}), ideas=[idea_detail(idea) for idea in brief.ideas]
+    )
+
+
 async def get_post(
     db: AsyncSession, user: User, post_id: str, *, now: datetime
 ) -> PostDetailResponse:
-    """The User's Post with its Text, every Version in order, its status and Scheduled post."""
+    """
+    The User's Post with its Text, every Version in order, its writing state, and its status and
+    Scheduled post once it has a Text.
+    """
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
+    written = post.text_version_number is not None
     return PostDetailResponse(
         id=post.id,
         brief=post.brief,
+        brief_id=post.idea.brief_id,
+        place_in_brief=await version_writing.place_in_brief_of(db, post),
+        plan=version_writing.plan_response(post.idea.plan),
         text=version_writing.text_response(post, char_limit),
         versions=[
             version_writing.version_response(v, char_limit)
             for v in version_writing.versions_of(post)
         ],
-        status=post_status(scheduled_post.state if scheduled_post else None),
+        writing_state=writing_state(post, now=now),
+        failed_feedback=version_writing.failed_feedback_response(post, now=now),
+        status=post_status(scheduled_post.state if scheduled_post else None) if written else None,
         scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
     )
 
@@ -665,22 +787,29 @@ def _scheduled_post_summary(
     )
 
 
-def _post_list_item(listed: service.ListedPost, *, now: datetime) -> PostListItemResponse:
+def _post_list_item(
+    listed: service.ListedPost, brief_post_ids: dict[str, list[str]], *, now: datetime
+) -> PostListItemResponse:
     post, scheduled_post = listed.post, listed.scheduled_post
     versions = version_writing.versions_of(post)
     latest = versions[-1]
     if scheduled_post is not None:
         parts = [part.text for part in scheduled_post.parts]
-        format = format_of(parts)
+        first_reply = scheduled_post.first_reply
+        format = format_of(parts, first_reply=first_reply)
     else:
         parts = list(latest.parts or [])
+        first_reply = latest.first_reply
         format = latest.format
     return PostListItemResponse(
         id=post.id,
         brief=post.brief,
+        brief_id=post.idea.brief_id,
+        place_in_brief=version_writing.place_in_brief(brief_post_ids[post.idea.brief_id], post.id),
         status=post_status(scheduled_post.state if scheduled_post else None),
         parts=parts,
         format=format,
+        first_reply=first_reply,
         version_count=len(versions),
         latest_version_at=as_utc(latest.created_at),
         scheduled_post=_scheduled_post_summary(scheduled_post, now=now) if scheduled_post else None,
@@ -701,9 +830,13 @@ async def list_posts(
     listed = await service.list_posts(
         db, user_id=user.id, status=status, limit=limit + 1, offset=offset
     )
+    page = listed[:limit]
+    brief_post_ids = await posts_service.post_ids_of_briefs(
+        db, brief_ids={item.post.idea.brief_id for item in page}
+    )
     counts = await service.count_posts(db, user_id=user.id)
     return PostsPageResponse(
-        data=[_post_list_item(item, now=now) for item in listed[:limit]],
+        data=[_post_list_item(item, brief_post_ids, now=now) for item in page],
         counts=PostCountsResponse(**counts),
         next_offset=offset + limit if len(listed) > limit else None,
     )
@@ -712,71 +845,155 @@ async def list_posts(
 async def give_feedback(
     db: AsyncSession,
     llm: LLM,
+    tasks: TaskRegistry,
+    sessions: async_sessionmaker[AsyncSession],
     user: User,
     post_id: str,
     feedback: str,
     format: Optional[Format],
-    now: datetime,
+    clock: Clock,
     sent_text: Optional[list[str]] = None,
-) -> VersionResponse:
+) -> PostDetailResponse:
     """
-    Write the Post's next Version from Feedback on its Text; `sent_text` must be the saved Text.
-    Takes-Feedback and Media checks run again after the model calls, under the Post's lock.
+    Start writing the Post's next Version from Feedback on its Text in the background, and answer
+    with the Post being written; `sent_text` must be the saved Text. The Text stays as it is until
+    the Version replaces it, and a write that fails leaves it so.
     """
+    now = clock()
+    # User then Post, as every write does, so two writes can't both take the last Generation.
+    await users_service.lock_user_id(db, user_id=user.id)
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     await _check_takes_feedback(db, post_id=post_id)
     next_version = await version_writing.prepare_next_version(
-        db, user=user, post=post, format=format, sent_text=sent_text, now=now
+        db, user=user, post=post, feedback=feedback, format=format, sent_text=sent_text, now=now
     )
-    # Holds the Text and ends the transaction before the calls, which can take minutes.
+    response = await get_post(db, user, post_id, now=now)
+    write = _FeedbackWrite(
+        user_id=user.id,
+        post_id=post_id,
+        started_at=now,
+        feedback=feedback,
+        next_version=next_version,
+    )
     await db.commit()
+    await tasks.start(
+        _feedback_task_name(post_id), _write_feedback_version(write, llm, sessions, clock)
+    )
+    return response
 
+
+def _feedback_task_name(post_id: str) -> str:
+    return f"write a version of {post_id} from feedback"
+
+
+@dataclass(frozen=True)
+class _FeedbackWrite:
+    """What writing a Version from Feedback needs, read before the request answers."""
+
+    user_id: str
+    post_id: str
+    # The Post's `writing_since` for this write: a later change to the Text drops this write.
+    started_at: datetime
+    feedback: str
+    next_version: version_writing.NextVersion
+
+
+async def _write_feedback_version(
+    write: _FeedbackWrite,
+    llm: LLM,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+) -> None:
+    """
+    The background task: the model calls with no session open, then the Version and its charge in
+    a session of its own, or else the failed attempt in a fresh one.
+    """
+    next_version = write.next_version
     try:
-        written = await write_next_version(
+        written = await revise_version(
             llm,
-            next_version.corpus,
-            post.brief,
+            next_version.inputs,
             next_version.earlier,
             next_version.starting_text,
-            feedback,
-            next_version.format,
-            next_version.char_limit,
+            write.feedback,
         )
-        # The Post may have been scheduled, or its Media changed, during the calls. User before
-        # Post, as every path that takes both locks them, since the charge below locks the User.
-        await users_service.lock_user_id(db, user_id=user.id)
-        post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
-        scheduled_post = await _check_takes_feedback(db, post_id=post_id)
-        media_service.check_dropped_parts_media_movable(
-            post, part_count=len(written.parts), live_count=_live_count(scheduled_post)
-        )
+        await _record_feedback_version(write, written, sessions, clock)
     except Exception as error:
-        await version_writing.record_failed_attempt(
+        try:
+            await _record_failed_feedback(write, sessions, clock, error)
+        finally:
+            if not isinstance(error, AppError) or error.reported:
+                report_background_exception(_feedback_task_name(write.post_id), error)
+            else:
+                logger.info("Feedback on post %s recorded as failed: %s", write.post_id, error)
+
+
+async def _record_feedback_version(
+    write: _FeedbackWrite,
+    written: WrittenVersion,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+) -> None:
+    """
+    Takes-Feedback and Media checks run again, since the Post may have been scheduled or its Media
+    changed during the calls; a refusal raises, and nothing here is committed.
+    """
+    next_version = write.next_version
+    async with sessions() as db:
+        # User before Post, as every path that takes both locks them, since the charge locks the User.
+        await users_service.lock_user_id(db, user_id=write.user_id)
+        now = clock()
+        post = await version_writing.post_still_writing(
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now
+        )
+        if post is None:
+            return
+        scheduled_post = await _check_takes_feedback(db, post_id=write.post_id)
+        media_service.check_dropped_parts_media_movable(
+            post,
+            part_count=len(written.parts),
+            first_reply=written.first_reply,
+            live_count=_live_count(scheduled_post),
+        )
+        version = await posts_service.record_version(
             db,
             post=post,
             sequence=next_version.sequence,
-            feedback=feedback,
-            format=next_version.format,
+            version_number=next_version.number,
+            feedback=write.feedback,
+            written=written,
+            now=now,
+            starting_text=next_version.starting_text,
+        )
+        await version_writing.charge_generation(db, user_id=write.user_id, version=version, now=now)
+        await db.commit()
+
+
+async def _record_failed_feedback(
+    write: _FeedbackWrite,
+    sessions: async_sessionmaker[AsyncSession],
+    clock: Clock,
+    error: Exception,
+) -> None:
+    async with sessions() as db:
+        # User before Post, as every path that takes both locks them: the attempt names the User.
+        await users_service.lock_user_id(db, user_id=write.user_id)
+        now = clock()
+        post = await version_writing.post_still_writing(
+            db, user_id=write.user_id, post_id=write.post_id, started_at=write.started_at, now=now
+        )
+        if post is None:
+            return
+        await version_writing.record_failed_attempt(
+            db,
+            post=post,
+            sequence=write.next_version.sequence,
+            feedback=write.feedback,
+            format=write.next_version.format,
             error=error,
             now=now,
         )
-        # Commit before re-raising, or the request session rolls the failed attempt back.
         await db.commit()
-        raise
-
-    version = await posts_service.record_version(
-        db,
-        post=post,
-        sequence=next_version.sequence,
-        version_number=next_version.number,
-        feedback=feedback,
-        written=written,
-        now=now,
-        starting_text=next_version.starting_text,
-    )
-    await version_writing.charge_generation(db, user_id=user.id, version=version, now=now)
-    await db.commit()
-    return version_writing.version_response(version, next_version.char_limit)
 
 
 async def restore_version(
@@ -793,14 +1010,22 @@ async def restore_version(
     if version is None:
         raise NotFoundError(f"This post has no version {version_number}.")
     media_service.check_dropped_parts_media_movable(
-        post, part_count=len(version.parts or []), live_count=_live_count(scheduled_post)
+        post,
+        part_count=len(version.parts or []),
+        first_reply=version.first_reply,
+        live_count=_live_count(scheduled_post),
     )
     posts_service.set_text_from_version(post, version)
     return await _commit_text(db, user=user, post=post)
 
 
 async def edit_text(
-    db: AsyncSession, user: User, post_id: str, parts: list[str], now: datetime
+    db: AsyncSession,
+    user: User,
+    post_id: str,
+    parts: list[str],
+    now: datetime,
+    first_reply: Optional[bool] = None,
 ) -> TextResponse:
     """
     Store the User's Parts as the Post's Text. Only a Draft or a Failed Post's, and not while a
@@ -811,7 +1036,7 @@ async def edit_text(
     if scheduled_post is not None:
         live_count = sum(1 for part in scheduled_post.parts if part.x_post_id is not None)
         rules.check_text_keeps_live_parts(live_count, post.text_parts or [], parts)
-    posts_service.edit_text(post, parts)
+    posts_service.edit_text(post, parts, first_reply=first_reply)
     return await _commit_text(db, user=user, post=post)
 
 
@@ -916,7 +1141,9 @@ async def attach_scheduled_post_media(
     part_index = part_number - 1
     _check_scheduled_post_part_takes_media(scheduled_post, media, part_index=part_index)
     checked = await _checked(received)
-    media_service.check_part_room(media, part_index=part_index, kind=checked.kind)
+    media_service.check_part_room(
+        media, part_index=part_index, kind=checked.kind, first_reply=scheduled_post.first_reply
+    )
     attached = await media_service.store(
         db,
         storage,
@@ -1062,6 +1289,11 @@ async def _attach_received(
 def post_url(post_id: str) -> str:
     """The Post's page in the web app."""
     return f"{settings.frontend_url()}{POSTS_PAGE}/{post_id}"
+
+
+def brief_url(brief_id: str) -> str:
+    """The Brief's page in the web app."""
+    return f"{settings.frontend_url()}{BRIEFS_PAGE}/{brief_id}"
 
 
 def attached_message(part_number: int, *, on_scheduled_post: bool) -> str:
@@ -1237,7 +1469,9 @@ def _check_scheduled_post_part_takes_media(
     if not 0 <= part_index < len(media):
         raise NotFoundError(f"This scheduled post has no part {part_index + 1}.")
     _check_not_live(scheduled_post, part_index=part_index)
-    media_service.check_part_room(media, part_index=part_index)
+    media_service.check_part_room(
+        media, part_index=part_index, first_reply=scheduled_post.first_reply
+    )
 
 
 async def _scheduled_post_whose_media_changes(
@@ -1307,7 +1541,7 @@ async def _post_whose_text_changes(
     post = await version_writing.user_post(db, user=user, post_id=post_id, for_update=True)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     check_text_changes(post_status(scheduled_post.state if scheduled_post else None))
-    posts_service.check_not_writing(post, now=now)
+    posts_service.take_text(post, now=now)
     return post, scheduled_post
 
 
