@@ -1,13 +1,12 @@
 """The Post MCP tools, writing with the faked LLM and refusing what the web routes refuse."""
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import select
 
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
@@ -24,19 +23,11 @@ from tests.posts.writing_replies import (
 
 
 @pytest.fixture
-async def with_author(subscribed, mcp, fake_x_reader):
-    """`levelsio` on the User's list, with one stored post."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
+async def with_positioning(subscribed, mcp):
+    """A Positioning saved, which writing a Post needs."""
     assert (await mcp.call_tool("set_positioning", text="I post about bootstrapping."))[
         "isError"
     ] is False
-    assert (await mcp.call_tool("add_inspiration_author", handle="levelsio"))["isError"] is False
 
 
 async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscribed, mcp):
@@ -52,7 +43,7 @@ async def test_the_writing_tools_only_add_and_the_reading_tools_only_read(subscr
 
 
 async def test_starting_a_post_returns_its_first_versions_final_and_character_count(
-    with_author, mcp, fake_llm, fixed_clock
+    with_positioning, mcp, fake_llm, fixed_clock
 ):
     fake_llm.replies = [{"post": "the final"}]
 
@@ -85,7 +76,7 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
 
 
 async def test_starting_a_post_the_planner_makes_a_thread_returns_its_parts(
-    with_author, mcp, fake_llm
+    with_positioning, mcp, fake_llm
 ):
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread())
     fake_llm.replies = [{"parts": ["final one", "final two 🚀"]}]
@@ -112,7 +103,7 @@ async def test_start_post_takes_only_a_brief(subscribed, mcp):
 
 
 @pytest.fixture
-async def post_id(with_author, mcp, fake_llm) -> str:
+async def post_id(with_positioning, mcp, fake_llm) -> str:
     """A Post of the User's with one Version, whose text is "final 1"."""
     fake_llm.replies = [{"post": "final 1"}]
     return (await mcp.call_tool("start_post", brief="ship small things"))["structuredContent"]["id"]

@@ -33,15 +33,6 @@ vi.mock('@/services/billingService', () => ({
     }),
   },
 }));
-vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
-  inspirationAuthorService: {
-    list: vi.fn(),
-    add: vi.fn(),
-    remove: vi.fn(),
-    refresh: vi.fn(),
-  },
-}));
 vi.mock('@/services/postService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/postService')>()),
   postService: {
@@ -109,7 +100,6 @@ import { WRITING_POLL_MS } from '@/features/posts/usePost';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
-import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import {
   postService,
   textOf,
@@ -132,10 +122,8 @@ import { usageService, type Usage } from '@/services/usageService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { xConnectionReturn } from '@/features/xConnection/xConnectionReturn';
 import {
-  LEVELSIO,
   NOT_SUBSCRIBED,
   NO_POSTS,
-  PAULG,
   SUBSCRIBED,
   allowanceUsedUp,
   apiError,
@@ -286,7 +274,6 @@ describe('Post page', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
     vi.mocked(postService.get).mockReset();
     vi.mocked(postService.addVersion).mockReset();
     vi.mocked(postService.restoreVersion).mockReset();
@@ -309,35 +296,8 @@ describe('Post page', () => {
       'href',
       '/posts/drafts',
     );
-    expect(
-      (await screen.findByRole('link', { name: 'Writing in the style of @levelsio' })).closest(
-        'header',
-      ),
-    ).not.toBeNull();
-  });
-
-  it("shows the Persona's photos in the header and their handles on focus", async () => {
-    vi.mocked(inspirationAuthorService.list).mockResolvedValue([
-      { ...LEVELSIO, photoUrl: 'https://pbs.twimg.com/levelsio_normal.jpg' },
-      PAULG,
-    ]);
-    renderPost(postWith('the final text'));
-
-    const chip = await screen.findByRole('link', {
-      name: 'Writing in the style of @levelsio, @paulg',
-    });
-    expect(chip).toHaveAttribute('href', '/persona');
-    expect(chip.querySelector('img')).toHaveAttribute(
-      'src',
-      'https://pbs.twimg.com/levelsio_normal.jpg',
-    );
-    expect(within(chip).getByText('P')).toBeInTheDocument();
-    expect(within(chip).getByText('@paulg')).not.toBeVisible();
-
-    act(() => chip.focus());
-
-    expect(within(chip).getByText('@levelsio')).toBeVisible();
-    expect(within(chip).getByText('@paulg')).toBeVisible();
+    const header = within(heading.closest('header')!);
+    expect(header.getByRole('link', { name: 'Persona' })).toHaveAttribute('href', '/persona');
   });
 
   it('shortens a long title with an ellipsis', async () => {
@@ -5686,7 +5646,6 @@ describe('A first reply on the Post page', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
     vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
@@ -5881,7 +5840,6 @@ describe('A post before its first version', () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([LEVELSIO]);
     vi.mocked(postService.get).mockReset();
     vi.mocked(postService.retry).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);

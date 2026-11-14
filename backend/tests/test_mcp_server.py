@@ -9,11 +9,12 @@ from unittest.mock import MagicMock
 
 from sqlalchemy import delete
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.analytics import posthog_client
 from tests.conftest import FIXED_NOW
 from tests.mcp_client import MCP, McpClient, error_text
+from tests.positioning.positioning import TEXT as POSITIONING
+from tests.posts.writing_replies import POST_IDEAS
 
 API_KEYS = "/api/v1/api-keys"
 CONNECTIONS = "/api/v1/app-connections"
@@ -85,21 +86,6 @@ async def test_no_instruction_or_tool_description_says_final(subscribed, mcp):
     assert [name for name, tool in tools.items() if "Final" in tool["description"]] == []
 
 
-async def test_tools_list_shows_the_inspiration_author_tools_with_their_annotations(
-    subscribed, mcp
-):
-    tools = await mcp.list_tools()
-
-    assert tools["list_inspiration_authors"]["annotations"]["readOnlyHint"] is True
-    assert tools["add_inspiration_author"]["annotations"] == {
-        "readOnlyHint": False,
-        "destructiveHint": False,
-    }
-    assert tools["remove_inspiration_author"]["annotations"]["destructiveHint"] is True
-    assert tools["add_inspiration_author"]["inputSchema"]["required"] == ["handle"]
-    assert tools["list_inspiration_authors"]["description"]
-
-
 async def test_a_request_without_a_token_is_401_with_a_bearer_challenge(new_browser):
     response = await McpClient(new_browser(), None).send("tools/list")
 
@@ -156,15 +142,15 @@ async def test_a_call_records_when_the_connection_was_last_used_at_most_once_a_m
         return datetime.fromisoformat(used) if used is not None else None
 
     assert await last_used_at() is None
-    await mcp.call_tool("list_inspiration_authors")
+    await mcp.call_tool("get_positioning")
     assert await last_used_at() == FIXED_NOW
 
     fixed_clock.advance(timedelta(seconds=59))
-    await mcp.call_tool("list_inspiration_authors")
+    await mcp.call_tool("get_positioning")
     assert await last_used_at() == FIXED_NOW
 
     fixed_clock.advance(timedelta(seconds=1))
-    await mcp.call_tool("list_inspiration_authors")
+    await mcp.call_tool("get_positioning")
     assert await last_used_at() == FIXED_NOW + timedelta(minutes=1)
 
 
@@ -189,9 +175,6 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link_from_gate
     await db.commit()
 
     for name, arguments in [
-        ("list_inspiration_authors", {}),
-        ("add_inspiration_author", {"handle": "levelsio"}),
-        ("remove_inspiration_author", {"handle": "levelsio"}),
         ("get_positioning", {}),
         ("set_positioning", {"text": "I post about bootstrapping."}),
         ("manage_subscription", {}),
@@ -205,10 +188,10 @@ async def test_a_user_whose_subscription_ended_gets_the_subscribe_link_from_gate
 
 
 async def test_every_user_uses_the_tools_on_an_instance_that_sells_no_plans(sells_no_plans, mcp):
-    result = await mcp.call_tool("list_inspiration_authors")
+    result = await mcp.call_tool("get_positioning")
 
     assert result["isError"] is False
-    assert result["structuredContent"] == {"data": []}
+    assert result["structuredContent"] == {"text": None, "saved_at": None}
 
 
 async def test_x_identity_can_get_its_reconnect_link_after_paid_access_ends(
@@ -225,54 +208,51 @@ async def test_x_identity_can_get_its_reconnect_link_after_paid_access_ends(
     assert result["structuredContent"]["url"] == "http://localhost:5173/settings"
     assert "Reconnect the X account you signed in with" in result["structuredContent"]["message"]
     assert "disconnect" not in result["structuredContent"]["message"]
-    assert (await mcp.call_tool("list_inspiration_authors"))["isError"] is True
+    assert (await mcp.call_tool("get_positioning"))["isError"] is True
 
 
 async def test_a_tool_over_its_per_user_limit_answers_retry_later(subscribed, mcp):
     for _ in range(20):
-        await mcp.call_tool("remove_inspiration_author", handle="levelsio")
+        await mcp.call_tool("set_positioning", text=POSITIONING)
 
-    result = await mcp.call_tool("remove_inspiration_author", handle="levelsio")
+    result = await mcp.call_tool("set_positioning", text=POSITIONING)
 
-    assert error_text(result).startswith("You've called remove_inspiration_author too often.")
+    assert error_text(result).startswith("You've called set_positioning too often.")
     assert result["structuredContent"]["retry_at"].endswith("Z")
-    assert (await mcp.call_tool("list_inspiration_authors"))["isError"] is False
+    assert (await mcp.call_tool("get_positioning"))["isError"] is False
 
 
 async def test_read_only_tools_allow_60_calls_a_minute(subscribed, mcp):
     for _ in range(60):
-        assert (await mcp.call_tool("list_inspiration_authors"))["isError"] is False
+        assert (await mcp.call_tool("get_positioning"))["isError"] is False
 
-    result = await mcp.call_tool("list_inspiration_authors")
+    result = await mcp.call_tool("get_positioning")
 
     assert "retry_at" in result["structuredContent"]
 
 
-async def test_tool_calls_capture_no_product_events(subscribed, mcp, fake_x_reader, monkeypatch):
+async def test_tool_calls_capture_no_product_events(subscribed, mcp, monkeypatch):
     capture, identify = MagicMock(), MagicMock()
     monkeypatch.setattr(posthog_client, "capture", capture)
     monkeypatch.setattr(posthog_client, "identify", identify)
-    fake_x_reader.posts["levelsio"] = [FetchedPost(post_id="1", text="hi", posted_at=FIXED_NOW)]
 
     await mcp.initialize()
     await mcp.list_tools()
-    await mcp.call_tool("add_inspiration_author", handle="levelsio")
-    await mcp.call_tool("list_inspiration_authors")
-    await mcp.call_tool("remove_inspiration_author", handle="levelsio")
+    await mcp.call_tool("set_positioning", text=POSITIONING)
+    await mcp.call_tool("get_positioning")
+    await mcp.call_tool("get_usage")
 
     capture.assert_not_called()
     identify.assert_not_called()
 
 
 async def test_an_unexpected_error_is_reported_and_answered_without_its_details(
-    subscribed, mcp, fake_x_reader, fake_posthog, monkeypatch
+    subscribed, mcp, fake_llm, fake_posthog
 ):
-    async def broken(handle: str):
-        raise RuntimeError("secret internals")
+    await mcp.call_tool("set_positioning", text=POSITIONING)
+    fake_llm.standing[POST_IDEAS] = RuntimeError("secret internals")
 
-    monkeypatch.setattr(fake_x_reader, "look_up_profile", broken)
-
-    result = await mcp.call_tool("add_inspiration_author", handle="levelsio")
+    result = await mcp.call_tool("start_post", brief="ship small things")
 
     assert error_text(result) == (
         "Something went wrong. Please try again later or contact us for support."

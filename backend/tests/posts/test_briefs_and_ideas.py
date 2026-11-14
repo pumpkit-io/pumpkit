@@ -8,28 +8,18 @@ from sqlalchemy.exc import IntegrityError
 
 from pumpkit.auth.models import User
 from pumpkit.auth.service import users
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Brief, Idea, Post
 from tests.connected_apps.conftest import foreign_keys_session as foreign_keys_session
 from tests.positioning.positioning import save_positioning
 
-AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
 NOW = datetime(2026, 10, 1, tzinfo=timezone.utc)
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader):
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
+async def with_positioning(client, subscribed):
     await save_positioning(client)
-    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
 async def _stored(db) -> list[tuple[str, str, int, str]]:
@@ -43,7 +33,7 @@ async def _stored(db) -> list[tuple[str, str, int, str]]:
 
 
 async def test_starting_a_post_stores_its_brief_with_one_idea_the_post_belongs_to(
-    client, with_author, fake_llm, db, user
+    client, with_positioning, fake_llm, db, user
 ):
     fake_llm.replies = [{"post": "the final"}]
 
@@ -53,7 +43,7 @@ async def test_starting_a_post_stores_its_brief_with_one_idea_the_post_belongs_t
 
 
 async def test_a_post_whose_first_version_failed_still_has_its_brief(
-    client, with_author, fake_llm, db
+    client, with_positioning, fake_llm, db
 ):
     fake_llm.replies = [LLMError("no reply")]
 
@@ -62,7 +52,7 @@ async def test_a_post_whose_first_version_failed_still_has_its_brief(
     assert [(text, order) for _, text, order, _ in await _stored(db)] == [("ship small things", 1)]
 
 
-async def test_each_post_started_gets_a_brief_of_its_own(client, with_author, fake_llm, db):
+async def test_each_post_started_gets_a_brief_of_its_own(client, with_positioning, fake_llm, db):
     fake_llm.replies = [{"post": "one"}, {"post": "two"}]
 
     first = (await client.post(POSTS, json={"brief": "the same words"})).json()

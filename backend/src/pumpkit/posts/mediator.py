@@ -37,7 +37,7 @@ from pumpkit.posts.writing.planning import plan_brief
 from pumpkit.posts.writing.post_writing import write_planned_version
 from pumpkit.posts.writing_state import WRITING, writing_state
 
-# Where the User saves their Positioning and adds Inspiration authors.
+# Where the User saves their Positioning.
 PERSONA_PAGE = "/persona"
 
 

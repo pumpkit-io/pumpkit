@@ -4,7 +4,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import select
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
@@ -101,9 +100,6 @@ async def test_existing_trial_keeps_original_reduced_period_then_full_free_month
         billing_cycle_anchor=at("2028-01-31T12:00:00"),
     )
     fake_billing.set_subscription("cus_monthly", state)
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="trial-author", text="An example", posted_at=fixed_clock())
-    ]
     await _send(
         authed_client,
         fake_billing,
@@ -112,7 +108,6 @@ async def test_existing_trial_keeps_original_reduced_period_then_full_free_month
         {"customer": "cus_monthly"},
     )
     await save_positioning(authed_client)
-    await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
     fake_llm.replies = [{"post": "Usage stays in the original trial"}]
     assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
     created = await coupons("--months", "1")

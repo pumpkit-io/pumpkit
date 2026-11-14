@@ -3,12 +3,11 @@ Reading one Post through `GET /posts/{id}` and the `get_post` tool: its Brief, i
 status its Scheduled post gives it (ADR 0015), and that Scheduled post.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post
 from pumpkit.scheduling import service
@@ -24,23 +23,14 @@ LATER = "2026-10-10T14:00:00Z"
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader, connect_x) -> None:
-    """`levelsio` in the User's Persona, and the User's X account connected."""
+async def with_positioning(client, subscribed, connect_x) -> None:
+    """A Positioning saved, and the User's X account connected."""
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
 
 
 @pytest.fixture
-async def post(client, with_author, fake_llm, fixed_clock) -> dict:
+async def post(client, with_positioning, fake_llm, fixed_clock) -> dict:
     """A Post written through the API, with one Version."""
     fake_llm.replies = [{"post": "Version one."}]
     return await written_post(client, await client.post(POSTS, json={"brief": "ship small things"}))
@@ -151,7 +141,7 @@ async def test_a_published_post_reads_as_published_with_its_link_on_x(client, po
 
 
 async def test_a_thread_that_failed_partway_reads_as_failed_with_its_live_part(
-    client, with_author, fake_llm, fake_x_publisher
+    client, with_positioning, fake_llm, fake_x_publisher
 ):
     post = (await start_thread(client, fake_llm, ["Live one.", "Refused two."])).json()
     fake_x_publisher.fail_publish = XPostRejectedError(403, "Nope")

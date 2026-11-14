@@ -1,32 +1,22 @@
 """Writing a Version for the post limit of the User's X account, in either Format."""
 
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
 import pumpkit.x_connection.service as x_connections_service
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import start_thread, written_post
 
-AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader):
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post 0",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc) - timedelta(hours=1),
-        )
-    ]
+async def with_positioning(client, subscribed):
     await save_positioning(client)
-    assert (await client.post(AUTHORS, json={"handle": "levelsio"})).status_code == 201
 
 
 @pytest.fixture
@@ -59,7 +49,7 @@ def _thread_limits(fake_llm) -> list[int]:
 
 
 async def test_without_an_x_connection_both_formats_are_written_for_xs_default_limit(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     fake_llm.replies = [{"post": "final"}]
 
@@ -82,7 +72,7 @@ async def test_without_an_x_connection_both_formats_are_written_for_xs_default_l
     ],
 )
 async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
-    client, with_author, fake_llm, connect_x_as, subscription_type, char_limit
+    client, with_positioning, fake_llm, connect_x_as, subscription_type, char_limit
 ):
     await connect_x_as(subscription_type)
     fake_llm.replies = [{"post": "final"}]
@@ -97,7 +87,7 @@ async def test_a_thread_is_written_for_the_x_accounts_limit_like_a_single_post(
 
 
 async def test_feedback_after_buying_x_premium_writes_and_shows_the_longer_limit(
-    client, db, user, with_author, fake_llm, connect_x_as
+    client, db, user, with_positioning, fake_llm, connect_x_as
 ):
     await connect_x_as("None")
     post_id = (await start_thread(client, fake_llm, ["one", "two"], brief="ship")).json()["id"]

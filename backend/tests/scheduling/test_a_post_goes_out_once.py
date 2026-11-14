@@ -3,11 +3,10 @@ ADR 0015 through the HTTP API: every Scheduled post is copied from its Post's Te
 most one, and a Scheduled or Published Post takes no Feedback.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import FakeLLM, get_llm
 from pumpkit.main import app
 from pumpkit.scheduling import service
@@ -31,16 +30,7 @@ PUBLISHED_TAKES_NO_FEEDBACK = (
 async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect_x) -> dict:
     """A Post written through the API, with one Version, and the User's X account connected."""
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
     fake_llm.replies = [{"post": "Version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text

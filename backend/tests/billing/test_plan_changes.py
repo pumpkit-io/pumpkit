@@ -7,7 +7,6 @@ from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from pumpkit.account_deletion import run_cli as delete_cli
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.allowance import months_after
 from pumpkit.billing.gateway import Plan
 from pumpkit.billing.models import PlanChange
@@ -447,13 +446,7 @@ async def test_interval_change_keeps_used_generation_and_captured_paid_caps(
     monkeypatch,
 ):
     await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(post_id="plan-author", text="An example", posted_at=fixed_clock())
-    ]
     await save_positioning(authed_client)
-    assert (
-        await authed_client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    ).status_code == 201
     fake_llm.replies = [{"post": "A used generation before changing payment frequency"}]
     assert (await authed_client.post("/api/v1/posts", json={"brief": "A note"})).status_code == 201
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 800)

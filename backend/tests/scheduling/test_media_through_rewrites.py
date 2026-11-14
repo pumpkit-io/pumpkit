@@ -3,13 +3,11 @@ Feedback, a Format change and restoring a Version replace only the Text's words:
 its Media, and Media of Parts the new Text no longer has goes last on its last Part.
 """
 
-from datetime import datetime, timezone
 from typing import Optional
 
 import pytest
 from httpx import Response
 
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.llm import FakeLLM, get_llm
 from pumpkit.main import app
 from pumpkit.x_connection.x_publisher import XPostRejectedError
@@ -23,18 +21,9 @@ LATER = "2026-10-10T14:00:00Z"
 
 
 @pytest.fixture
-async def with_author(client, subscribed, fake_x_reader, connect_x):
+async def with_positioning(client, subscribed, connect_x):
     await connect_x()
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
 
 
 async def _start_thread(client, fake_llm, *parts: str) -> str:
@@ -64,7 +53,7 @@ async def _media_by_part(client, post_id: str) -> list[list[str]]:
     return [[m["id"] for m in part["media"]] for part in text["parts"]]
 
 
-async def test_feedback_keeps_each_parts_media_where_it_is(client, with_author, fake_llm):
+async def test_feedback_keeps_each_parts_media_where_it_is(client, with_positioning, fake_llm):
     post_id = await _start_thread(client, fake_llm, "one", "two")
     first = await _attach(client, post_id, part=1)
     second = await _attach(client, post_id, part=2)
@@ -76,7 +65,7 @@ async def test_feedback_keeps_each_parts_media_where_it_is(client, with_author, 
 
 
 async def test_feedback_that_drops_parts_moves_their_media_last_on_the_last_part_in_order(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     post_id = await _start_thread(client, fake_llm, "one", "two", "three", "four")
     on_two = await _attach(client, post_id, part=2)
@@ -90,7 +79,7 @@ async def test_feedback_that_drops_parts_moves_their_media_last_on_the_last_part
 
 
 async def test_switching_a_thread_to_a_single_post_puts_every_parts_media_on_it_in_order(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     post_id = await _start_thread(client, fake_llm, "one", "two")
     on_one = await _attach(client, post_id, part=1)
@@ -103,7 +92,7 @@ async def test_switching_a_thread_to_a_single_post_puts_every_parts_media_on_it_
 
 
 async def test_media_moved_onto_a_part_past_xs_rule_stays_and_scheduling_refuses_it(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     post_id = await _start_thread(client, fake_llm, "one", "two")
     on_one = [await _attach(client, post_id, part=1) for _ in range(3)]
@@ -118,7 +107,7 @@ async def test_media_moved_onto_a_part_past_xs_rule_stays_and_scheduling_refuses
     assert scheduled.json()["code"] == "MEDIA_OVER_X_RULE"
 
 
-async def test_restoring_a_version_keeps_each_parts_media(client, with_author, fake_llm):
+async def test_restoring_a_version_keeps_each_parts_media(client, with_positioning, fake_llm):
     post_id = await _start_thread(client, fake_llm, "one", "two")
     fake_llm.replies = [{"parts": ["uno", "dos"]}]
     await _feedback(client, post_id, "in Spanish")
@@ -133,7 +122,7 @@ async def test_restoring_a_version_keeps_each_parts_media(client, with_author, f
 
 
 async def test_restoring_a_shorter_version_moves_media_onto_its_last_part_and_back_keeps_it(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     post_id = await _start_thread(client, fake_llm, "one", "two")
     fake_llm.replies = [
@@ -152,7 +141,7 @@ async def test_restoring_a_shorter_version_moves_media_onto_its_last_part_and_ba
 
 
 async def test_media_attached_while_feedback_writes_stays_and_moves_with_its_part(
-    client, with_author, fake_llm
+    client, with_positioning, fake_llm
 ):
     post_id = await _start_thread(client, fake_llm, "one", "two", "three")
     attached: list[str] = []
@@ -172,7 +161,9 @@ async def test_media_attached_while_feedback_writes_stays_and_moves_with_its_par
     assert await _media_by_part(client, post_id) == [[], attached]
 
 
-async def test_media_removed_while_feedback_writes_stays_removed(client, with_author, fake_llm):
+async def test_media_removed_while_feedback_writes_stays_removed(
+    client, with_positioning, fake_llm
+):
     post_id = await _start_thread(client, fake_llm, "one", "two", "three")
     kept = await _attach(client, post_id, part=2)
     removed = await _attach(client, post_id, part=3)
@@ -194,7 +185,7 @@ async def test_media_removed_while_feedback_writes_stays_removed(client, with_au
     assert await _media_by_part(client, post_id) == [[], [kept]]
 
 
-async def test_no_prompt_holds_anything_of_the_texts_media(client, with_author, fake_llm):
+async def test_no_prompt_holds_anything_of_the_texts_media(client, with_positioning, fake_llm):
     post_id = await _start_thread(client, fake_llm, "one", "two")
     media_id = await _attach(client, post_id, part=1, name="beach-at-dawn.png")
     described = await client.put(
@@ -228,7 +219,7 @@ async def _fail_after(client, fake_x_publisher, post_id: str, *, live: int) -> N
 
 
 async def test_restoring_a_version_that_would_put_media_on_a_part_already_on_x_is_refused(
-    client, with_author, fake_llm, fake_x_publisher
+    client, with_positioning, fake_llm, fake_x_publisher
 ):
     fake_llm.replies = [{"post": "one post"}]
     started = await client.post(POSTS, json={"brief": "ship small things"})
@@ -246,7 +237,7 @@ async def test_restoring_a_version_that_would_put_media_on_a_part_already_on_x_i
 
 
 async def test_feedback_that_would_put_media_on_a_part_already_on_x_is_refused(
-    client, with_author, fake_llm, fake_x_publisher
+    client, with_positioning, fake_llm, fake_x_publisher
 ):
     post_id = await _start_thread(client, fake_llm, "a", "b", "c")
     on_three = await _attach(client, post_id, part=3)

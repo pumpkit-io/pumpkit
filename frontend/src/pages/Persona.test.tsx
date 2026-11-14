@@ -71,7 +71,13 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
   track: vi.fn(),
 }));
 
+import { Route } from 'react-router-dom';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
+import { InspirationAuthorsPanel } from '@/features/inspirationAuthors/InspirationAuthorsPanel';
+import { InspirationAuthorsProvider } from '@/features/inspirationAuthors/InspirationAuthorsProvider';
+import { OnboardingGate } from '@/features/onboarding/OnboardingGate';
+import { APP_HOME } from '@/features/onboarding/paths';
+import { AppLayout } from './AppLayout';
 import { track } from '@/lib/analytics';
 import {
   authorDirectoryService,
@@ -109,8 +115,34 @@ const DIRECTORY: AuthorDirectoryEntry[] = [
   entry('taylorotwell', 'Taylor Otwell'),
 ];
 
+const PANEL_PATH = '/test/inspiration-authors';
+
+/**
+ * The inactive Inspiration authors panel (ADR 0024) in a test-owned route inside the signed-in
+ * layout, since no page renders it.
+ */
 function renderPersona(instance = SELLS_PLANS) {
-  return renderSignedIn('/persona', { instance });
+  return renderSignedIn(PANEL_PATH, {
+    instance,
+    routes: (
+      <Route
+        element={
+          <OnboardingGate home={APP_HOME}>
+            <AppLayout />
+          </OnboardingGate>
+        }
+      >
+        <Route
+          path={PANEL_PATH}
+          element={
+            <InspirationAuthorsProvider>
+              <InspirationAuthorsPanel />
+            </InspirationAuthorsProvider>
+          }
+        />
+      </Route>
+    ),
+  });
 }
 
 async function persona() {
@@ -162,10 +194,9 @@ describe('Persona', () => {
     vi.mocked(track).mockClear();
   });
 
-  it('says under the "Persona" header that Inspiration authors set how posts sound, not what they say', async () => {
+  it('says that Inspiration authors set how posts sound, not what they say', async () => {
     renderPersona();
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'Persona' })).toBeInTheDocument();
     expect((await persona()).getByText(/never what they say/i)).toBeInTheDocument();
   });
 

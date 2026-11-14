@@ -70,8 +70,11 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 )
 from sqlalchemy.orm import selectinload  # noqa: E402
 from sqlalchemy.pool import NullPool  # noqa: E402
+from starlette.routing import Route  # noqa: E402
 
+import pumpkit.authors.tools as authors_tools  # noqa: E402
 import pumpkit.core.errors as errors_module  # noqa: E402
+import pumpkit.mcp_server as mcp_server  # noqa: E402
 import pumpkit.models  # noqa: E402,F401  (registers every table on Base.metadata)
 from pumpkit.auth.dependencies import get_current_user  # noqa: E402
 from pumpkit.auth.google_sign_in import (  # noqa: E402
@@ -84,6 +87,7 @@ from pumpkit.auth.models import MagicLink, User  # noqa: E402
 from pumpkit.auth.router import legacy_router  # noqa: E402
 from pumpkit.auth.router import router as auth_router  # noqa: E402
 from pumpkit.auth.service import sessions as auth_sessions  # noqa: E402
+from pumpkit.authors.router import router as authors_router  # noqa: E402
 from pumpkit.authors.x_reader import FakeXReader, get_x_reader  # noqa: E402
 from pumpkit.billing.gateway import FakeBillingGateway, get_billing_gateway  # noqa: E402
 from pumpkit.billing.models import Subscription  # noqa: E402
@@ -110,6 +114,7 @@ from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Post, VersionAttempt  # noqa
 from pumpkit.posts.service import set_text_from_version  # noqa: E402
 from pumpkit.x_connection.service import save_connection  # noqa: E402
 from pumpkit.x_connection.x_publisher import FakeXPublisher, get_x_publisher  # noqa: E402
+from tests.mcp_client import MCP as MCP_PATH  # noqa: E402
 from tests.mcp_client import McpClient  # noqa: E402
 from tests.oauth_app import (  # noqa: E402
     REDIRECT,
@@ -522,9 +527,38 @@ def legacy_auth_app():
 
 
 @pytest.fixture
+def authors_app():
+    """
+    Test-owned assembly for the inactive Inspiration authors: the application's routes, plus the
+    author routes, and an MCP endpoint whose tools include the author tools.
+    """
+    isolated = FastAPI()
+    for route in app.router.routes:
+        if getattr(route, "path", None) != MCP_PATH:
+            isolated.router.routes.append(route)
+    isolated.include_router(authors_router, prefix="/api/v1")
+    endpoint = mcp_server.McpEndpoint(
+        mcp_server.build_server([*authors_tools.TOOLS, *mcp_server.TOOLS])
+    )
+    isolated.router.routes.append(
+        Route(MCP_PATH, endpoint=endpoint, methods=["POST", "GET", "DELETE"])
+    )
+    isolated.state.limiter = limiter
+    isolated.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # pyright: ignore[reportArgumentType]
+    errors_module.register_exception_handlers(isolated)
+    isolated.dependency_overrides = app.dependency_overrides
+    return isolated
+
+
+# Each test-owned assembly a test can request in place of the application.
+_ASSEMBLIES = ("legacy_auth_app", "authors_app")
+
+
+@pytest.fixture
 def http_app(request):
-    if "legacy_auth_app" in request.fixturenames:
-        return request.getfixturevalue("legacy_auth_app")
+    for assembly in _ASSEMBLIES:
+        if assembly in request.fixturenames:
+            return request.getfixturevalue(assembly)
     return app
 
 

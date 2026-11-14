@@ -1,6 +1,6 @@
 """The Scheduled post MCP tools, refusing what the web routes refuse, in the same words."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -8,7 +8,6 @@ from sqlalchemy import delete
 
 import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.auth.models import User
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.core.config import settings
 from pumpkit.posts.models import Post
@@ -35,16 +34,7 @@ async def connected(subscribed, fixed_clock, connect_x) -> None:
 @pytest.fixture
 async def written_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post written through the API, its Text "The final, version one."."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
     fake_llm.replies = [{"post": "The final, version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
@@ -78,16 +68,7 @@ THREAD_FINAL = ["Ship small every week.", "It's how you learn.", "Start today."]
 @pytest.fixture
 async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post started as a Thread, its Text the three THREAD_FINAL Parts."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
     started = await start_thread(client, fake_llm, THREAD_FINAL)
     assert started.status_code == 201, started.text
     return started.json()

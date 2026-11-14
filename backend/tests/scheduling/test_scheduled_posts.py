@@ -1,11 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from unittest.mock import MagicMock
 
 import pytest
 from httpx import AsyncClient
 
 import pumpkit.scheduling.publish as publish_module
-from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.core.config import settings
 from pumpkit.posts.models import Post
 from pumpkit.scheduling.publisher import run_pass
@@ -487,16 +486,7 @@ async def test_a_user_without_a_subscription_schedules_where_no_plans_are_sold(
 @pytest.fixture
 async def post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post written through the API, its Text the first Version, "Version one."."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
     fake_llm.replies = [{"post": "Version one."}]
     started = await client.post("/api/v1/posts", json={"brief": "ship small things"})
     assert started.status_code == 201, started.text
@@ -568,16 +558,7 @@ THREAD_VERSION = ["Ship small every week.", "It's how you learn.", "Start today.
 @pytest.fixture
 async def thread_post(client, subscribed, fake_x_reader, fake_llm) -> dict:
     """A new Post started as a Thread, its Text the THREAD_VERSION Parts."""
-    fake_x_reader.posts["levelsio"] = [
-        FetchedPost(
-            post_id="levelsio-0",
-            text="levelsio post",
-            posted_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
-        )
-    ]
     await save_positioning(client)
-    added = await client.post("/api/v1/inspiration-authors", json={"handle": "levelsio"})
-    assert added.status_code == 201, added.text
     started = await start_thread(client, fake_llm, THREAD_VERSION)
     assert started.status_code == 201, started.text
     return started.json()

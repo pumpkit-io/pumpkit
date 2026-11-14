@@ -68,7 +68,7 @@ export function Login() {
                 Welcome to {app_name}
               </h1>
               <p className="mt-3 text-base leading-relaxed text-muted-foreground">
-                Write X posts in the style of the authors you choose.
+                Write X posts that fit who you are and who you write for.
               </p>
 
               <div className="mt-8 grid gap-6">

@@ -1,4 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import {
   MemoryRouter,
   Route,
@@ -24,7 +25,7 @@ import { signedInRoutes } from '../signedInRoutes';
 /**
  * For tests: the signed-in route tree at `path` (with any query), as App mounts it behind
  * sign-in. The User starts at `nextStep`, past the Paywall by default; later checks go to the
- * mocked onboardingService.
+ * mocked onboardingService. `routes` adds test-owned routes, such as an inactive feature's.
  */
 export function renderSignedIn(
   path: string,
@@ -32,7 +33,8 @@ export function renderSignedIn(
     state,
     instance = SELLS_PLANS,
     nextStep = null,
-  }: { state?: unknown; instance?: Instance; nextStep?: NextStep | null } = {},
+    routes,
+  }: { state?: unknown; instance?: Instance; nextStep?: NextStep | null; routes?: ReactNode } = {},
 ) {
   return render(
     <InstanceProvider instance={instance}>
@@ -46,6 +48,7 @@ export function renderSignedIn(
               <Routes>
                 <Route path="/" element={<SignedInHome />} />
                 {signedInRoutes()}
+                {routes}
               </Routes>
               <CurrentPath />
               <Navigator />

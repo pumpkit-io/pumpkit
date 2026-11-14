@@ -22,7 +22,6 @@ from starlette.responses import JSONResponse, Response
 from starlette.types import Receive, Scope, Send
 
 import pumpkit.auth.service.users as user_service
-import pumpkit.authors.tools as authors_tools
 import pumpkit.billing.service as billing_service
 import pumpkit.billing.tools as billing_tools
 import pumpkit.connected_apps.mediator as connected_apps_mediator
@@ -40,7 +39,6 @@ from pumpkit.core.rate_limit import hit_user_limit
 from pumpkit.core.time import get_clock
 
 TOOLS: list[McpTool] = [
-    *authors_tools.TOOLS,
     *positioning_tools.TOOLS,
     *posts_tools.TOOLS,
     *scheduling_tools.TOOLS,

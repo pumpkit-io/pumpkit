@@ -127,10 +127,9 @@ function newPostShortcut(target: Element | Window = window) {
   fireEvent.keyDown(target, { key: 'O', ctrlKey: true, shiftKey: true });
 }
 
-/** A Subscribed User with one Inspiration author, on a written Post's page. */
+/** A Subscribed User, on a written Post's page. */
 async function withPostOnScreen() {
   vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-  vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
   vi.mocked(postService.get).mockResolvedValue(POST);
   renderSignedIn('/posts/post_01');
   await screen.findByRole('article', { name: 'Text' });
@@ -154,7 +153,6 @@ describe('The signed-in shell', () => {
         termsVersion: '2026-10-11',
         ...NO_CAPS,
       });
-    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
     vi.mocked(postService.start).mockReset();
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
@@ -182,12 +180,13 @@ describe('The signed-in shell', () => {
       expect(nav.getByRole('link', { name: 'Posts' })).toHaveAttribute('aria-current', 'page');
     });
 
-    it('shows Persona as a plain link, without counting its Inspiration authors', async () => {
+    it('shows Persona as a plain link, reading no Inspiration authors', async () => {
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO, PAULG]);
       renderSignedIn('/new');
 
       const nav = await sidebar();
-      await waitFor(() => expect(inspirationAuthorService.list).toHaveBeenCalled());
+      await screen.findByRole('heading', { level: 1, name: 'New post' });
+      expect(inspirationAuthorService.list).not.toHaveBeenCalled();
       expect(nav.getByRole('link', { name: 'Persona' })).toHaveTextContent(/^Persona$/);
     });
 
@@ -450,7 +449,6 @@ describe('The signed-in shell', () => {
     });
 
     it('leaves the Brief alone when the shortcut is pressed over a dialog', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       renderSignedIn('/new');
       const brief = await screen.findByLabelText('Brief');
       fireEvent.change(brief, { target: { value: 'half a thought' } });
@@ -464,7 +462,6 @@ describe('The signed-in shell', () => {
 
     it('keeps the Brief while it is being planned', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
       renderSignedIn('/new');
       fireEvent.change(await screen.findByLabelText('Brief'), {
