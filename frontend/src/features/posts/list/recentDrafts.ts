@@ -41,6 +41,18 @@ export function recordDraftOpened(id: string, now = Date.now()): void {
   }
 }
 
+/** Drops a Post from Recently opened, as once it is discarded. */
+export function forgetDraft(id: string, now = Date.now()): void {
+  try {
+    storage.set(
+      'recent-drafts',
+      read(now).filter((o) => o.id !== id),
+    );
+  } catch {
+    // Blocked storage keeps nothing to forget; a deleted Post is left out when the tab reads it.
+  }
+}
+
 /** The Posts under Recently opened, most recently opened first; some may no longer be Drafts. */
 export function recentDraftIds(now = Date.now()): string[] {
   return read(now).map((o) => o.id);

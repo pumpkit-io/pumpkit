@@ -85,6 +85,9 @@ by hand.
 - A post goes out once, so it has at most one scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
 failed post takes feedback: a scheduled or published one doesn't.
+- `delete_post` discards a draft for good, with every version and its media; its idea stays on \
+its brief, and the generations it used stay used. A scheduled, published or failed post is \
+refused, and so is one still being written. It can't be undone, so get the user's yes first.
 - Each post written and each feedback uses one generation of the user's allowance. Writing \
 that fails uses none. Each X post published uses one X post, each part of a thread and each \
 first reply counting as one. Write a new version only when the user asks for one. `get_usage` says what is \

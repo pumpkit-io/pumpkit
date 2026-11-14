@@ -297,6 +297,31 @@ async def delete(db: AsyncSession, storage: FileStorage, media: Media) -> None:
     await db.flush()
 
 
+async def delete_text_media(db: AsyncSession, *, post: Post) -> list[str]:
+    """
+    Delete the records of the Media on the Post's Text, which nothing else references while it is
+    a Draft, and answer their files' keys, for the caller to delete once this commits. Flushes.
+    """
+    held = [placed.media for placed in post.text_media]
+    await db.execute(sa.delete(TextMedia).where(TextMedia.post_id == post.id))
+    if held:
+        await db.execute(sa.delete(Media).where(Media.id.in_([m.id for m in held])))
+    await db.flush()
+    return [key for m in held for key in (m.file_key, m.preview_key) if key is not None]
+
+
+async def delete_files(storage: FileStorage, keys: list[str]) -> None:
+    """
+    Best effort, for files whose records are already deleted and committed: the publisher's file
+    sweep deletes what is left, since no record names it, once the database holds any Media.
+    """
+    for key in keys:
+        try:
+            await storage.delete(key)
+        except OSError:
+            logger.exception("Deleting the file %s failed", key)
+
+
 async def get_user_media(db: AsyncSession, *, user_id: str, media_id: str) -> Optional[Media]:
     """The User's Media, or None when it isn't theirs."""
     result = await db.execute(select(Media).where(Media.id == media_id, Media.user_id == user_id))

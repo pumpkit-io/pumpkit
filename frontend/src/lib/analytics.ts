@@ -212,6 +212,10 @@ export const EVENTS = {
     description:
       "Post page: saved the alt text of an image or GIF on a Part of the Post's Text, or of its Scheduled post's own copy. Props: kind (image | gif), cleared (boolean: saved empty), on (text | scheduled_post), source (web).",
   },
+  post_discarded: {
+    description:
+      'The Brief page or the Post page: discarded a Draft after confirming. Props: from (brief_page | post_page).',
+  },
   post_final_copied: {
     description:
       "Post page: copied the text on screen with the card's copy icon, every Part of it.",

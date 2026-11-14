@@ -711,6 +711,7 @@ def post_with(db, user) -> Callable[..., Awaitable[str]]:
             user_id=user.id, brief="Seeded", corpus_post_ids=[], created_at=now, text_media=[]
         )
         version = VersionAttempt(
+            user_id=post.user_id,
             post=post,
             sequence=1,
             format=format_of(parts, first_reply=first_reply),
@@ -739,6 +740,7 @@ def next_version(db) -> Callable[..., Awaitable[None]]:
         assert post is not None
         previous = post.attempts[-1]
         version = VersionAttempt(
+            user_id=post.user_id,
             post_id=post_id,
             sequence=previous.sequence + 1,
             format=format_of(parts, first_reply=first_reply),

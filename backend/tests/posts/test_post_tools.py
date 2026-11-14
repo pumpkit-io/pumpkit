@@ -357,6 +357,7 @@ async def test_attempts_through_the_web_routes_count_toward_the_hourly_attempt_l
     for sequence in range(1, 29):
         db.add(
             VersionAttempt(
+                user_id=earlier.user_id,
                 post_id=earlier.id,
                 sequence=sequence,
                 format="post",

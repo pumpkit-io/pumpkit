@@ -42,6 +42,7 @@ async def _attempts(db, user_id: str, start: datetime, count: int, status: str =
     for sequence in range(1, count + 1):
         db.add(
             VersionAttempt(
+                user_id=post.user_id,
                 post_id=post.id,
                 sequence=sequence,
                 version_number=sequence if status == "succeeded" else None,

@@ -49,7 +49,12 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     dismissFailedFeedback: vi.fn(),
     restoreVersion: vi.fn(),
     saveText: vi.fn(),
+    discard: vi.fn(),
   },
+}));
+vi.mock('@/services/briefService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/briefService')>()),
+  briefService: { plan: vi.fn(), get: vi.fn(), write: vi.fn() },
 }));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
@@ -101,6 +106,8 @@ import { TEXT_SAVE_PAUSE_MS, TEXT_SAVE_RETRY_MS } from '@/features/posts/text/te
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
+import { briefService, type Brief } from '@/services/briefService';
+import { recentDraftIds } from '@/features/posts/list/recentDrafts';
 import {
   postService,
   VersionNotWritten,
@@ -6376,5 +6383,108 @@ describe("A post among its brief's posts", () => {
 
     expect(await screen.findByText('Writing…')).toBeInTheDocument();
     expect(briefNav().getByText('2 of 4')).toBeInTheDocument();
+  });
+});
+
+describe('Discarding a draft from its page', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(postService.get).mockReset();
+    vi.mocked(postService.discard).mockReset().mockResolvedValue();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+    vi.mocked(briefService.get).mockReset();
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+    vi.mocked(track).mockClear();
+  });
+
+  /** The Brief of `post_01` once it is discarded, its one Idea offered again. */
+  const DISCARDED_ALONE: Brief = {
+    id: 'brief_01',
+    text: 'ship small things',
+    createdAt: '2026-10-10T12:00:30Z',
+    ideas: [{ id: 'idea_01', postingOrder: 1, wholeBrief: true, plan: null, post: null }],
+    generationsLeft: null,
+  };
+
+  async function confirmDiscard() {
+    fireEvent.click((await textCard()).getByRole('button', { name: 'Discard post' }));
+    const dialog = within(await screen.findByRole('alertdialog'));
+    expect(dialog.getByText('Discard this post?')).toBeInTheDocument();
+    expect(dialog.getByText('Its versions are deleted for good.')).toBeInTheDocument();
+    fireEvent.click(dialog.getByRole('button', { name: 'Discard' }));
+  }
+
+  it("asks first, then discards it and opens its brief, which offers the post's idea again", async () => {
+    vi.mocked(briefService.get).mockResolvedValue(DISCARDED_ALONE);
+    renderPost(postWith('the final text'));
+    await textCard();
+    expect(recentDraftIds()).toEqual(['post_01']);
+
+    await confirmDiscard();
+
+    await waitFor(() => expect(currentPath()).toBe('/briefs/brief_01'));
+    expect(postService.discard).toHaveBeenCalledWith('post_01');
+    expect(recentDraftIds()).toEqual([]);
+    expect(track).toHaveBeenCalledWith('post_discarded', { from: 'post_page' });
+  });
+
+  it('opens Drafts when its brief has nothing left to show', async () => {
+    vi.mocked(briefService.get).mockResolvedValue({ ...DISCARDED_ALONE, ideas: [] });
+    renderPost(postWith('the final text'));
+
+    await confirmDiscard();
+
+    await waitFor(() => expect(currentPath()).toBe('/posts/drafts'));
+  });
+
+  it('keeps the post when the User changes their mind', async () => {
+    renderPost(postWith('the final text'));
+
+    fireEvent.click((await textCard()).getByRole('button', { name: 'Discard post' }));
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Keep it' }),
+    );
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(postService.discard).not.toHaveBeenCalled();
+    expect(currentPath()).toBe('/posts/post_01');
+  });
+
+  it('says why when discarding is refused, and stays on the post', async () => {
+    vi.mocked(postService.discard).mockRejectedValue(
+      apiError(409, "This post is still being written, so it can't be discarded yet."),
+    );
+    renderPost(postWith('the final text'));
+
+    await confirmDiscard();
+
+    const dialog = within(screen.getByRole('alertdialog'));
+    expect(await dialog.findByRole('alert')).toHaveTextContent(
+      "This post is still being written, so it can't be discarded yet.",
+    );
+    fireEvent.click(dialog.getByRole('button', { name: 'Keep it' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(currentPath()).toBe('/posts/post_01');
+    expect(recentDraftIds()).toEqual(['post_01']);
+  });
+
+  it('disables discard while a version is written', async () => {
+    renderPost({ ...postWith('the final text'), writing: true });
+
+    expect((await textCard()).getByRole('button', { name: 'Discard post' })).toBeDisabled();
+  });
+
+  it.each([
+    ['scheduled', SCHEDULED],
+    ['published', { ...SCHEDULED, state: 'published' as const }],
+    ['failed', { ...SCHEDULED, state: 'failed' as const }],
+  ])('offers no discard on a %s post', async (_, scheduledPost) => {
+    renderPost(withScheduledPost(scheduledPost));
+
+    expect(
+      (await textCard()).queryByRole('button', { name: 'Discard post' }),
+    ).not.toBeInTheDocument();
   });
 });

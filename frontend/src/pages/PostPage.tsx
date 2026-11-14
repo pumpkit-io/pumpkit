@@ -5,6 +5,7 @@ import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { BriefNav } from '@/features/posts/BriefNav';
 import { CopyTextButton } from '@/features/posts/CopyTextButton';
+import { DiscardPostButton } from '@/features/posts/DiscardPostButton';
 import { HoverLabels } from '@/features/posts/HoverLabel';
 import { opensEditing } from '@/features/posts/edit/scheduledPostEdit';
 import { ScheduledPostEditor } from '@/features/posts/edit/ScheduledPostEditor';
@@ -39,6 +40,7 @@ import { Topbar } from '@/features/topbar/Topbar';
 import { ReconnectXForMediaDialog } from '@/features/xConnection/ReconnectXForMediaDialog';
 import { useXConnectionContext } from '@/features/xConnection/useXConnectionContext';
 import { useXConnectionNotice } from '@/features/xConnection/xConnectionReturn';
+import { briefPosts, briefService, notWrittenIdeas } from '@/services/briefService';
 import { FORMAT_POST, type Format, type PostDetail } from '@/services/postService';
 import { usePosting } from '@/features/scheduledPosts/usePosting';
 import type { ScheduledPost } from '@/services/scheduledPostService';
@@ -132,6 +134,18 @@ function DraftPostTo({
       onDone={onScheduled}
     />
   );
+}
+
+/** Where a discarded Post's page goes: its Brief's page while that has Posts or Ideas to show. */
+async function afterDiscard(briefId: string): Promise<string> {
+  try {
+    const brief = await briefService.get(briefId);
+    if (briefPosts(brief).length > 0 || notWrittenIdeas(brief).length > 0)
+      return `/briefs/${briefId}`;
+  } catch {
+    // The Drafts tab, where the Post was listed, is always there to go to.
+  }
+  return '/posts/drafts';
 }
 
 /** The Text's Parts with the Media now on them, for "Post to…" to check and show. */
@@ -296,6 +310,15 @@ function LoadedPost({
           onRestore={can.restore ? (n) => controller.restore(n) : undefined}
         />
         <CopyTextButton text={copiedText(parts)} disabled={text.writing} />
+        {post.status === 'draft' && (
+          <DiscardPostButton
+            icon
+            postId={post.id}
+            from="post_page"
+            disabled={text.writing}
+            onDiscarded={async () => navigate(await afterDiscard(post.briefId), { replace: true })}
+          />
+        )}
       </div>
     </HoverLabels>
   );

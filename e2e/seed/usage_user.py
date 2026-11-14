@@ -91,6 +91,7 @@ async def main() -> None:
         db.add(post)
         for number in range(1, used + 1):
             version = VersionAttempt(
+                user_id=post.user_id,
                 post=post,
                 sequence=number,
                 version_number=number,
@@ -110,6 +111,7 @@ async def main() -> None:
             created_at=anchor - timedelta(days=1),
         )
         version = VersionAttempt(
+            user_id=scheduled.user_id,
             post=scheduled,
             sequence=1,
             version_number=1,
