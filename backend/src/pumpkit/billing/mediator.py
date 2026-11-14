@@ -1,6 +1,6 @@
 import hashlib
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -109,6 +109,7 @@ async def get_billing_me(
         may_arrange_paid_signup=bool(
             coupon_service.coupons_available(settings)
             and free
+            and paid_signups.arrangeable(free.ends_at, now=moment)
             and not subscription
             and not pending_operations
             and not signup_operations
@@ -554,8 +555,7 @@ _TOP_UP_NUDGES = {
 def _is_subscription_nudge(event: WebhookEvent) -> bool:
     """Whether the event says a customer's Subscriptions may have changed."""
     return event.type.startswith("customer.subscription.") or (
-        event.type
-        in {"checkout.session.completed", "setup_intent.succeeded", "setup_intent.canceled"}
+        event.type == "checkout.session.completed"
     )
 
 
@@ -956,64 +956,8 @@ async def _recover_paid_signup(
         answer = await paid_signups.reconcile(
             db, gateway, user=user, operation=operation, clock=clock, cancel_dispatch=True
         )
-    elif operation.status == "pending" and operation.creation_state == "ready":
-        answer = await _dispatch_paid_signup(
-            db, gateway, user=user, operation=operation, clock=clock, prior_unknown=False
-        )
-    elif (
-        operation.status == "pending"
-        and operation.creation_state == "uncertain"
-        and operation.cancel_requested_at is None
-        and operation.creation_attempted_at is not None
-        and clock() < as_utc(operation.creation_attempted_at) + timedelta(hours=23)
-        and clock() < as_utc(operation.first_payment_at)
-    ):
-        answer = await _dispatch_paid_signup(
-            db, gateway, user=user, operation=operation, clock=clock, prior_unknown=True
-        )
     await db.commit()
     return answer
-
-
-async def _dispatch_paid_signup(
-    db: AsyncSession,
-    gateway: BillingGateway,
-    *,
-    user: User,
-    operation: PaidSignup,
-    clock: Clock,
-    prior_unknown: bool,
-) -> PaidSignupResponse:
-    operation.creation_state = "uncertain"
-    operation.creation_attempted_at = operation.creation_attempted_at or clock()
-    operation.creation_dispatch_count += 1
-    dispatch_count = operation.creation_dispatch_count
-    # This checkpoint precedes dispatch; the generation prevents a stale owner from sending after a newer claim.
-    await db.commit()
-    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
-    operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)
-    if operation.status != "pending" or operation.creation_dispatch_count != dispatch_count:
-        return paid_signups.response(operation)
-    if operation.cancel_requested_at is not None or as_utc(operation.first_payment_at) <= clock():
-        if not prior_unknown:
-            operation.creation_state = "refused"
-            return paid_signups.refuse(
-                operation,
-                now=clock(),
-                detail="No subscription request was sent. Review a fresh paid offer if you want to subscribe.",
-            )
-        return await paid_signups.reconcile(
-            db, gateway, user=user, operation=operation, clock=clock
-        )
-    return await paid_signups.reconcile(
-        db,
-        gateway,
-        user=user,
-        operation=operation,
-        clock=clock,
-        dispatch=True,
-        prior_unknown=prior_unknown,
-    )
 
 
 async def preview_plan_change(

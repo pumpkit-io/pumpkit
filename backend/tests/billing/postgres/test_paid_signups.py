@@ -24,7 +24,7 @@ async def test_independent_duplicate_recovery_and_provider_nudge_create_one_subs
     db_engine, db_session_maker, authed_client, coupons, user, fake_billing
 ):
     free, request, opened = await _open(authed_client, coupons)
-    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    fake_billing.complete_paid_signup_checkout(opened["session_id"])
     async with db_session_maker() as control:
         await control.scalar(select(User).where(User.id == user.id).with_for_update())
         tasks = [
@@ -56,7 +56,7 @@ async def test_deletion_and_recovery_share_user_lock_and_cannot_orphan_future_pa
     db_engine, db_session_maker, authed_client, coupons, user, fake_billing
 ):
     _, request, opened = await _open(authed_client, coupons)
-    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    fake_billing.complete_paid_signup_checkout(opened["session_id"])
 
     async def delete():
         async with db_session_maker() as deletion_db:
@@ -78,7 +78,7 @@ async def test_cancellation_racing_recovery_removes_future_payment_and_retains_f
     db_engine, db_session_maker, authed_client, coupons, user, fake_billing
 ):
     free, request, opened = await _open(authed_client, coupons)
-    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    fake_billing.complete_paid_signup_checkout(opened["session_id"])
     async with db_session_maker() as control:
         await control.scalar(select(User).where(User.id == user.id).with_for_update())
         tasks = [
@@ -100,8 +100,7 @@ async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletio
     db_engine, db_session_maker, authed_client, coupons, user, fake_billing, fixed_clock, cancel
 ):
     free, request, opened = await _open(authed_client, coupons)
-    fake_billing.complete_paid_signup_setup(opened["session_id"])
-    fake_billing.delay_paid_signup_creation = True
+    fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
     ] == "pending"
@@ -124,8 +123,7 @@ async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletio
         tasks = [asyncio.create_task(action), asyncio.create_task(delete())]
         results = await blocked_requests(db_engine, control, tasks, 2)
     assert results[0].json()["status"] == "pending"
-    assert len(fake_billing.paid_signup_create_attempts) == 1
-    fake_billing.complete_pending_paid_signup(fake_billing.paid_signup_create_attempts[0])
+    fake_billing.list_paid_signup_subscription(opened["session_id"])
     async with db_session_maker() as control:
         await control.scalar(select(User).where(User.id == user.id).with_for_update())
         tasks = [
@@ -141,10 +139,10 @@ async def test_late_provider_write_cannot_escape_pending_cancellation_or_deletio
             ),
         ]
         results = await blocked_requests(db_engine, control, tasks, 2)
-    assert results[0].json()["status"] == "refused"
     states = await fake_billing.list_subscriptions(customer_id="cus_fake_1")
-    assert len(states) == 1 and states[0].status == "canceled"
-    assert len(fake_billing.paid_signup_create_attempts) == 1
+    # Without a cancellation, the Checkout the User completed in time stands.
+    assert results[0].json()["status"] == ("refused" if cancel else "completed")
+    assert len(states) == 1 and states[0].status == ("canceled" if cancel else "active")
 
 
 @pytest.mark.parametrize("after_mutation", [True, False])
@@ -160,7 +158,7 @@ async def test_completed_cancellation_checkpoint_keeps_paid_access_and_excludes_
     after_mutation,
 ):
     free, request, opened = await _open(authed_client, coupons)
-    fake_billing.complete_paid_signup_setup(opened["session_id"])
+    fake_billing.complete_paid_signup_checkout(opened["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
     ] == "completed"
