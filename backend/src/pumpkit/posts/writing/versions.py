@@ -8,7 +8,7 @@ gets the system prompt first and the corpus second, as in v6, so the per-call pa
 prefix that stays the same across a Post's Versions.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict
@@ -47,6 +47,7 @@ from pumpkit.posts.writing.prompts.sketch_post import sketch_post_prompt
 from pumpkit.posts.writing.prompts.sketch_thread import sketch_thread_prompt
 from pumpkit.posts.writing.scrub import scrub
 from pumpkit.posts.writing.starting_text import StartingText, hand_written_sentences
+from pumpkit.x_connection.x_length import x_weighted_length
 
 
 class _HookedWriting(BaseModel):
@@ -134,6 +135,7 @@ class EarlierVersion:
     feedback: Optional[str]
     format: Format
     parts: list[str]
+    first_reply: bool
     starting_text: Optional[StartingText] = None
 
 
@@ -163,8 +165,8 @@ class WrittenVersion:
     # Every sketch call and the merge's reviews and reasoning. Only kept, never shown.
     sketches: Optional[list[dict]] = None
     merge: Optional[dict] = None
-    # The writing doesn't put a first reply on the Text yet, so it is dropped when recorded.
-    first_reply: Optional[str] = None
+    # Whether the last of `parts` is a single post's first reply (ADR 0027).
+    first_reply: bool = False
 
 
 def system_message(prompt: str) -> dict:
@@ -202,7 +204,7 @@ def humanizer_messages(
     """The first Version's humanizer call, as v6 sent it: the Brief, then the scrubbed Sketch last."""
     return [
         *_humanizer_prefix(corpus, brief, format, char_limit),
-        user_message(format_text(format, sketch_parts)),
+        user_message(format_text(format, sketch_parts, first_reply=False)),
     ]
 
 
@@ -222,21 +224,23 @@ def revision_humanizer_messages(
     User wrote by hand. The text the Feedback was given on, the Starting text or else the latest
     Version's, keeps its own Format.
     """
-    previous = (
-        (earlier[-1].format, earlier[-1].parts)
-        if starting is None
-        else (starting.format, starting.parts)
-    )
+    previous = earlier[-1] if starting is None else starting
     messages = _humanizer_prefix(corpus, brief, format, char_limit)
     earlier_feedback = [v.feedback for v in earlier if v.feedback is not None]
     if earlier_feedback:
         messages.append(user_message(earlier_feedback_message(earlier_feedback)))
-    messages.append(user_message(previous_final_message(*previous)))
-    messages.append(user_message(latest_feedback_message(feedback, previous[0], format)))
+    messages.append(
+        user_message(
+            previous_final_message(
+                previous.format, previous.parts, first_reply=previous.first_reply
+            )
+        )
+    )
+    messages.append(user_message(latest_feedback_message(feedback, previous.format, format)))
     written_by_hand = hand_written(earlier, starting)
     if written_by_hand:
         messages.append(user_message(hand_written_message(written_by_hand, format)))
-    messages.append(user_message(revised_sketch_message(previous[0], format, sketch_parts)))
+    messages.append(user_message(revised_sketch_message(previous.format, format, sketch_parts)))
     return messages
 
 
@@ -261,13 +265,23 @@ def _framed_feedback(
     after = earlier[-1]
     if starting is None:
         return feedback_message(feedback, after.number, after.format, format)
-    same = [v.number for v in earlier if (v.format, v.parts) == (starting.format, starting.parts)]
+    shown = (starting.format, starting.parts, starting.first_reply)
+    same = [v.number for v in earlier if (v.format, v.parts, v.first_reply) == shown]
     if same:
         back_to = starting.version_number if starting.version_number in same else same[-1]
+        # Only a first reply, which the model never sees, made the Text differ from this Version.
+        if back_to == after.number:
+            return feedback_message(feedback, after.number, after.format, format)
         return went_back_message(feedback, after.number, back_to, starting.format, format)
     began_from = None if starting.version_number == after.number else starting.version_number
     return changed_message(
-        feedback, after.number, began_from, starting.format, starting.parts, format
+        feedback,
+        after.number,
+        began_from,
+        starting.format,
+        starting.parts,
+        format,
+        first_reply=starting.first_reply,
     )
 
 
@@ -305,7 +319,7 @@ def replayed_versions(
                 version.feedback, earlier[:index], version.starting_text, version.format
             )
             messages.append(user_message(framed))
-        content = format_text(version.format, version.parts)
+        content = format_text(version.format, version.parts, first_reply=version.first_reply)
         messages.append({"role": "assistant", "content": content})
     messages.append(user_message(_framed_feedback(feedback, earlier, starting, format)))
     return messages
@@ -368,7 +382,14 @@ async def write_next_version(
     Version, for an X account whose posts hold up to
     `char_limit` characters. Raises whatever the LLM port raises, or an
     `LLMError` for a Thread of the wrong length; nothing is stored here.
+    A first reply stays out of the calls: a single post keeps the one its Feedback was given on
+    as it is, and a Thread ends with its text (ADR 0027). A blank one is dropped, as the single
+    post writing drops one.
     """
+    shown = earlier[-1] if starting is None else starting
+    kept_reply = shown.parts[-1] if shown.first_reply and shown.parts[-1].strip() else None
+    earlier = [_without_first_reply(v) for v in earlier]
+    starting = _without_first_reply(starting) if starting is not None else None
     revised = await llm.structured(
         model=settings.LLM_REVISING_MODEL,
         messages=revision_messages(corpus, brief, earlier, starting, feedback, format, char_limit),
@@ -379,7 +400,32 @@ async def write_next_version(
     messages = revision_humanizer_messages(
         corpus, brief, earlier, starting, feedback, format, char_limit, sketch_parts
     )
-    return await _humanize(llm, format, messages, revised, sketch_parts, _hook(revised.parsed))
+    written = await _humanize(llm, format, messages, revised, sketch_parts, _hook(revised.parsed))
+    if kept_reply is None:
+        return written
+    if format == FORMAT_THREAD:
+        return replace(written, parts=_ending_with(written.parts, scrub(kept_reply), char_limit))
+    return replace(written, parts=[*written.parts, kept_reply], first_reply=True)
+
+
+def _ending_with(parts: list[str], text: str, char_limit: int) -> list[str]:
+    """
+    A Thread's Parts with `text` after its last Part, or as a Part of its own when the last has no
+    room for it. A Thread with no Part to spare takes it over the limit, which is flagged, not refused.
+    """
+    joined = f"{parts[-1]}\n\n{text}"
+    if x_weighted_length(joined) > char_limit and len(parts) < THREAD_MAX_PARTS:
+        return [*parts, text]
+    return [*parts[:-1], joined]
+
+
+def _without_first_reply[T: (EarlierVersion, StartingText)](text: T) -> T:
+    """`text` with no first reply, which the pumpkit-v6 prompts have no place for."""
+    if isinstance(text, EarlierVersion) and text.starting_text is not None:
+        text = replace(text, starting_text=_without_first_reply(text.starting_text))
+    if not text.first_reply:
+        return text
+    return replace(text, parts=text.parts[:-1], first_reply=False)
 
 
 def _hook(written: _HookedWriting) -> Hook:

@@ -105,6 +105,7 @@ function item(id: string, parts: string[], extra: Partial<PostListItem> = {}): P
     status: 'scheduled',
     parts,
     format: parts.length > 1 ? 'thread' : 'post',
+    firstReply: false,
     versionCount: 1,
     latestVersionAt: at(-1, 15),
     scheduledPost: summary(),
@@ -265,6 +266,26 @@ describe('Posts page', () => {
       expect(screen.getByText('Next to go out first.')).toBeInTheDocument();
     });
 
+    it('reads a single post with a first reply as one, and names its first reply', async () => {
+      vi.mocked(postService.list).mockResolvedValue(
+        page([
+          item('post_01', ['Try the calculator.', 'Sign up: pumpkit.io/calc'], {
+            format: 'post',
+            firstReply: true,
+          }),
+        ]),
+      );
+      renderSignedIn('/posts/scheduled');
+
+      const reply = await row('Try the calculator.');
+      expect(reply.getByText(/Single post · first reply · Your profile/)).toBeInTheDocument();
+      fireEvent.click(reply.getByRole('button', { name: /Show/ }));
+      expect(await reply.findByRole('listitem', { name: 'First reply' })).toHaveTextContent(
+        'Sign up: pumpkit.io/calc',
+      );
+      expect(reply.getByRole('listitem', { name: 'Post' })).toBeInTheDocument();
+    });
+
     it('says when a Post is being published', async () => {
       vi.mocked(postService.list).mockResolvedValue(
         page([
@@ -312,6 +333,7 @@ describe('Posts page', () => {
         textMedia: [],
         text: {
           format: 'post',
+          firstReply: false,
           parts: [{ text: 'Ship small.', charCount: 11, charLimit: 280 }],
           versionNumber: 1,
           edited: false,
@@ -322,6 +344,7 @@ describe('Posts page', () => {
             number: 1,
             feedback: null,
             format: 'post',
+            firstReply: false,
             parts: [{ text: 'Ship small.', charCount: 11, charLimit: 280 }],
             createdAt: '2026-10-10T12:00:30Z',
           },
@@ -329,6 +352,7 @@ describe('Posts page', () => {
         scheduledPost: {
           id: 'scheduled_post_01',
           parts: [{ text: 'Ship small.', live: false, xPostUrl: null, media: [] }],
+          firstReply: false,
           state: 'scheduled',
           publishAt: at(1, 9),
           publishedAt: null,
@@ -574,12 +598,13 @@ describe('Posts page', () => {
         id,
         brief: 'ship small things',
         plan: null,
-        text: { format: 'post', parts: [], versionNumber: 2, edited: false },
+        text: { format: 'post', firstReply: false, parts: [], versionNumber: 2, edited: false },
         versions: [1, 2].map((number) => ({
           id: `${id}_v${number}`,
           number,
           feedback: number === 1 ? null : 'punchier',
           format: 'post' as const,
+          firstReply: false,
           parts: [{ text: `${text} v${number}`, charCount: 10, charLimit: 280 }],
           createdAt: at(0, 7 + number),
         })),

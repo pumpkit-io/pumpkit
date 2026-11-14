@@ -10,6 +10,7 @@ function version(number: number, texts: string[], feedback: string | null = null
     number,
     feedback: number === 1 ? null : (feedback ?? 'punchier'),
     format: texts.length > 1 ? 'thread' : 'post',
+    firstReply: false,
     parts: texts.map((text) => ({ text, charCount: text.length, charLimit: 280 })),
     createdAt: `2026-10-10T0${number}:00:00Z`,
   };
@@ -60,7 +61,7 @@ describe('TextController', () => {
       expect(controller.snapshot().save).toEqual({ kind: 'pending' });
       expect(server.callsOf('saveText')).toEqual([]);
       await clock.advance(TEXT_SAVE_PAUSE_MS);
-      expect(server.callsOf('saveText')).toEqual([[['the first text, edited']]]);
+      expect(server.callsOf('saveText')).toEqual([[['the first text, edited'], false]]);
       expect(server.textParts).toEqual(['the first text, edited']);
       expect(controller.snapshot().save).toEqual({ kind: 'saved' });
     });
@@ -73,7 +74,7 @@ describe('TextController', () => {
       controller.edit(['the first text, again'], 'typing');
       await clock.advance(TEXT_SAVE_PAUSE_MS);
 
-      expect(server.callsOf('saveText')).toEqual([[['the first text, again']]]);
+      expect(server.callsOf('saveText')).toEqual([[['the first text, again'], false]]);
       expect(track.mock.calls.filter(([event]) => event === 'post_text_edited')).toEqual([
         ['post_text_edited', { format: 'post', part_count: 1 }],
       ]);
@@ -92,6 +93,7 @@ describe('TextController', () => {
       const { server, controller } = open(draft(ONE));
       server.port.saveText = async (parts) => ({
         format: 'post',
+        firstReply: false,
         parts: parts.map((text) => ({ text, charCount: 99, charLimit: 280 })),
         versionNumber: 1,
         edited: true,
@@ -122,8 +124,8 @@ describe('TextController', () => {
       const { server, controller, texts } = open(draft(TWO));
       const save = server.hold('saveText');
       const counted = server.port.saveText;
-      server.port.saveText = async (parts) => ({
-        ...(await counted(parts)),
+      server.port.saveText = async (parts, firstReply) => ({
+        ...(await counted(parts, firstReply)),
         parts: parts.map((text) => ({ text, charCount: 99, charLimit: 280 })),
       });
       controller.edit(['edited'], 'paste');
@@ -212,7 +214,10 @@ describe('TextController', () => {
       controller.dispose();
       await save.release();
 
-      expect(server.callsOf('saveText')).toEqual([[['first']], [['first, then more']]]);
+      expect(server.callsOf('saveText')).toEqual([
+        [['first'], false],
+        [['first, then more'], false],
+      ]);
     });
   });
 
@@ -382,7 +387,7 @@ describe('TextController', () => {
       expect(texts()).toEqual(['the first text, mine']);
       await clock.advance(TEXT_SAVE_PAUSE_MS);
 
-      expect(server.callsOf('saveText')).toEqual([[['the first text, mine']]]);
+      expect(server.callsOf('saveText')).toEqual([[['the first text, mine'], false]]);
       expect(server.text).toMatchObject({ versionNumber: 1, edited: true });
     });
 

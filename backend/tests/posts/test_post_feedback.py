@@ -238,6 +238,7 @@ def _starting(text: str, version_number: int) -> dict:
     return {
         "format": "post",
         "parts": [{"text": text, "char_count": len(text), "char_limit": X_POST_MAX_CHARS}],
+        "first_reply": False,
         "version_number": version_number,
     }
 
@@ -405,21 +406,6 @@ async def test_the_humanizer_gets_every_earlier_feedback_in_order_framed_as_done
         _user(_latest_feedback("shorter")),
         _user(_to_rewrite("revised 4")),
     ]
-
-
-async def test_a_first_reply_the_revise_call_writes_reaches_the_humanizer_but_not_the_text(
-    client, db, post_id, fake_llm
-):
-    fake_llm.standing[REVISED_POST] = revised("The post.", first_reply="Repo: [link]")
-    fake_llm.replies = [{"post": "The post.", "first_reply": "Repo: [link]"}]
-
-    response = await _feedback(client, post_id, "point to the repo")
-
-    [humanizer] = _calls(fake_llm, HUMANIZED_POST)
-    assert humanizer.messages[-1] == _user(
-        _to_rewrite("The post.") + "\n\n<first_reply>\nRepo: [link]\n</first_reply>"
-    )
-    assert [part["text"] for part in response.json()["parts"]] == ["The post."]
 
 
 async def test_a_version_stores_its_feedback_the_revised_post_the_reasoning_cta_models_and_usage(

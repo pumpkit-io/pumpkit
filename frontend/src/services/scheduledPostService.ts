@@ -52,8 +52,10 @@ export interface ScheduledPostPart {
 /** A text set to be published on the User's X account, with its own copy of the text. */
 export interface ScheduledPost {
   id: string;
-  /** In the order they go out; one Part is a single X post. */
+  /** In the order they go out; one Part, or one and its first reply, is a single X post. */
   parts: ScheduledPostPart[];
+  /** Whether the last Part is the single post's first reply, posted as a reply to it. */
+  firstReply: boolean;
   state: ScheduledPostState;
   publishAt: string;
   publishedAt: string | null;
@@ -72,6 +74,7 @@ export interface ScheduledPost {
 export interface ScheduledPostApi {
   id: string;
   parts: { text: string; live: boolean; x_post_url: string | null; media: MediaApi[] }[];
+  first_reply: boolean;
   state: ScheduledPostState;
   publish_at: string;
   published_at: string | null;
@@ -91,6 +94,7 @@ export const toScheduledPost = (p: ScheduledPostApi): ScheduledPost => ({
     xPostUrl: part.x_post_url,
     media: part.media.map(toMedia),
   })),
+  firstReply: p.first_reply,
   state: p.state,
   publishAt: p.publish_at,
   publishedAt: p.published_at,

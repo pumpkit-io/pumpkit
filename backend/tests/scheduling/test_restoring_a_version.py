@@ -72,6 +72,7 @@ async def test_restoring_a_version_makes_it_the_text(client, post):
     restored = {
         "format": "post",
         "parts": [{**ONE, "media": []}],
+        "first_reply": False,
         "version_number": 1,
         "edited": False,
     }
@@ -155,6 +156,7 @@ async def test_the_restore_version_tool_answers_with_the_text(client, post, mcp)
     assert result["structuredContent"] == {
         "format": "post",
         "parts": [{**ONE, "media": []}],
+        "first_reply": False,
         "version_number": 1,
         "edited": False,
     }

@@ -16,13 +16,22 @@ class StartingText:
     parts: list[str]
     # The Version the Text came from, the last one written or restored before the Feedback.
     version_number: int
+    # Whether the last of `parts` is a single post's first reply (ADR 0027).
+    first_reply: bool
 
 
 def starting_text(
-    text: StartingText, previous_format: Format, previous_parts: list[str]
+    text: StartingText,
+    previous_format: Format,
+    previous_parts: list[str],
+    previous_first_reply: bool,
 ) -> Optional[StartingText]:
     """The Text as a Starting text, or None when it is the Version before as written."""
-    if text.format == previous_format and text.parts == previous_parts:
+    if (text.format, text.parts, text.first_reply) == (
+        previous_format,
+        previous_parts,
+        previous_first_reply,
+    ):
         return None
     return text
 

@@ -111,7 +111,8 @@ async def schedule_post(
     """
     Schedule the post's text on the user's connected X account for `publish_at`, an ISO 8601
     time with its UTC offset, on a whole minute and at least a minute from now. A thread keeps
-    every part in order. A post goes out once: it has at most one scheduled post, so to change
+    every part in order, and a first reply goes out as a reply to its post. A text that still
+    holds the `[link]` placeholder is refused. A post goes out once: it has at most one scheduled post, so to change
     one already scheduled, edit it, or delete it first. The post goes to the user's profile, or
     to the community whose URL or ID is in `community`. In a community, `share_with_followers`
     also shows it to the user's followers.
@@ -150,7 +151,8 @@ async def post_now(
     """
     Publish the post's text on the user's connected X account right away. Show the user the
     exact text of every part and get their yes first. A thread keeps every part in order, each
-    replying to the one before. A post goes out once: one that already has a scheduled post is
+    replying to the one before, and a first reply replies to its post. A text that still holds
+    the `[link]` placeholder is refused. A post goes out once: one that already has a scheduled post is
     refused. The post goes to the user's profile, or to the community whose URL or ID is in
     `community`. In a community, `share_with_followers` also shows it to the user's followers.
     A post with a GIF or a video comes back scheduled before its media is uploaded: Pumpkit then
@@ -278,6 +280,7 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     Read one of the user's posts: its brief, its text (the text meant for X, with `version_number`,
     the version it came from, and `edited`, whether the user changed it by hand since) and every
     version in order, each with the feedback that made it, its text, each part's character count,
+    `first_reply` (whether its last part is the single post's first reply),
     when it was written and its `starting_text`: the text that feedback was given on, with the
     version it came from, when it wasn't the version before as written. `status` is "draft" with no
     scheduled post, else "scheduled", "published" or "failed" from its one scheduled post, returned

@@ -12,6 +12,7 @@ import type { PostListItem } from '@/services/postService';
 import type { PostPageState } from '../edit/scheduledPostEdit';
 import { formatWhen } from '../panels/panelFacts';
 import { DestinationName, Facts } from '../panels/panelParts';
+import { partLabel, shapeName } from '../postShape';
 import { postTitle } from '../postStatus';
 import { rowMoment, rowWhen } from './rowWhen';
 
@@ -20,7 +21,7 @@ import { rowMoment, rowWhen } from './rowWhen';
 const EDIT_STATE: PostPageState = { edit: true };
 
 function shape(post: PostListItem): string {
-  return post.format === 'thread' ? `Thread · ${post.parts.length} parts` : 'Single post';
+  return shapeName(post.parts.length, post.firstReply);
 }
 
 /** What a row says under its title, by the Post's status. */
@@ -76,14 +77,13 @@ function Expanded({
 }) {
   const navigate = useNavigate();
   const scheduled = post.scheduledPost;
-  const thread = post.parts.length > 1;
   return (
     <div id={id} className="space-y-3 pt-2">
       <ol className="space-y-2">
         {post.parts.map((text, i) => (
           <li
             key={i}
-            aria-label={thread ? `Part ${i + 1} of ${post.parts.length}` : 'Post'}
+            aria-label={partLabel(i, post.parts.length, post.firstReply)}
             className="space-y-1 rounded-lg bg-muted/60 px-3 py-2"
           >
             <p className="whitespace-pre-wrap break-words font-sans text-sm text-foreground">

@@ -56,6 +56,7 @@ export function draftListItem(post: PostDetail): PostListItem | null {
     status: post.status,
     parts: latest.parts.map((p) => p.text),
     format: latest.format,
+    firstReply: latest.firstReply,
     versionCount: post.versions.length,
     latestVersionAt: latest.createdAt,
     scheduledPost: null,

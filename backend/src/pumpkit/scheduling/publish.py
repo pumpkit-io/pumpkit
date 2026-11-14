@@ -370,7 +370,9 @@ async def delete_published_files(storage: FileStorage, media: list[Media]) -> No
 
 
 def _subject(scheduled_post: ScheduledPost, part: ScheduledPostPart) -> Optional[str]:
-    return part_name(part.position + 1, len(scheduled_post.parts))
+    return part_name(
+        part.position + 1, len(scheduled_post.parts), first_reply=scheduled_post.first_reply
+    )
 
 
 def _not_published(subject: Optional[str], why: str) -> str:
@@ -414,7 +416,7 @@ def _next_attempt_at(scheduled_post: ScheduledPost, *, now: datetime) -> Optiona
 
 def _shape(scheduled_post: ScheduledPost) -> dict[str, object]:
     return {
-        "format": format_of(scheduled_post.parts),
+        "format": format_of(scheduled_post.parts, first_reply=scheduled_post.first_reply),
         "part_count": len(scheduled_post.parts),
         "has_media": bool(scheduled_post.media),
     }

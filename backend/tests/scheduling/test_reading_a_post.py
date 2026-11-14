@@ -66,6 +66,7 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
         "text": {
             "format": "post",
             "parts": [{**one, "media": []}],
+            "first_reply": False,
             "version_number": 1,
             "edited": False,
         },
@@ -76,6 +77,7 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
                 "feedback": None,
                 "format": "post",
                 "parts": [one],
+                "first_reply": False,
                 "starting_text": None,
                 "created_at": "2026-10-10T12:00:30Z",
             }
@@ -100,6 +102,7 @@ async def test_feedback_makes_the_new_version_the_text(client, post, fake_llm):
             {"text": "Part one.", "char_count": 9, "char_limit": X_POST_MAX_CHARS, "media": []},
             {"text": "Part two.", "char_count": 9, "char_limit": X_POST_MAX_CHARS, "media": []},
         ],
+        "first_reply": False,
         "version_number": 2,
         "edited": False,
     }
@@ -216,6 +219,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
         "text": {
             "format": "post",
             "parts": [{**one, "media": []}],
+            "first_reply": False,
             "version_number": 1,
             "edited": False,
         },
@@ -226,6 +230,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
                 "feedback": None,
                 "format": "post",
                 "parts": [one],
+                "first_reply": False,
                 "starting_text": None,
                 "created_at": "2026-10-10T12:00:30Z",
             }

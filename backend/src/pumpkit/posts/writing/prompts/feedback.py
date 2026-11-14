@@ -35,6 +35,8 @@ def changed_message(
     previous: Format,
     parts: list[str],
     format: Format,
+    *,
+    first_reply: bool,
 ) -> str:
     """
     Feedback on a Text the User changed by hand, from the Version just written or, with
@@ -47,10 +49,13 @@ def changed_message(
         else f"I went back to Version {began_from} and changed it to:"
     )
     ask = _ask(feedback, f"my {noun} above", previous, format)
-    return (
-        f"That was Version {after}. {went_back}\n\n"
-        f"<{noun}>\n{format_text(previous, parts)}\n</{noun}>\n\n{ask}"
+    # A post with its first reply comes tagged already, as the conversation shows its Versions.
+    text = (
+        format_text(previous, parts, first_reply=True)
+        if first_reply
+        else f"<{noun}>\n{format_text(previous, parts, first_reply=False)}\n</{noun}>"
     )
+    return f"That was Version {after}. {went_back}\n\n{text}\n\n{ask}"
 
 
 def _ask(feedback: str, subject: str, previous: Format, format: Format) -> str:

@@ -86,6 +86,15 @@ def _storable(value: Any) -> Any:
     return value
 
 
+def _with_first_reply(post: str, first_reply: Optional[str], *, kept: bool) -> list[str]:
+    """
+    The post, then its first reply when the humanizer kept one. A reply it made up for a post that
+    had none is dropped, as in v5, and so is one the scrub leaves blank.
+    """
+    reply = _clean(first_reply) if first_reply and kept else ""
+    return [post, reply] if reply else [post]
+
+
 def _usage(result: StructuredResult) -> Optional[dict]:
     return None if result.usage is None else result.usage.raw
 
@@ -189,17 +198,12 @@ async def write_post(llm: LLM, inputs: PostInputs, *, user_id: str) -> WrittenVe
     post = _clean(humanized.parsed.post)
     if not post:
         raise LLMError("The humanizer call wrote a blank post")
-    # A reply the humanizer made up for a post that had none is dropped, as in v5.
-    first_reply = (
-        _clean(humanized.parsed.first_reply)
-        if humanized.parsed.first_reply and merged_reply
-        else None
-    )
+    parts = _with_first_reply(post, humanized.parsed.first_reply, kept=bool(merged_reply))
 
     return WrittenVersion(
         format=FORMAT_POST,
-        sketch_parts=[merged_post],
-        parts=[post],
+        sketch_parts=[merged_post, merged_reply] if merged_reply else [merged_post],
+        parts=parts,
         sketch_model=merged.model,
         humanizing_model=humanized.model,
         sketch_usage=_usage(merged),
@@ -215,7 +219,7 @@ async def write_post(llm: LLM, inputs: PostInputs, *, user_id: str) -> WrittenVe
                 "first_reply": merged_reply,
             }
         ),
-        first_reply=first_reply or None,
+        first_reply=len(parts) > 1,
     )
 
 
@@ -282,7 +286,9 @@ def revision_humanizer_messages(
     v5's revision humanizer, plus Pumpkit's message of the sentences the User wrote by hand. The
     post the Feedback was given on is the Starting text, or else the latest Version.
     """
-    [previous] = earlier[-1].parts if starting is None else starting.parts
+    shown = earlier[-1] if starting is None else starting
+    previous = shown.parts[0]
+    first_reply = shown.parts[-1] if shown.first_reply else None
     messages = [
         system_message(humanizer_prompt(inputs)),
         user_message(brief_message(inputs)),
@@ -290,8 +296,7 @@ def revision_humanizer_messages(
     earlier_feedback = [v.feedback for v in earlier if v.feedback is not None]
     if earlier_feedback:
         messages.append(user_message(earlier_feedback_message(earlier_feedback)))
-    # The Text holds no first reply yet (#475), so the previous post never has one.
-    messages.append(user_message(previous_post_message(previous, None)))
+    messages.append(user_message(previous_post_message(previous, first_reply)))
     messages.append(user_message(latest_feedback_message(feedback, FORMAT_POST, FORMAT_POST)))
     written_by_hand = hand_written(earlier, starting)
     if written_by_hand:
@@ -333,23 +338,19 @@ async def revise_post(
     post = _clean(humanized.parsed.post)
     if not post:
         raise LLMError("The revision humanizer call wrote a blank post")
-    first_reply = (
-        _clean(humanized.parsed.first_reply)
-        if humanized.parsed.first_reply and revised_reply
-        else None
-    )
+    parts = _with_first_reply(post, humanized.parsed.first_reply, kept=bool(revised_reply))
 
     return WrittenVersion(
         format=FORMAT_POST,
-        sketch_parts=[revised_post],
-        parts=[post],
+        sketch_parts=[revised_post, revised_reply] if revised_reply else [revised_post],
+        parts=parts,
         sketch_model=revised.model,
         humanizing_model=humanized.model,
         sketch_usage=_usage(revised),
         humanizing_usage=_usage(humanized),
         hook=Hook(reasoning=drop_unstorable(revised.parsed.reasoning), name=None),
         cta_type=revised.parsed.cta_type,
-        first_reply=first_reply or None,
+        first_reply=len(parts) > 1,
     )
 
 

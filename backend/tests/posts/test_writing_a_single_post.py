@@ -365,23 +365,6 @@ async def test_a_written_single_post_uses_one_generation(client, ready, fake_llm
     assert await _generations_used(client) == 1
 
 
-async def test_a_first_reply_is_not_part_of_the_text_yet(client, db, ready, fake_llm):
-    fake_llm.standing[MERGED_SKETCH] = merged("The post.", first_reply="Repo: [link]")
-    fake_llm.replies = [{"post": "The post.", "first_reply": "Repo: [link]"}]
-
-    response = await client.post(POSTS, json={"brief": BRIEF})
-
-    [humanizer] = _calls(fake_llm, HUMANIZED_POST)
-    assert humanizer.messages[2]["content"] == (
-        "<post>\nThe post.\n</post>\n\n<first_reply>\nRepo: [link]\n</first_reply>"
-    )
-    [version] = response.json()["versions"]
-    assert [part["text"] for part in version["parts"]] == ["The post."]
-    stored = await _version(db)
-    assert stored.parts == ["The post."]
-    assert stored.merge is not None and stored.merge["first_reply"] == "Repo: [link]"
-
-
 async def test_starting_a_single_post_over_mcp_needs_no_inspiration_author(
     client, ready, mcp, fake_llm
 ):

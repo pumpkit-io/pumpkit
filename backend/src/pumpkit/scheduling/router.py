@@ -414,11 +414,17 @@ async def edit_text(
     clock: Clock = Depends(get_clock),
 ) -> TextResponse:
     """
-    Saves the User's edit of the Post's Text, every Part in order. Idempotent, so the web app
-    retries a failed save as it is. A Scheduled or Published Post is refused.
+    Saves the User's edit of the Post's Text, every Part in order, which may add or remove a
+    single post's first reply. Idempotent, so the web app retries a failed save as it is. A
+    Scheduled or Published Post is refused.
     """
     return await mediator.edit_text(
-        db=db, user=current_user, post_id=post_id, parts=edit_request.parts, now=clock()
+        db=db,
+        user=current_user,
+        post_id=post_id,
+        parts=edit_request.parts,
+        first_reply=edit_request.first_reply,
+        now=clock(),
     )
 
 
