@@ -56,6 +56,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     get: vi.fn(),
     addVersion: vi.fn(),
     retry: vi.fn(),
+    discard: vi.fn(),
   },
 }));
 vi.mock('@/services/briefService', async (importOriginal) => ({
@@ -201,6 +202,7 @@ describe('Brief page', () => {
     vi.mocked(briefService.get).mockReset();
     vi.mocked(briefService.write).mockReset();
     vi.mocked(postService.retry).mockReset();
+    vi.mocked(postService.discard).mockReset().mockResolvedValue();
     vi.mocked(track).mockClear();
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
     vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
@@ -324,6 +326,7 @@ describe('Brief page', () => {
     const pain = await card(PAIN);
     expect(pain.getByText(badge)).toBeInTheDocument();
     expect(pain.queryByRole('button', { name: 'Post to…' })).not.toBeInTheDocument();
+    expect(pain.queryByRole('button', { name: /Discard/ })).not.toBeInTheDocument();
     expect(pain.getByRole('link', { name: `Open “${PAIN}”` })).toBeInTheDocument();
   });
 
@@ -654,5 +657,87 @@ describe('Brief page', () => {
 
     expect(await (await card(PAIN)).findByRole('alert')).toHaveTextContent('Retrying failed.');
     expect(notWrittenList.getByRole('alert')).toHaveTextContent('Writing B2B failed.');
+  });
+  describe('discarding a draft', () => {
+    it('asks first, then discards it: its idea is offered again and the cards close up', async () => {
+      vi.mocked(briefService.get)
+        .mockResolvedValueOnce(
+          brief({
+            1: written('post_1', 'Pain post.'),
+            2: written('post_2', 'B2B post.'),
+            3: written('post_3', 'OAuth post.'),
+          }),
+        )
+        .mockResolvedValue(
+          brief({ 1: written('post_1', 'Pain post.'), 3: written('post_3', 'OAuth post.') }),
+        );
+      renderSignedIn('/briefs/brief_01');
+      expect(await screen.findByText('3 of 4 written')).toBeInTheDocument();
+
+      fireEvent.click((await card(B2B)).getByRole('button', { name: `Discard “${B2B}”` }));
+      const dialog = within(await screen.findByRole('alertdialog'));
+      expect(dialog.getByText('Discard this post?')).toBeInTheDocument();
+      expect(dialog.getByText('Its versions are deleted for good.')).toBeInTheDocument();
+      expect(postService.discard).not.toHaveBeenCalled();
+      fireEvent.click(dialog.getByRole('button', { name: 'Discard' }));
+
+      const notWrittenList = within(await screen.findByRole('list', { name: 'Not written' }));
+      expect(notWrittenList.getByRole('listitem', { name: B2B })).toBeInTheDocument();
+      expect(postService.discard).toHaveBeenCalledWith('post_2');
+      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+      const cards = within(screen.getByRole('list', { name: 'Posts' })).getAllByRole('listitem');
+      expect(cards.map((c) => c.getAttribute('aria-label'))).toEqual([PAIN, OAUTH]);
+      expect(within(cards[1]!).getByText('2')).toBeInTheDocument();
+      expect(screen.getByText('2 of 4 written')).toBeInTheDocument();
+      expect(track).toHaveBeenCalledWith('post_discarded', { from: 'brief_page' });
+      await waitFor(() =>
+        expect(screen.getByRole('heading', { name: 'Not written' })).toHaveFocus(),
+      );
+    });
+
+    it('keeps the post when the User changes their mind', async () => {
+      vi.mocked(briefService.get).mockResolvedValue(
+        brief({ 1: written('post_1', 'Pain post.'), 2: written('post_2', 'B2B post.') }),
+      );
+      renderSignedIn('/briefs/brief_01');
+
+      fireEvent.click((await card(B2B)).getByRole('button', { name: `Discard “${B2B}”` }));
+      fireEvent.click(
+        within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Keep it' }),
+      );
+
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+      expect(postService.discard).not.toHaveBeenCalled();
+      expect((await card(B2B)).getByText('B2B post.')).toBeInTheDocument();
+    });
+
+    it('says why in the dialog when discarding is refused', async () => {
+      vi.mocked(briefService.get).mockResolvedValue(
+        brief({ 1: written('post_1', 'Pain post.'), 2: written('post_2', 'B2B post.') }),
+      );
+      vi.mocked(postService.discard).mockRejectedValue(
+        apiError(409, "This post is scheduled, so it can't be discarded. Unschedule it first."),
+      );
+      renderSignedIn('/briefs/brief_01');
+
+      fireEvent.click((await card(B2B)).getByRole('button', { name: `Discard “${B2B}”` }));
+      const dialog = within(await screen.findByRole('alertdialog'));
+      fireEvent.click(dialog.getByRole('button', { name: 'Discard' }));
+
+      expect(await dialog.findByRole('alert')).toHaveTextContent(
+        "This post is scheduled, so it can't be discarded. Unschedule it first.",
+      );
+      expect(track).not.toHaveBeenCalledWith('post_discarded', expect.anything());
+    });
+
+    it('offers no discard on a post being written or not written', async () => {
+      vi.mocked(briefService.get).mockResolvedValue(
+        brief({ 1: beingWritten('post_1'), 2: notWritten('post_2') }),
+      );
+      renderSignedIn('/briefs/brief_01');
+
+      expect((await card(PAIN)).queryByRole('button', { name: /Discard/ })).not.toBeInTheDocument();
+      expect((await card(B2B)).queryByRole('button', { name: /Discard/ })).not.toBeInTheDocument();
+    });
   });
 });

@@ -64,6 +64,7 @@ def seed_post(db, user):
         for number, parts in enumerate(versions, start=1):
             attempts.append(
                 VersionAttempt(
+                    user_id=post.user_id,
                     post=post,
                     sequence=number,
                     format=format_of(parts, first_reply=False),
@@ -158,6 +159,7 @@ async def test_a_post_with_no_version_is_left_out_of_every_list_and_count(
     await db.flush()
     db.add(
         VersionAttempt(
+            user_id=no_version.user_id,
             post_id=no_version.id,
             sequence=1,
             format="post",

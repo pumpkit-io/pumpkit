@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import delete, exists, func, select
+from sqlalchemy import delete, exists, func, null, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import lazyload, selectinload
 
@@ -16,6 +16,7 @@ from pumpkit.posts.models import (
     IDEA_ORDER,
     Brief,
     Idea,
+    MediaUploadLink,
     PlanCall,
     Post,
     VersionAttempt,
@@ -48,9 +49,9 @@ async def get_user_post(
 async def attempt_times_since(db: AsyncSession, *, user_id: str, since: datetime) -> list[datetime]:
     """When the User attempted a Version after `since`, failed attempts included."""
     rows = await db.execute(
-        select(VersionAttempt.created_at)
-        .join(Post, VersionAttempt.post_id == Post.id)
-        .where(Post.user_id == user_id, VersionAttempt.created_at > since)
+        select(VersionAttempt.created_at).where(
+            VersionAttempt.user_id == user_id, VersionAttempt.created_at > since
+        )
     )
     return [as_utc(created_at) for created_at in rows.scalars()]
 
@@ -82,15 +83,14 @@ async def count_versions_between(
     db: AsyncSession, *, user_id: str, start: datetime, end: datetime
 ) -> int:
     """
-    The Generations of the User's Allowance used in `[start, end)`: succeeded attempts only, less
-    those charged to a Top-up, refunded or disputed since or not.
+    The Generations of the User's Allowance used in `[start, end)`: succeeded attempts only, a
+    discarded Post's included, less those charged to a Top-up, refunded or disputed since or not.
     """
     result = await db.execute(
         select(func.count())
         .select_from(VersionAttempt)
-        .join(Post, VersionAttempt.post_id == Post.id)
         .where(
-            Post.user_id == user_id,
+            VersionAttempt.user_id == user_id,
             VersionAttempt.status == ATTEMPT_SUCCEEDED,
             VersionAttempt.created_at >= start,
             VersionAttempt.created_at < end,
@@ -256,6 +256,7 @@ async def record_version(
 ) -> VersionAttempt:
     """Store a succeeded attempt, a Version, and make it the Post's Text, free to change. Flushes."""
     attempt = VersionAttempt(
+        user_id=post.user_id,
         post_id=post.id,
         sequence=sequence,
         feedback=feedback,
@@ -412,6 +413,7 @@ async def record_failed_attempt(
 ) -> VersionAttempt:
     """Lets the Text change again. Flushes."""
     attempt = VersionAttempt(
+        user_id=post.user_id,
         post_id=post.id,
         sequence=sequence,
         feedback=feedback,
@@ -424,3 +426,39 @@ async def record_failed_attempt(
     post.writing_since = None
     await db.flush()
     return attempt
+
+
+async def discard(db: AsyncSession, *, post: Post) -> list[str]:
+    """
+    Delete the Post with its Versions, Media and Upload links, leaving its Idea not written. Its
+    attempts stay with only what counts them, so the Generations and the hourly limit still do.
+    Answers the Media's file keys, to delete once this commits. Flushes.
+    """
+    keys = await media.delete_text_media(db, post=post)
+    await db.execute(delete(MediaUploadLink).where(MediaUploadLink.post_id == post.id))
+    await db.execute(
+        update(VersionAttempt)
+        .where(VersionAttempt.post_id == post.id)
+        # SQL NULL, not JSON null, in the JSON columns.
+        .values(
+            post_id=None,
+            feedback=None,
+            sketch_parts=null(),
+            parts=null(),
+            hook_reasoning=None,
+            hook_name=None,
+            hook_levers=null(),
+            hook_types=null(),
+            cta_type=None,
+            sketches=null(),
+            merge=null(),
+            starting_text_parts=null(),
+            error=None,
+        )
+        .execution_options(synchronize_session=False)
+    )
+    await db.execute(
+        delete(Post).where(Post.id == post.id).execution_options(synchronize_session=False)
+    )
+    await db.flush()
+    return keys

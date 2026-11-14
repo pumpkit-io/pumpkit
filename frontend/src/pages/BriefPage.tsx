@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { ErrorBanner } from '@/components/ErrorBanner';
@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { AllowanceNotice } from '@/features/billing/AllowanceNotice';
 import { useBrief, type BriefFailure } from '@/features/briefs/useBrief';
 import { CharacterCount } from '@/features/posts/CharacterCount';
+import { DiscardPostButton } from '@/features/posts/DiscardPostButton';
 import { planLine } from '@/features/posts/planLine';
 import { partSubject, shapeName } from '@/features/posts/postShape';
 import { postTitle } from '@/features/posts/postStatus';
@@ -161,6 +162,7 @@ function PostCard({
   failure,
   onRetry,
   onSent,
+  onDiscarded,
 }: {
   idea: Idea;
   post: BriefPost;
@@ -171,6 +173,7 @@ function PostCard({
   onRetry: () => void;
   /** After "Post to…" scheduled it or posted it now. */
   onSent: () => void;
+  onDiscarded: () => Promise<void>;
 }) {
   const coreIdea = idea.plan?.coreIdea ?? 'Your post';
   const { text, status } = post;
@@ -203,7 +206,18 @@ function PostCard({
             Open
           </Link>
         </Button>
-        {text && status === 'draft' && <CardPostTo post={post} text={text} onDone={onSent} />}
+        {text && status === 'draft' && (
+          <>
+            <CardPostTo post={post} text={text} onDone={onSent} />
+            <DiscardPostButton
+              postId={post.id}
+              from="brief_page"
+              label={`Discard “${coreIdea}”`}
+              disabled={post.writingState === 'writing'}
+              onDiscarded={onDiscarded}
+            />
+          </>
+        )}
         {text && status && status !== 'draft' && (
           <StatusBadge status={status} publishing={post.publishing} />
         )}
@@ -218,7 +232,10 @@ function NotWritten({
   busy,
   failures,
   onWrite,
+  headingRef,
 }: {
+  /** Takes focus once a Draft is discarded, since its Idea is listed here again. */
+  headingRef: RefObject<HTMLHeadingElement>;
   ideas: Idea[];
   busy: ReadonlySet<string>;
   failures: Readonly<Record<string, BriefFailure>>;
@@ -226,7 +243,12 @@ function NotWritten({
 }) {
   return (
     <section aria-labelledby="not-written" className="max-w-[68ch] space-y-3">
-      <h2 id="not-written" className="font-sans text-[13px] font-medium text-foreground">
+      <h2
+        id="not-written"
+        ref={headingRef}
+        tabIndex={-1}
+        className="font-sans text-[13px] font-medium text-foreground outline-none"
+      >
         Not written
       </h2>
       <ul aria-labelledby="not-written" className="divide-y divide-border border-y border-border">
@@ -314,6 +336,12 @@ function Placeholders() {
 export function BriefPage() {
   const { id = '' } = useParams<{ id: string }>();
   const { load, reload, refresh, write, retry, busy, failures } = useBrief(id);
+  const notWrittenHeading = useRef<HTMLHeadingElement>(null);
+  // The discarded card held the dialog's trigger, so focus would drop to the page.
+  const [discards, setDiscards] = useState(0);
+  useEffect(() => {
+    if (discards > 0) notWrittenHeading.current?.focus();
+  }, [discards]);
 
   if (load.kind === 'loading')
     return (
@@ -366,6 +394,10 @@ export function BriefPage() {
               failure={failures[idea.id]}
               onRetry={() => void retry(idea.id, post.id)}
               onSent={() => void refresh()}
+              onDiscarded={async () => {
+                await refresh();
+                setDiscards((n) => n + 1);
+              }}
             />
           ))}
         </ol>
@@ -376,6 +408,7 @@ export function BriefPage() {
           busy={busy}
           failures={failures}
           onWrite={(ideaId) => void write(ideaId)}
+          headingRef={notWrittenHeading}
         />
       )}
     </Page>

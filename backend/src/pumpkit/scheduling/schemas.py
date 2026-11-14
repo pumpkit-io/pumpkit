@@ -232,6 +232,13 @@ class PostMessageToolResponse(BaseModel):
     post_url: str
 
 
+class DiscardedPostToolResponse(BaseModel):
+    message: str
+    # The Brief the Post came from, which offers its Idea again.
+    brief_id: str
+    brief_url: str
+
+
 URL_MAX_CHARS = 2048
 
 

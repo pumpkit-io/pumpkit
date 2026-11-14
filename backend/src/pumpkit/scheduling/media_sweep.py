@@ -173,7 +173,8 @@ async def delete_unnamed_files(db: AsyncSession, storage: FileStorage, *, now: d
     if keys_by_id and not (await db.execute(select(exists().select_from(Media)))).scalar():
         logger.warning(
             "Stored media files kept: the database holds no Media at all. Check the publisher "
-            "uses the Instance's database and media volume."
+            "uses the Instance's database and media volume. Files a discard left when it removed "
+            "the last Media are deleted once a Media exists again."
         )
         return
     ids = list(keys_by_id)

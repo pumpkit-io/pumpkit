@@ -459,6 +459,13 @@ export const postService = {
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
     };
   },
+  /**
+   * Discards a Draft: the Post and its Versions are deleted for good, and its Idea is offered again
+   * on its Brief. The server refuses any other Post, and one being written.
+   */
+  discard: async (postId: string): Promise<void> => {
+    await apiService.delete(`/posts/${encodeURIComponent(postId)}`);
+  },
   /** Writes the first Version of a Post Pumpkit couldn't write again, from the same Plan. */
   retry: async (postId: string): Promise<StartedPost> => {
     const { data } = await apiService.post<StartedPostApi>(

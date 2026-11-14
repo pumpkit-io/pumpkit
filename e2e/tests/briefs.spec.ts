@@ -125,3 +125,46 @@ test('recent briefs on New post show a brief writing, update when it is written,
   await expect(page).toHaveURL(new RegExp(`/briefs/${briefId}$`));
   await expect(page.getByText('2 of 3 written')).toBeVisible();
 });
+
+test('a draft is discarded from its card and from its page, and its idea is offered again', async ({
+  page,
+}) => {
+  runSeedScript('planned_brief.py', ['writing', briefId]);
+  runSeedScript('planned_brief.py', ['written', briefId]);
+  await page.goto(`/briefs/${briefId}`);
+
+  const cards = page.getByRole('list', { name: 'Posts' }).getByRole('listitem');
+  await expect(cards).toHaveCount(3);
+  await expect(page.getByText('3 of 3 written')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Discard “Charge at least 20 euros a month”' }).click();
+  const confirm = page.getByRole('alertdialog');
+  await expect(confirm.getByText('Discard this post?')).toBeVisible();
+  await expect(confirm.getByText('Its versions are deleted for good.')).toBeVisible();
+  await confirm.getByRole('button', { name: 'Discard' }).click();
+
+  await expect(cards).toHaveCount(2);
+  await expect(page.getByText('2 of 3 written')).toBeVisible();
+  const notWritten = page.getByRole('list', { name: 'Not written' });
+  await expect(
+    notWritten.getByRole('listitem', { name: 'Charge at least 20 euros a month' }),
+  ).toBeVisible();
+  await expect(cards.nth(1)).toHaveAttribute(
+    'aria-label',
+    "Don't make OAuth integrations your core value",
+  );
+
+  await cards.nth(0).getByRole('link', { name: /^Open/ }).click();
+  const place = page.getByRole('navigation', { name: 'Posts from your brief' });
+  await expect(place.getByText('1 of 2')).toBeVisible();
+  await page
+    .getByRole('article', { name: 'Text' })
+    .getByRole('button', { name: 'Discard' })
+    .click();
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Discard' }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/briefs/${briefId}$`));
+  await expect(cards).toHaveCount(1);
+  await expect(page.getByText('1 of 3 written')).toBeVisible();
+  await expect(notWritten.getByRole('listitem')).toHaveCount(2);
+});

@@ -1,5 +1,7 @@
 # Media is published content the writing never sees, kept by the Instance until it goes out
 
+ADR 0025 amends the sweep of unreferenced Media below: discarding a Draft deletes its Media, records and files, at once, without the hour's wait.
+
 Users can attach Media (images, an animated GIF or a video) to a Post's Text, and Pumpkit publishes it inside the X post, through X's media upload and `media.media_ids` on `POST /2/tweets`. Media belongs to the Text, never to a Version, and Pumpkit's writing never receives it: no bytes, no file names, no alt text. Reading media costs far more than reading text, and the Operator pays for every Generation. A User who wants an AI to look at an image and write from it uses their own AI app through the MCP server, which attaches the Media and starts the Post from a text Brief.
 
 X keeps an uploaded media id for only about 24 hours, so a Scheduled post can't hold X's ids. The Instance keeps each file itself, on a disk volume shared by the backend and the publisher, behind a storage interface, and uploads it to X just before the X post that carries it is published. Once that X post is Published, the file is deleted and only a small preview stays.

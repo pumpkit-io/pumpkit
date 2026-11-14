@@ -64,6 +64,7 @@ async def _store_attempts(db, user_id: str, times: list[datetime], status: str =
     for sequence, moment in enumerate(times, start=1):
         db.add(
             VersionAttempt(
+                user_id=post.user_id,
                 post_id=post.id,
                 sequence=sequence,
                 version_number=sequence if status == "succeeded" else None,
