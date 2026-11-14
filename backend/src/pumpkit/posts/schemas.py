@@ -178,15 +178,20 @@ class BriefPostResponse(BaseModel):
     text: Optional[TextResponse]
 
 
-class IdeaFields(BaseModel):
-    """An Idea without its Post, which `IdeaResponse` and the Brief page's answer each add."""
+class PlannedIdeaToolResponse(BaseModel):
+    """An Idea as `plan_posts` answers it, where the field holding it says which kind it is."""
 
     id: str
     # Where the Idea comes among the Ideas posted with it, from 1; the single-post Idea is 1.
     posting_order: int
+    plan: Optional[PlanResponse]
+
+
+class IdeaFields(PlannedIdeaToolResponse):
+    """An Idea without its Post, which `IdeaResponse` and the Brief page's answer each add."""
+
     # True for the single-post Idea, which covers the whole Brief.
     whole_brief: bool
-    plan: Optional[PlanResponse]
 
 
 class IdeaResponse(IdeaFields):
@@ -215,9 +220,9 @@ class PlannedBriefToolResponse(BaseModel):
 
     brief_id: str
     # The split Ideas in posting order; empty when the Brief holds one idea.
-    ideas: list[IdeaFields]
+    ideas: list[PlannedIdeaToolResponse]
     # The Idea covering the whole Brief, the alternative to the split Ideas.
-    single_post: IdeaFields
+    single_post: PlannedIdeaToolResponse
     # As `BriefFields.generations_left`.
     generations_left: Optional[int]
 

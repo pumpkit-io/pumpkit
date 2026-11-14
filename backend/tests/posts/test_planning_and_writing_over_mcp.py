@@ -82,7 +82,6 @@ async def test_plan_posts_answers_with_a_split_briefs_ideas_and_the_single_post_
         {
             "id": planned["ideas"][n]["id"],
             "posting_order": n + 1,
-            "whole_brief": False,
             "plan": _plan_of(core_idea),
         }
         for n, core_idea in enumerate(CORE_IDEAS)
@@ -90,7 +89,6 @@ async def test_plan_posts_answers_with_a_split_briefs_ideas_and_the_single_post_
     assert planned["single_post"] == {
         "id": planned["single_post"]["id"],
         "posting_order": 1,
-        "whole_brief": True,
         "plan": _plan_of(WHOLE),
     }
     assert planned["generations_left"] == 2
@@ -295,7 +293,7 @@ async def test_the_instructions_describe_positioning_and_the_two_steps(subscribe
     assert "The user's positioning is a few sentences" in instructions
     assert "`set_positioning` saves it" in instructions
     assert "Writing posts takes two steps." in instructions
-    assert "Show the user the core idea of each idea and ask which to write" in instructions
+    assert "Show the user each idea's core idea and ask which to write" in instructions
     assert "Call it only with the user's choice." in instructions
     assert "read each with `get_post` until `writing_state` is null" in instructions
     assert "start_post" not in instructions
