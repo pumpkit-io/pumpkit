@@ -6,7 +6,7 @@ X is the only active sign-in method in every Instance (ADR 0023). `GET /api/v1/l
 
 `auth/router.py` retains an unmounted `legacy_router`, and `pages/LegacyLogin.tsx` retains the original isolated UI. Google, magic link, mail and photo-source implementations are inactive. Old frontend callbacks redirect without creating Sessions. Google or SMTP settings cannot reactivate them; restoring a method requires code changes and an account-policy review. Focused legacy tests mount their own test-owned assembly, while general backend fixtures use the Session service and browser seeds require the local X stand-in.
 
-Personal local testing uses `make dev-personal` at `http://localhost:5173` with real X and Stripe sandbox; see [setup and the callback relay](agents/dev-stack.md#personal-testing-on-localhost-with-real-providers). Agent checks retain their isolated emulated stack.
+Personal local testing uses `docker compose -f compose.dev.yml up --build` at `http://localhost:5173` with real X and Stripe sandbox; see [setup and the callback relay](agents/dev-stack.md#personal-testing-on-localhost-with-real-providers). Agent checks retain their isolated emulated stack.
 
 The shared `/oauth/x/callback` selects sign-in or reconnect from the pending attempt's purpose, independently of any Session another tab might change. The prefix only routes; backend state, browser binding, PKCE and stable-ID checks remain authoritative. Callback query credentials are removed before rendering and excluded at the global analytics boundary, including automatic SDK events. Pending Connected app consent retains its original 30-minute deadline across failed attempts and retries, and is consumed only after successful sign-in.
 
@@ -257,7 +257,7 @@ The e2e suite opens Settings' Plan card, so its Instance must sell Plans: set th
 `make dev` uses `scripts/dev-stack up`, which allocates worktree-specific loopback
 ports for the backend and database, so another stack on port 5432 does not
 conflict. Use `scripts/dev-stack url`, `status`, `logs` and `down` for that stack.
-`make dev-personal` selects the separate persistent personal mode described above.
+`docker compose -f compose.dev.yml up --build` runs the persistent personal instance described above.
 
 ## Self-hosting and releases
 

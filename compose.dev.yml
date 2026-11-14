@@ -36,7 +36,7 @@ services:
       - --base-url
       - ${EMULATE_BASE_URL:-http://localhost:4000}
     environment:
-      DEV_PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:5173}
+      DEV_PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:${DEV_PUBLIC_PORT:-5173}}
       DEV_STAGED_X_URL: ${DEV_STAGED_X_URL:-http://localhost:5174}
       X_API_URL: ${X_API_URL:-}
       STRIPE_WEBHOOK_URL: ${STRIPE_WEBHOOK_URL:-}
@@ -57,9 +57,9 @@ services:
     env_file: .env
     # The dev stack always runs locally against its own Postgres, behind the Vite dev server.
     environment: &dev-backend-environment
-      X_LOCAL_CALLBACK_RELAY: 'false'
+      X_LOCAL_CALLBACK_RELAY: 'true'
       ENV: local
-      PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:5173}
+      PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:${DEV_PUBLIC_PORT:-5173}}
       POSTGRES_HOST: db
       POSTGRES_PORT: '5432'
       # Safe-mode switches: read from .env unless scripts/dev-stack overrides them.
@@ -102,13 +102,17 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
+      ENV: local
+      X_LOCAL_CALLBACK_RELAY: 'true'
+      DEV_PUBLIC_URL: ${DEV_PUBLIC_URL:-http://localhost:${DEV_PUBLIC_PORT:-5173}}
       API_PROXY_TARGET: http://backend:8000
       VITE_BYPASS_AUTH: ${VITE_BYPASS_AUTH:-false}
     volumes:
       - ./frontend:/app
       - /app/node_modules
     ports:
-      - ${DEV_WEB_BIND:-5173}:5173
+      - 127.0.0.1:${DEV_PUBLIC_PORT:-5173}:5173
+      - '[::1]:${DEV_PUBLIC_PORT:-5173}:5173'
     depends_on:
       - backend
 

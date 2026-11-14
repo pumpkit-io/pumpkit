@@ -5,13 +5,10 @@ SMOKE_URL ?= http://localhost:8080
 # The app e2e runs against. For a worktree's own stack, pass the Dev URL `scripts/dev-stack up` prints.
 E2E_BASE_URL ?= http://localhost:5173
 
-.PHONY: dev dev-personal check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-managed-payments e2e-wait smoke
+.PHONY: dev check check-backend check-frontend check-e2e test test-backend test-frontend fmt e2e e2e-managed-payments e2e-wait smoke
 
 dev:
 	scripts/dev-stack up
-
-dev-personal:
-	scripts/dev-stack up --personal
 
 check: check-backend check-frontend check-e2e
 	python3 scripts/tests/test_dev_stack.py

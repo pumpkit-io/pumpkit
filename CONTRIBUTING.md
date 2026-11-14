@@ -16,7 +16,7 @@ npm install                                   # repo root: installs the Husky pr
 (cd frontend && npm install) && (cd e2e && npm install && npx playwright install chromium)
 (cd backend && uv sync --extra dev)
 
-# Run the isolated stack with hot reload and local provider stand-ins
+# In a dedicated git worktree: run the isolated agent stack with local provider stand-ins
 scripts/dev-stack up
 ```
 
@@ -29,7 +29,6 @@ CI runs these same targets, so a branch that passes them locally passes CI.
 | Target              | What it runs                                                                                              |
 | ------------------- | --------------------------------------------------------------------------------------------------------- |
 | `make dev`          | The isolated emulated dev stack through `scripts/dev-stack up`                                            |
-| `make dev-personal` | Personal localhost stack with real X and Stripe sandbox                                                   |
 | `make check`        | Lint, format check, typecheck and import contracts for backend, frontend and e2e, plus the frontend build |
 | `make test`         | Backend pytest and frontend vitest                                                                        |
 | `make fmt`          | The formatters in all three packages (ruff format and Prettier)                                           |
@@ -41,14 +40,18 @@ The contract supplies the dummy Stripe billing group and Top-up key for browser 
 
 ### Stripe webhooks
 
-For personal testing with real X and Stripe's sandbox, use a dedicated worktree
-and `make dev-personal`. Configure its sandbox catalog, keys and webhook listener
-as described in [Personal testing on localhost](docs/agents/dev-stack.md#personal-testing-on-localhost-with-real-providers).
-Open `http://localhost:5173`; register `http://127.0.0.1:5173/oauth/x/callback` on X.
-The dev server relays that callback back to localhost before login completes.
+For personal testing with real X and Stripe's sandbox, run
+`docker compose -f compose.dev.yml up --build`. Open `http://localhost:5173`;
+no `DEV_PUBLIC_URL` or `DEV_PUBLIC_PORT` settings are needed. Register
+`http://127.0.0.1:5173/oauth/x/callback` on X. The callback relay returns to localhost.
+Configure sandbox keys and webhook forwarding as described in
+[Personal testing on localhost](docs/agents/dev-stack.md#personal-testing-on-localhost-with-real-providers).
+Plain Compose retains the existing personal database and media. Scheduled
+publishing follows your `.env` and is enabled by default.
 
-The default `make dev` and agent stacks keep using provider stand-ins and their
-own data. Existing `--real-x` stacks retain their separate data and emulated Stripe.
+`make dev` and agent stacks use provider stand-ins and separate data in dedicated
+worktrees. Retired `--personal` and `--real-x` modes are covered in the guide's
+[data recovery instructions](docs/agents/dev-stack.md#retired-startup-modes-and-existing-data).
 
 The project layout and common recipes are in [docs/development.md](./docs/development.md).
 

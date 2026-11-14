@@ -1,14 +1,12 @@
-"""Exercise the managed stack CLI without starting containers or contacting providers."""
+"""Exercise development startup boundaries without contacting providers."""
 
 import json
 import os
 from pathlib import Path
 import shutil
-import socket
 import subprocess
 import tempfile
 import unittest
-
 
 SOURCE = Path(__file__).resolve().parents[2]
 
@@ -16,21 +14,39 @@ SOURCE = Path(__file__).resolve().parents[2]
 class DevStackTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.root = Path(self.temp.name)
+        base = Path(self.temp.name)
+        self.main = base / "main"
+        self.root = base / "worktree"
+        subprocess.run(["git", "init", "-q", str(self.main)], check=True)
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(self.main),
+                "-c",
+                "user.name=Test",
+                "-c",
+                "user.email=test@example.org",
+                "commit",
+                "--allow-empty",
+                "-qm",
+                "seed",
+            ],
+            check=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(self.main), "worktree", "add", "-qb", "feat/test", str(self.root)],
+            check=True,
+        )
         (self.root / "scripts").mkdir()
         shutil.copy(SOURCE / "scripts/dev-stack", self.root / "scripts/dev-stack")
-        shutil.copy(
-            SOURCE / "scripts/check-personal-stack.py",
-            self.root / "scripts/check-personal-stack.py",
-        )
-        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
-        self.bin = self.root / "bin"
+        self.bin = base / "bin"
         self.bin.mkdir()
-        self.trace = self.root / "trace"
+        self.trace = base / "trace"
         for name, body in {
-            "portless": 'printf "portless %s\\n" "$*" >> "$TRACE"; case "$1" in get) echo "http://$2.localhost:1355";; esac',
+            "portless": 'printf "portless %s\\n" "$*" >> "$TRACE"; case "$1" in get) echo "http://test.$2.localhost:1355";; esac',
             "curl": 'if [[ "$*" == *http_code* ]]; then echo 200; fi',
-            "docker": 'printf "%s\\n" "$*" >> "$TRACE"; case " $* " in *" config "*) printf "%s" "$PERSONAL_CONFIG";; *" port "*) echo 127.0.0.1:54123;; *" ps "*) echo container;; esac',
+            "docker": 'printf "%s\\n" "$*" >> "$TRACE"; case " $* " in *" port "*) echo 127.0.0.1:54123;; *" ps "*) echo container;; esac',
         }.items():
             path = self.bin / name
             path.write_text("#!/usr/bin/env bash\n" + body + "\n")
@@ -39,154 +55,76 @@ class DevStackTests(unittest.TestCase):
             **os.environ,
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "TRACE": str(self.trace),
-            "PERSONAL_CONFIG": json.dumps(
-                {
-                    "services": {
-                        "backend": {
-                            "environment": {
-                                "STRIPE_SECRET_KEY": "sk_test_dummy",
-                                "STRIPE_PUBLISHABLE_KEY": "pk_test_dummy",
-                                "STRIPE_WEBHOOK_SECRET": "whsec_dummy",
-                                "X_CLIENT_ID": "x",
-                                "X_CLIENT_SECRET": "x",
-                                "TRIAL_IDENTITY_KEYS": "persistent",
-                                "BILLING_PLAN_KEYS": '["monthly"]',
-                            }
-                        }
-                    }
-                }
-            ),
         }
 
     def tearDown(self):
         self.temp.cleanup()
 
-    def run_cli(self, *args):
+    def run_cli(self, *args, cwd=None):
         return subprocess.run(
-            ["scripts/dev-stack", *args],
-            cwd=self.root,
+            [str(self.root / "scripts/dev-stack"), *args],
+            cwd=cwd or self.root,
             env=self.env,
             text=True,
             capture_output=True,
         )
 
-    def test_real_mode_persists_url_and_compose_selection_without_secrets(self):
-        result = self.run_cli("up", "--real-x", "http://127.0.0.1:59237")
+    def test_emulated_lifecycle_keeps_generated_url_and_isolated_project(self):
+        result = self.run_cli("up")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "http://127.0.0.1:59237")
-        self.assertEqual(self.run_cli("url").stdout.strip(), result.stdout.strip())
+        self.assertEqual(result.stdout.strip(), "http://test.pumpkit.localhost:1355")
+        self.assertEqual(self.run_cli("url").stdout, result.stdout)
         self.assertEqual(self.run_cli("status").stdout.strip(), "running")
         self.assertEqual(self.run_cli("logs", "backend").returncode, 0)
-        self.assertIn("compose.real-x.yml", self.trace.read_text())
-        self.assertIn("pumpkit-dev-real-x", self.trace.read_text())
-        self.assertFalse((self.root / ".sdlc/dev-stack/e2e-target").exists())
-        self.assertNotEqual(self.run_cli("up").returncode, 0)
+        target = (self.root / ".sdlc/dev-stack/e2e-target").read_text()
+        self.assertIn("pumpkit-dev-test", target)
+        self.assertIn("compose.emulators.yml", self.trace.read_text())
+        self.assertNotIn(" -p pumpkit-dev ", self.trace.read_text())
         self.assertEqual(self.run_cli("down").returncode, 0)
-        self.assertEqual(self.run_cli("url").stdout.strip(), result.stdout.strip())
+        self.assertNotIn("down -v", self.trace.read_text())
         self.assertEqual(self.run_cli("destroy").returncode, 0)
-        self.assertEqual(self.run_cli("up").returncode, 0)
-        self.assertTrue((self.root / ".sdlc/dev-stack/e2e-target").exists())
+        self.assertFalse((self.root / ".sdlc/dev-stack").exists())
 
-    def test_personal_mode_persists_and_does_not_start_emulators(self):
-        result = self.run_cli("up", "--personal", "http://localhost:59238")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "http://localhost:59238")
-        self.assertEqual(self.run_cli("url").stdout.strip(), result.stdout.strip())
-        self.assertEqual(self.run_cli("status").stdout.strip(), "running")
-        self.assertEqual(self.run_cli("logs", "backend").returncode, 0)
-        trace = self.trace.read_text()
-        self.assertIn("pumpkit-dev-personal", trace)
-        self.assertIn("compose.personal.yml", trace)
-        self.assertNotIn("compose.emulators.yml", trace)
-        self.assertNotIn("--profile emulators", trace)
-        self.assertNotIn("portless", trace)
-        self.assertFalse((self.root / ".sdlc/dev-stack/e2e-target").exists())
-        self.assertNotEqual(self.run_cli("up").returncode, 0)
-        self.assertEqual(self.run_cli("down").returncode, 0)
-        self.assertEqual(self.run_cli("url").stdout.strip(), result.stdout.strip())
-        self.assertEqual(self.run_cli("up", "--personal").returncode, 0)
-
-    def test_personal_mode_rejects_invalid_settings_before_starting(self):
-        valid = json.loads(self.env["PERSONAL_CONFIG"])
-        for key, value in [
-            ("STRIPE_SECRET_KEY", "sk_live_do-not-print"),
-            ("STRIPE_PUBLISHABLE_KEY", "pk_live_do-not-print"),
-            ("STRIPE_WEBHOOK_SECRET", ""),
-            ("X_CLIENT_ID", ""),
-            ("TRIAL_IDENTITY_KEYS", ""),
-            ("BILLING_PLAN_KEYS", "[]"),
-            ("X_API_URL", "http://emulate:4002"),
-            ("X_AUTHORIZE_URL", "http://fake/authorize"),
-            ("STRIPE_API_URL", "http://emulate:4001"),
-            ("COUPONS_ENABLED", "true"),
-        ]:
-            with self.subTest(key=key):
-                config = json.loads(json.dumps(valid))
-                config["services"]["backend"]["environment"][key] = value
-                self.env["PERSONAL_CONFIG"] = json.dumps(config)
-                result = self.run_cli("up", "--personal", "http://localhost:59238")
+    def test_retired_flags_fail_before_touching_routes_or_containers(self):
+        for flag in ["--personal", "--real-x"]:
+            with self.subTest(flag=flag):
+                result = self.run_cli("up", flag)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertNotIn("do-not-print", result.stderr)
-                self.assertNotIn("up -d", self.trace.read_text())
+                self.assertIn("docker compose -f compose.dev.yml", result.stderr)
+                self.assertFalse(self.trace.exists())
 
-    def test_personal_mode_runs_without_portless(self):
-        (self.bin / "portless").unlink()
-        self.assertEqual(self.run_cli("up", "--personal", "http://localhost:59238").returncode, 0)
-
-    def test_personal_mode_refuses_other_origins(self):
-        for url in [
-            "http://127.0.0.1:5173",
-            "https://localhost:5173",
-            "http://localhost",
-            "http://localhost:0",
-            "http://localhost:65536",
-            "http://localhost:5173/path",
-        ]:
-            with self.subTest(url=url):
-                self.assertNotEqual(self.run_cli("up", "--personal", url).returncode, 0)
-
-    def test_refuses_mode_flip_without_destroy(self):
-        self.assertEqual(self.run_cli("up").returncode, 0)
-        self.assertNotEqual(self.run_cli("up", "--real-x").returncode, 0)
-
-    def test_refuses_real_mode_over_an_older_emulated_stack(self):
+    def test_saved_retired_modes_leave_state_and_volumes_untouched(self):
         state = self.root / ".sdlc/dev-stack"
         state.mkdir(parents=True)
-        (state / "e2e-target").write_text("legacy-emulated-target\n")
-        self.assertNotEqual(self.run_cli("up", "--real-x", "http://127.0.0.1:59237").returncode, 0)
+        for mode in ["personal", "real-x"]:
+            (state / "mode").write_text(mode + "\n")
+            (state / "public-url").write_text("http://localhost:5173\n")
+            for command in ["up", "down", "destroy", "url", "status", "logs", "staged-x-url"]:
+                with self.subTest(mode=mode, command=command):
+                    result = self.run_cli(command)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("retired", result.stderr)
+                    self.assertEqual((state / "mode").read_text(), mode + "\n")
+                    self.assertFalse(self.trace.exists())
 
-    def test_rejects_non_loopback_origins_and_extra_arguments(self):
-        for url in [
-            "https://127.0.0.1:5173",
-            "http://localhost:5173",
-            "http://127.0.0.1:0",
-            "http://127.0.0.1:65536",
-            "http://127.0.0.1:5173/path",
-        ]:
-            with self.subTest(url=url):
-                self.assertNotEqual(self.run_cli("up", "--real-x", url).returncode, 0)
-        self.assertNotEqual(self.run_cli("up", "--typo").returncode, 0)
+    def test_agent_launcher_refuses_main_checkout(self):
+        result = self.run_cli("up", cwd=self.main)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("worktree", result.stderr)
+        self.assertFalse(self.trace.exists())
 
     def test_down_works_without_portless_installed(self):
         (self.bin / "portless").unlink()
         self.env["PATH"] = f"{self.bin}:/usr/bin:/bin"
         self.assertEqual(self.run_cli("down").returncode, 0)
 
-    def test_occupied_callback_port_is_not_taken(self):
-        with socket.socket() as listener:
-            listener.bind(("127.0.0.1", 0))
-            listener.listen()
-            result = self.run_cli("up", "--real-x", f"http://127.0.0.1:{listener.getsockname()[1]}")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn("up -d", self.trace.read_text() if self.trace.exists() else "")
-
 
 @unittest.skipUnless(shutil.which("docker"), "Docker Compose is needed to render its configuration")
 class ComposeSettingsTests(unittest.TestCase):
-    def test_personal_compose_uses_real_providers_without_emulator_services(self):
+    def render(self, emulated=False, overrides=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ["compose.dev.yml", "compose.personal.yml"]:
+            for name in ["compose.dev.yml", "compose.emulators.yml"]:
                 shutil.copy(SOURCE / name, root / name)
             (root / ".env").write_text(
                 "POSTGRES_PASSWORD=test\nX_CLIENT_ID=personal-x\nX_CLIENT_SECRET=personal-secret\n"
@@ -194,135 +132,126 @@ class ComposeSettingsTests(unittest.TestCase):
                 "STRIPE_PUBLISHABLE_KEY=pk_test_personal\nSTRIPE_WEBHOOK_SECRET=whsec_personal\n"
                 'BILLING_PLAN_KEYS=["monthly"]\nCOUPON_IDENTITY_KEYS=personal-coupon-ring\n'
             )
-            result = subprocess.run(
-                [
-                    "docker",
-                    "compose",
+            env = {
+                k: v
+                for k, v in os.environ.items()
+                if not k.startswith(
+                    (
+                        "DEV_",
+                        "COMPOSE_",
+                        "PUBLISHER_",
+                        "X_",
+                        "STRIPE_",
+                        "POSTHOG_",
+                        "SMTP_",
+                        "EMAIL_",
+                    )
+                )
+            }
+            command = ["docker", "compose", "-f", "compose.dev.yml"]
+            if emulated:
+                command += [
                     "-p",
-                    "isolated-personal",
+                    "pumpkit-dev-example",
                     "-f",
-                    "compose.dev.yml",
-                    "-f",
-                    "compose.personal.yml",
-                    "config",
-                    "--format",
-                    "json",
-                ],
+                    "compose.emulators.yml",
+                    "--profile",
+                    "emulators",
+                ]
+                env.update(
+                    {
+                        "DEV_PUBLIC_URL": "http://example.pumpkit.localhost:1355",
+                        "DEV_STAGED_X_URL": "http://example.staged-x.pumpkit.localhost:1355",
+                        "DEV_WEB_BIND": "127.0.0.1:53123",
+                        "DEV_API_BIND": "127.0.0.1:",
+                        "DEV_DB_BIND": "127.0.0.1:",
+                        "X_API_URL": "http://emulate:4002",
+                        "X_AUTHORIZE_URL": "http://example.pumpkit-x.emulate.pumpkit.localhost:1355/i/oauth2/authorize",
+                        "STRIPE_API_URL": "http://emulate:4001",
+                        "STRIPE_SECRET_KEY": "sk_test_dev",
+                        "STRIPE_PUBLISHABLE_KEY": "pk_test_dev",
+                        "STRIPE_WEBHOOK_SECRET": "whsec_dev",
+                        "PUBLISHER_ENABLED": "false",
+                        "SMTP_HOST": "",
+                        "EMAIL_FROM": "",
+                        "POSTHOG_ENABLED": "false",
+                    }
+                )
+            env.update(overrides or {})
+            result = subprocess.run(
+                command + ["config", "--format", "json"],
                 cwd=root,
-                env={
-                    **os.environ,
-                    "DEV_PUBLIC_URL": "http://localhost:5173",
-                    "DEV_PUBLIC_PORT": "5173",
-                    "PUBLISHER_ENABLED": "false",
-                    "SMTP_HOST": "",
-                    "EMAIL_FROM": "",
-                    "POSTHOG_ENABLED": "false",
-                    "DEV_API_BIND": "127.0.0.1:",
-                    "DEV_DB_BIND": "127.0.0.1:",
-                },
+                env=env,
                 text=True,
                 capture_output=True,
                 check=True,
             )
-            config = json.loads(result.stdout)
-            services = config["services"]
-            self.assertEqual(set(services), {"db", "backend", "publisher", "frontend"})
-            for name in ["backend", "publisher"]:
-                settings = services[name]["environment"]
-                self.assertEqual(settings["PUBLIC_URL"], "http://localhost:5173")
-                self.assertEqual(settings["X_LOCAL_CALLBACK_RELAY"], "true")
-                self.assertEqual(settings["X_CLIENT_ID"], "personal-x")
-                self.assertEqual(settings["STRIPE_SECRET_KEY"], "sk_test_personal")
-                self.assertEqual(settings["TRIAL_IDENTITY_KEYS"], "personal-ring")
-                self.assertEqual(settings["COUPON_IDENTITY_KEYS"], "personal-coupon-ring")
-                self.assertEqual(settings["PUBLISHER_ENABLED"], "false")
-                self.assertNotIn("X_API_URL", settings)
-                self.assertNotIn("STRIPE_API_URL", settings)
-            self.assertEqual(
-                services["frontend"]["environment"]["DEV_PUBLIC_URL"], "http://localhost:5173"
-            )
-            self.assertEqual(
-                {p["host_ip"] for p in services["frontend"]["ports"]}, {"127.0.0.1", "::1"}
-            )
-            self.assertTrue(
-                all(v["name"].startswith("isolated-personal_") for v in config["volumes"].values())
-            )
+            return json.loads(result.stdout)
 
-    def test_only_main_app_gets_real_x_settings(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            for name in [
-                "compose.dev.yml",
-                "compose.emulators.yml",
-                "compose.real-x.yml",
-            ]:
-                shutil.copy(SOURCE / name, root / name)
-            (root / ".env").write_text(
-                "POSTGRES_PASSWORD=test\nX_CLIENT_ID=synthetic-client\nX_CLIENT_SECRET=synthetic-secret\nTRIAL_IDENTITY_KEYS=synthetic-ring\n"
-            )
-            command = [
-                "docker",
-                "compose",
-                "-f",
-                "compose.dev.yml",
-                "-f",
-                "compose.emulators.yml",
-            ]
-            env = {
-                **os.environ,
-                "X_API_URL": "http://emulate:4002",
-                "X_AUTHORIZE_URL": "http://fake/i/oauth2/authorize",
-                "PUBLISHER_ENABLED": "false",
-                "SMTP_HOST": "",
-                "EMAIL_FROM": "",
-                "POSTHOG_ENABLED": "false",
-                "DEV_PUBLIC_URL": "http://127.0.0.1:5173",
-                "DEV_WEB_BIND": "127.0.0.1:5173",
-                "X_CLIENT_ID": "synthetic-client",
-                "X_CLIENT_SECRET": "synthetic-secret",
-                "TRIAL_IDENTITY_KEYS": "synthetic-ring",
-            }
-            for real in [False, True]:
-                with self.subTest(real=real):
-                    extra = ["-f", "compose.real-x.yml"] if real else []
-                    result = subprocess.run(
-                        command + extra + ["--profile", "emulators", "config", "--format", "json"],
-                        cwd=root,
-                        env=env,
-                        text=True,
-                        capture_output=True,
-                        check=True,
-                    )
-                    services = json.loads(result.stdout)["services"]
-                    for name in ["backend", "publisher"]:
-                        settings = services[name]["environment"]
-                        self.assertEqual(
-                            settings["X_CLIENT_ID"],
-                            "synthetic-client" if real else "pumpkit-dev-x",
-                        )
-                        self.assertEqual(
-                            settings["X_CLIENT_SECRET"],
-                            "synthetic-secret" if real else "pumpkit-dev-x-secret",
-                        )
-                        self.assertEqual(
-                            settings["X_API_URL"], "" if real else "http://emulate:4002"
-                        )
-                        self.assertEqual(
-                            settings["X_AUTHORIZE_URL"],
-                            "" if real else "http://fake/i/oauth2/authorize",
-                        )
-                        self.assertEqual(settings["PUBLIC_URL"], "http://127.0.0.1:5173")
-                        self.assertEqual(settings["PUBLISHER_ENABLED"], "false")
-                        self.assertEqual(settings["POSTHOG_ENABLED"], "false")
-                        self.assertEqual(settings["SMTP_HOST"], "")
-                        self.assertEqual(settings["EMAIL_FROM"], "")
-                        self.assertEqual(settings["TRIAL_IDENTITY_KEYS"] == "synthetic-ring", real)
-                    staged = services["staged-x"]["environment"]
-                    self.assertEqual(staged["X_CLIENT_ID"], "pumpkit-dev-x")
-                    self.assertEqual(staged["X_API_URL"], "http://emulate:4002")
-                    self.assertNotIn("X_CLIENT_SECRET", services["emulate"]["environment"])
-                    self.assertEqual(services["frontend"]["ports"][0]["host_ip"], "127.0.0.1")
-                    self.assertEqual(services["frontend"]["ports"][0]["published"], "5173")
+    def test_plain_compose_defaults_to_personal_localhost_without_dev_variables(self):
+        config = self.render()
+        services = config["services"]
+        self.assertEqual(config["name"], "pumpkit-dev")
+        self.assertEqual(set(services), {"db", "backend", "publisher", "frontend"})
+        for name in ["backend", "publisher"]:
+            settings = services[name]["environment"]
+            self.assertEqual(settings["PUBLIC_URL"], "http://localhost:5173")
+            self.assertEqual(settings["X_LOCAL_CALLBACK_RELAY"], "true")
+            self.assertEqual(settings["X_CLIENT_ID"], "personal-x")
+            self.assertEqual(settings["STRIPE_SECRET_KEY"], "sk_test_personal")
+            self.assertEqual(settings["TRIAL_IDENTITY_KEYS"], "personal-ring")
+            self.assertEqual(settings["PUBLISHER_ENABLED"], "true")
+            self.assertNotIn("X_API_URL", settings)
+        frontend = services["frontend"]
+        self.assertEqual(frontend["environment"]["X_LOCAL_CALLBACK_RELAY"], "true")
+        self.assertEqual(frontend["environment"]["DEV_PUBLIC_URL"], "http://localhost:5173")
+        self.assertEqual({p["host_ip"] for p in frontend["ports"]}, {"127.0.0.1", "::1"})
+        self.assertEqual({p["published"] for p in frontend["ports"]}, {"5173"})
+        self.assertEqual(
+            {v["name"] for v in config["volumes"].values()},
+            {"pumpkit-dev_postgres_data", "pumpkit-dev_media_data"},
+        )
+
+    def test_personal_port_and_publishing_can_be_overridden(self):
+        services = self.render(overrides={"DEV_PUBLIC_PORT": "5175", "PUBLISHER_ENABLED": "false"})[
+            "services"
+        ]
+        for name in ["backend", "publisher"]:
+            self.assertEqual(services[name]["environment"]["PUBLIC_URL"], "http://localhost:5175")
+            self.assertEqual(services[name]["environment"]["PUBLISHER_ENABLED"], "false")
+        self.assertEqual(
+            services["frontend"]["environment"]["DEV_PUBLIC_URL"], "http://localhost:5175"
+        )
+        self.assertEqual({p["published"] for p in services["frontend"]["ports"]}, {"5175"})
+
+    def test_emulators_override_personal_settings_in_every_service(self):
+        config = self.render(emulated=True)
+        services = config["services"]
+        for name in ["backend", "publisher", "staged-x"]:
+            settings = services[name]["environment"]
+            self.assertEqual(settings["X_LOCAL_CALLBACK_RELAY"], "false")
+            self.assertEqual(settings["X_CLIENT_ID"], "pumpkit-dev-x")
+            self.assertEqual(settings["X_CLIENT_SECRET"], "pumpkit-dev-x-secret")
+            self.assertEqual(settings["X_API_URL"], "http://emulate:4002")
+            self.assertEqual(settings["STRIPE_SECRET_KEY"], "sk_test_dev")
+            self.assertEqual(settings["PUBLISHER_ENABLED"], "false")
+            self.assertEqual(settings["SMTP_HOST"], "")
+            self.assertEqual(settings["POSTHOG_ENABLED"], "false")
+            self.assertNotEqual(settings["TRIAL_IDENTITY_KEYS"], "personal-ring")
+        self.assertEqual(
+            services["backend"]["environment"]["PUBLIC_URL"],
+            "http://example.pumpkit.localhost:1355",
+        )
+        self.assertEqual(
+            services["staged-x"]["environment"]["PUBLIC_URL"],
+            "http://example.staged-x.pumpkit.localhost:1355",
+        )
+        self.assertEqual(services["frontend"]["environment"]["X_LOCAL_CALLBACK_RELAY"], "false")
+        self.assertEqual(len(services["frontend"]["ports"]), 1)
+        self.assertEqual(services["frontend"]["ports"][0]["published"], "53123")
+        self.assertTrue(
+            all(v["name"].startswith("pumpkit-dev-example_") for v in config["volumes"].values())
+        )
 
 
 if __name__ == "__main__":

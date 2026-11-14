@@ -14,7 +14,7 @@ Positioning is the User's Persona, and Inspiration authors are inactive in every
 
 - Backend: Python 3.13, FastAPI, SQLAlchemy, Alembic, managed with **uv** (`backend/`). Frontend: React, Vite, TypeScript, Tailwind, managed with **npm** (`frontend/`). E2E: Playwright, npm (`e2e/`).
 - Root `Makefile`, which CI calls: `make check` (lint, format check, typecheck, import contracts and frontend build, all three packages) · `make test` (backend and frontend) · `make fmt` · `make e2e` (starts the dev stack if needed) · `make dev`. Per package: `make check-backend`, `check-frontend`, `check-e2e`, `test-backend`, `test-frontend`. The per-package commands below are what they run.
-- Dev: `make dev`, or `docker compose -f compose.dev.yml up --build` (Postgres, backend on :8000, frontend on :5173, which proxies `/api` to the backend)
+- Dev: agents use `make dev` / `scripts/dev-stack up` in a dedicated worktree (emulated X and Stripe, generated URL). Humans use `docker compose -f compose.dev.yml up --build` for personal testing at localhost:5173 with real providers and persistent data (ADR 0029).
 - Lint: `cd backend && uv run ruff check .` · `cd frontend && npm run lint`
 - Format: `cd backend && uv run ruff format .` · `cd frontend && npm run format` (same in `e2e/`)
 - Imports: `cd backend && uv run --extra dev lint-imports` (ADR 0008's package rules, contracts in `backend/pyproject.toml`)
@@ -81,4 +81,4 @@ Never edit files or commit in the main checkout, even for a one-line change. Bef
 
 ### Dev stack
 
-Start, check and stop the app only through `scripts/dev-stack`: load the `dev-stack` skill when you need it running. See `docs/agents/dev-stack.md`.
+Agents start, check and stop their isolated app only through `scripts/dev-stack`: load the `dev-stack` skill when you need it running. Human personal testing uses plain Compose; agents leave that stack and its data alone. See `docs/agents/dev-stack.md`.

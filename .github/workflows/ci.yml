@@ -75,20 +75,27 @@ jobs:
           X_POSTS_MONTHLY_CAP=100
           X_LINK_POSTS_MONTHLY_CAP=10
           EOF
+      - name: Create isolated agent worktree
+        run: |
+          git worktree add -b ci/e2e .claude/worktrees/e2e-ci HEAD
+          cp .env .claude/worktrees/e2e-ci/.env
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: e2e/package-lock.json
       - run: npm ci
-        working-directory: e2e
+        working-directory: .claude/worktrees/e2e-ci/e2e
       - run: npx playwright install --with-deps chromium
-        working-directory: e2e
+        working-directory: .claude/worktrees/e2e-ci/e2e
       - run: npm install --global portless@0.15.12
       - run: make e2e
+        working-directory: .claude/worktrees/e2e-ci
       - run: make e2e-managed-payments
+        working-directory: .claude/worktrees/e2e-ci
       - if: failure()
-        run: docker compose -f compose.dev.yml logs --tail 100
+        run: scripts/dev-stack logs
+        working-directory: .claude/worktrees/e2e-ci
   stack:
     runs-on: ubuntu-latest
     steps:
