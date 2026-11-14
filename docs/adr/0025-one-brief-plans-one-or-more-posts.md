@@ -32,7 +32,7 @@ Each Idea's Post is an ordinary Post: one Text, an append-only History, Feedback
 
 Only a Draft can be discarded. Discarding deletes the Post and its Versions for good, the one case where Versions are removed. Every other Post is refused: a Scheduled, Published or Failed one, and a Post still waiting for its first Version. A discarded Post's Generation is not refunded. A Post still waiting for its first Version is one being written or one whose first write failed or was lost: Retry is its way forward, and it was charged nothing. A Draft whose next Version is being written from Feedback is refused too, until that write ends. The Post's Media go with it, records and files, and so do its Upload links; the files are deleted only once the deletion commits, and the publisher's file sweep deletes any it missed. They don't wait the hour ADR 0021's sweep gives unreferenced Media. The Post's version attempts stay, their texts cleared, with only what counts them: the User, the outcome, the time, the models and the usage. So the Generations it used, a Top-up's charge included, and the hourly attempt limit keep counting them.
 
-A Post written before this change gets a Brief and an Idea of its own, so every Post belongs to an Idea. It gets no Plan, so it is refused Feedback, with a message saying so.
+A Post written before this change gets a Brief and an Idea of its own, so every Post belongs to an Idea. It gets no Plan, so it is refused Feedback, with a message saying so, and once it is discarded its Idea is not offered to write again.
 
 ## The Brief's page
 

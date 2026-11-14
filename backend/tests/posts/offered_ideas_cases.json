@@ -28,5 +28,11 @@
     "note": "a post being written still counts as the idea's post",
     "ideas": [["whole", null], ["split_1", "writing"], ["split_2", null]],
     "offered": ["split_2"]
+  },
+  {
+    "note": "an idea with no plan, whose post was discarded, is not offered",
+    "ideas": [["whole", null]],
+    "unplanned": ["whole"],
+    "offered": []
   }
 ]
