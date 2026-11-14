@@ -1,6 +1,37 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiService } from './apiService';
-import { postService } from './postService';
+import {
+  isUnwritten,
+  postService,
+  type Plan,
+  type PostDetail,
+  type UnwrittenPost,
+} from './postService';
+
+const PLAN = {
+  core_idea: 'Ship small.',
+  takeaway: 'Ship this week.',
+  funnel: 'middle',
+  desired_action: 'bookmark',
+  format: 'post',
+  length: 'short',
+  structure: 'few_lines',
+};
+const SHOWN_PLAN: Plan = {
+  coreIdea: 'Ship small.',
+  takeaway: 'Ship this week.',
+  funnel: 'middle',
+  desiredAction: 'bookmark',
+  format: 'post',
+  length: 'short',
+  structure: 'few_lines',
+};
+
+/** The Post `get` read, which the test expects written. */
+function written(post: PostDetail | UnwrittenPost): PostDetail {
+  if (isUnwritten(post)) throw new Error('Expected a written post.');
+  return post;
+}
 
 const VERSION = {
   id: 'version_attempt_01',
@@ -14,25 +45,59 @@ const VERSION = {
 describe('postService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("reads a version's Format and the Parts of its text", async () => {
+  it('starts a Post and reads it as being written, with its Plan', async () => {
     vi.spyOn(apiService, 'post').mockResolvedValue({
-      data: { id: 'post_01', brief: 'ship', versions: [VERSION] },
+      data: { id: 'post_01', brief: 'ship', plan: PLAN, versions: [], writing_state: 'writing' },
     } as never);
 
     const post = await postService.start('ship');
 
     expect(apiService.post).toHaveBeenCalledWith('/posts', { brief: 'ship' });
-    expect(post.versions).toEqual([
-      {
-        id: 'version_attempt_01',
-        number: 1,
-        feedback: null,
-        format: 'post',
-        parts: [{ text: 'the final', charCount: 9, charLimit: 280 }],
-        createdAt: '2026-10-10T12:00:30Z',
-      },
-    ]);
+    expect(post).toEqual<UnwrittenPost>({
+      id: 'post_01',
+      brief: 'ship',
+      plan: SHOWN_PLAN,
+      writingState: 'writing',
+    });
   });
+
+  it('retries the first Version of a Post Pumpkit could not write', async () => {
+    vi.spyOn(apiService, 'post').mockResolvedValue({
+      data: { id: 'post_01', brief: 'ship', plan: PLAN, versions: [], writing_state: 'writing' },
+    } as never);
+
+    const post = await postService.retry('post_01');
+
+    expect(apiService.post).toHaveBeenCalledWith('/posts/post_01/retry');
+    expect(post.writingState).toBe('writing');
+  });
+
+  it.each(['writing', 'not_written'] as const)(
+    'reads a Post with no status as unwritten, %s',
+    async (writingState) => {
+      vi.spyOn(apiService, 'get').mockResolvedValue({
+        data: {
+          id: 'post_01',
+          brief: 'ship',
+          plan: PLAN,
+          text: null,
+          versions: [],
+          writing_state: writingState,
+          status: null,
+          scheduled_post: null,
+        },
+      } as never);
+
+      const post = await postService.get('post_01');
+
+      expect(post).toEqual<UnwrittenPost>({
+        id: 'post_01',
+        brief: 'ship',
+        plan: SHOWN_PLAN,
+        writingState,
+      });
+    },
+  );
 
   it("reads a Post's Text, its status and its Scheduled post", async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
@@ -70,7 +135,7 @@ describe('postService', () => {
       },
     } as never);
 
-    const post = await postService.get('post_01');
+    const post = written(await postService.get('post_01'));
 
     expect(apiService.get).toHaveBeenCalledWith('/posts/post_01');
     expect(post.text).toEqual({
@@ -166,7 +231,7 @@ describe('postService', () => {
       },
     } as never);
 
-    const post = await postService.get('post_01');
+    const post = written(await postService.get('post_01'));
 
     expect(post.text).toEqual({
       format: 'thread',
@@ -204,7 +269,7 @@ describe('postService', () => {
       },
     } as never);
 
-    const post = await postService.get('post_01');
+    const post = written(await postService.get('post_01'));
 
     expect(post.scheduledPost).toBeNull();
     expect(post.status).toBe('draft');

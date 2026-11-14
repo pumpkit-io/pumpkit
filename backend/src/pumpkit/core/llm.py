@@ -129,7 +129,8 @@ class FakeLLM:
     A scripted model: each call takes the reply `standing` holds for its schema class or name, or
     else the next of `replies`: a dict of fields or an exception. A standing reply can also be a
     function of the call, for calls that run in parallel. Each call holds a slot under the
-    Instance's cap for `latency` seconds, as a real one does. Clear `configured` for a missing key.
+    Instance's cap for `latency` seconds, as a real one does. A call whose schema `held` names
+    first waits for that event to be set. Clear `configured` for a missing key.
     """
 
     replies: list[_Reply] = field(default_factory=list)
@@ -139,6 +140,7 @@ class FakeLLM:
     calls: list[LLMCall] = field(default_factory=list)
     configured: bool = True
     latency: float = 0.0
+    held: dict[Union[str, type[BaseModel]], asyncio.Event] = field(default_factory=dict)
 
     def is_configured(self) -> bool:
         return self.configured
@@ -160,6 +162,9 @@ class FakeLLM:
 
     async def _answer(self, call: LLMCall) -> StructuredResult[Any]:
         model, response_model = call.model, call.response_model
+        hold = self.held.get(response_model) or self.held.get(response_model.__name__)
+        if hold is not None:
+            await hold.wait()
         if self.latency:
             await asyncio.sleep(self.latency)
         # A class key tells apart two schemas the model reads under one name.

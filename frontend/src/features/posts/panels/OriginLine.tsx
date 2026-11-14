@@ -21,8 +21,8 @@ export function OriginLine({
   brief: string;
   /** Shown on the Version written from the Brief: Feedback may have overridden it since. */
   plan?: Plan | null;
-  /** The Version the Text came from. */
-  version: Version;
+  /** The Version the Text came from; none while the first Version is being written. */
+  version?: Version;
   edited: boolean;
   /** The number of the Version being written from Feedback, if one is. */
   writing?: number | null;
@@ -52,12 +52,13 @@ export function OriginLine({
     );
   }
 
-  const from = version.feedback
-    ? `From feedback: “${version.feedback.replace(/\s+/g, ' ').trim()}”`
+  const feedback = version?.feedback ?? null;
+  const from = feedback
+    ? `From feedback: “${feedback.replace(/\s+/g, ' ').trim()}”`
     : 'From your brief';
-  const planned = plan && !version.feedback ? planLine(plan, version.format) : null;
+  const planned = plan && !feedback ? planLine(plan, version?.format ?? plan.format) : null;
   const line = [
-    `V${version.number}`,
+    ...(version ? [`V${version.number}`] : []),
     from,
     ...(planned ? [planned] : []),
     ...(edited ? ['edited'] : []),
@@ -73,9 +74,11 @@ export function OriginLine({
           aria-label={line}
           className={`group flex w-full min-w-0 items-center gap-2 rounded-sm text-left transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none ${LINE}`}
         >
-          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground">
-            V{version.number}
-          </span>
+          {version && (
+            <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs font-semibold text-foreground">
+              V{version.number}
+            </span>
+          )}
           <span className={planned ? 'shrink-0' : 'min-w-0 truncate'}>{from}</span>
           {planned && <span className="min-w-0 truncate">· {planned}</span>}
           {edited && <span className="shrink-0">· edited</span>}
@@ -84,12 +87,12 @@ export function OriginLine({
       <PopoverContent
         side="bottom"
         align="start"
-        aria-label={version.feedback ? 'Feedback' : 'Brief'}
+        aria-label={feedback ? 'Feedback' : 'Brief'}
         className="max-h-[50vh] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto"
       >
         {planned && <p className={`mb-2 ${LINE}`}>{planned}</p>}
         <p className="whitespace-pre-wrap break-words font-sans text-sm leading-6 text-foreground">
-          {version.feedback ?? brief}
+          {feedback ?? brief}
         </p>
       </PopoverContent>
     </Popover>

@@ -41,6 +41,7 @@ from pumpkit.posts.media_upload_links import NewUploadLink
 from pumpkit.posts.models import Media, Post
 from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse, VersionResponse
 from pumpkit.posts.writing.post_writing import revise_version
+from pumpkit.posts.writing_state import writing_state
 from pumpkit.scheduling import communities, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -664,10 +665,14 @@ async def cancel_scheduled_post(
 async def get_post(
     db: AsyncSession, user: User, post_id: str, *, now: datetime
 ) -> PostDetailResponse:
-    """The User's Post with its Text, every Version in order, its status and Scheduled post."""
+    """
+    The User's Post with its Text, every Version in order, its writing state, and its status and
+    Scheduled post once it has a Text.
+    """
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
+    written = post.text_version_number is not None
     return PostDetailResponse(
         id=post.id,
         brief=post.brief,
@@ -677,7 +682,8 @@ async def get_post(
             version_writing.version_response(v, char_limit)
             for v in version_writing.versions_of(post)
         ],
-        status=post_status(scheduled_post.state if scheduled_post else None),
+        writing_state=writing_state(post, now=now),
+        status=post_status(scheduled_post.state if scheduled_post else None) if written else None,
         scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
     )
 

@@ -282,7 +282,11 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     version in order, each with the feedback that made it, its text, each part's character count,
     `first_reply` (whether its last part is the single post's first reply),
     when it was written and its `starting_text`: the text that feedback was given on, with the
-    version it came from, when it wasn't the version before as written. `status` is "draft" with no
+    version it came from, when it wasn't the version before as written. `writing_state` is
+    "writing" while Pumpkit writes a version, about a minute, so read the post again until it is
+    null; "not_written" means Pumpkit couldn't write the first version, which the user can retry
+    from the post's page in the web app. Until its first version is written a post has no text
+    and `status` is null. `status` is "draft" with no
     scheduled post, else "scheduled", "published" or "failed" from its one scheduled post, returned
     in `scheduled_post` with its own copy of the text, which the user may have edited since, and
     `posting`, true while it is being published or due. A draft has no scheduled post, so its text

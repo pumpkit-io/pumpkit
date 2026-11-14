@@ -462,7 +462,7 @@ describe('The signed-in shell', () => {
       expect(brief).toHaveValue('half a thought');
     });
 
-    it('keeps the Brief while a Version is being written', async () => {
+    it('keeps the Brief while it is being planned', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
       vi.mocked(inspirationAuthorService.list).mockResolvedValue([LEVELSIO]);
       vi.mocked(postService.start).mockReturnValue(new Promise(() => {}));
@@ -476,7 +476,7 @@ describe('The signed-in shell', () => {
       fireEvent.click((await sidebar()).getByRole('link', { name: 'New post' }));
 
       expect(screen.getByLabelText('Brief')).toHaveValue('ship small things');
-      expect(screen.getByText(/writing your post/i)).toBeInTheDocument();
+      expect(screen.getByText('Reading your brief…')).toBeInTheDocument();
     });
   });
 

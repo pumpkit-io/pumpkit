@@ -14,7 +14,14 @@ from pumpkit.posts.writing import planning
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.mcp_client import error_text
 from tests.positioning.positioning import POSITIONING, TEXT, save_positioning
-from tests.posts.writing_replies import PLAN, POST_IDEAS, ideas, planned_post, planned_thread
+from tests.posts.writing_replies import (
+    PLAN,
+    POST_IDEAS,
+    ideas,
+    planned_post,
+    planned_thread,
+    written_post,
+)
 
 POSTS = "/api/v1/posts"
 BRIEF = "I shipped a pricing page in a weekend and trials went from 12 to 31 a week."
@@ -214,8 +221,7 @@ async def test_the_plan_of_a_thread_the_planner_chose_has_the_thread_format_and_
 
     response = await client.post(POSTS, json={"brief": BRIEF})
 
-    assert response.status_code == 201, response.text
-    started = response.json()
+    started = await written_post(client, response)
     assert started["versions"][0]["format"] == "thread"
     assert started["plan"] == {
         **PLAN,
@@ -349,8 +355,6 @@ async def test_choices_that_pull_against_each_other_are_logged_and_the_post_is_s
     with caplog.at_level(logging.WARNING, logger="pumpkit.posts.writing.planning"):
         response = await _start(client, fake_llm)
 
-    assert response.status_code == 201
-    assert response.json()["versions"][0]["parts"][0]["text"] == "the final"
     logged = [record.getMessage() for record in caplog.records]
     assert logged == [
         f"A plan's choices pull against each other for User {user.id}: structure=few_lines is "
@@ -359,6 +363,7 @@ async def test_choices_that_pull_against_each_other_are_logged_and_the_post_is_s
         "unusual for the top of the funnel (usual: dwell_time, follow, reply, repost, share).",
     ]
     assert response.json()["plan"]["length"] == "short"
+    assert (await written_post(client, response))["versions"][0]["parts"][0]["text"] == "the final"
 
 
 async def test_a_list_planned_short_is_logged_as_tight(
@@ -435,7 +440,7 @@ async def test_a_plan_call_that_runs_out_of_time_fails_like_any_other(
 async def test_a_post_whose_writing_failed_keeps_its_brief_and_plan(client, ready, fake_llm, db):
     fake_llm.replies = [LLMError("no reply")]
 
-    assert (await client.post(POSTS, json={"brief": BRIEF})).status_code == 502
+    assert (await client.post(POSTS, json={"brief": BRIEF})).status_code == 201
 
     [idea] = await _ideas(db)
     [post] = list(await db.scalars(select(Post)))

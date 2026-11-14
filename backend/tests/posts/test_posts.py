@@ -11,7 +11,7 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import start_thread
+from tests.posts.writing_replies import start_thread, written_post
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -45,8 +45,7 @@ async def test_starting_a_post_returns_it_with_its_first_version(
 
     response = await client.post(POSTS, json={"brief": "ship small things"})
 
-    assert response.status_code == 201
-    body = response.json()
+    body = await written_post(client, response)
     assert body["id"].startswith("post_")
     assert body["brief"] == "ship small things"
     assert body["versions"][0]["id"].startswith("version_attempt_")
@@ -71,7 +70,7 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
         {"post": "final one"},
         {"post": "final two"},
     ]
-    post = (await client.post(POSTS, json={"brief": "ship"})).json()
+    post = await written_post(client, await client.post(POSTS, json={"brief": "ship"}))
     [first] = post["versions"]
 
     second = (
@@ -117,7 +116,7 @@ async def test_the_final_is_counted_as_x_counts_it_and_kept_when_over_the_limit(
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
-    version = response.json()["versions"][0]
+    version = (await written_post(client, response))["versions"][0]
     assert version["parts"] == [
         {"text": long_final, "char_count": 302, "char_limit": X_POST_MAX_CHARS}
     ]
@@ -164,8 +163,7 @@ async def test_a_user_without_a_subscription_writes_a_post_where_no_plans_are_so
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
-    assert response.status_code == 201
-    assert response.json()["versions"][0]["parts"][0]["text"] == "final"
+    assert (await written_post(client, response))["versions"][0]["parts"][0]["text"] == "final"
 
 
 async def _stored_posts(db) -> list[Post]:
@@ -202,15 +200,15 @@ async def test_a_post_stores_its_brief_and_version_with_models_and_usage(
     assert as_utc(attempt.created_at) == clock()
 
 
-async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_returns_502(
-    client, db, with_author, fake_llm, assert_reported_502
+async def test_a_failed_version_stores_the_post_and_a_failed_attempt_and_reports_it(
+    client, db, with_author, fake_llm, fake_posthog
 ):
     fake_llm.replies = [LLMError("provider timed out")]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
-    assert_reported_502(response)
-    assert response.json()["detail"] == "Writing the post failed. Please try again."
+    assert (await written_post(client, response))["writing_state"] == "not_written"
+    fake_posthog.capture_exception.assert_called_once()
     [post] = await _stored_posts(db)
     assert post.brief == "ship"
     [attempt] = post.attempts
@@ -232,14 +230,13 @@ async def test_retrying_after_a_failure_starts_a_new_post(client, db, with_autho
     assert sorted(p.attempts[0].status for p in posts) == ["failed", "succeeded"]
 
 
-async def test_writing_without_the_llm_key_fails_clearly_and_stores_the_attempt(
+async def test_a_write_without_the_llm_key_leaves_the_post_not_written_and_stores_the_attempt(
     client, db, with_author, fake_llm
 ):
     fake_llm.replies = [LLMNotConfiguredError("LLM_API_KEY is not set. Add it to .env.")]
 
     response = await client.post(POSTS, json={"brief": "ship"})
 
-    assert response.status_code == 503
-    assert "LLM_API_KEY" in response.json()["detail"]
+    assert (await written_post(client, response))["writing_state"] == "not_written"
     [post] = await _stored_posts(db)
     assert post.attempts[0].status == "failed"

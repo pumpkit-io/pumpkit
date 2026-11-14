@@ -1,8 +1,8 @@
 """Seed a fixed e2e test user and print one machine-readable line, `E2E_ACCESS_TOKEN=<jwt>`.
 
 The user is Subscribed through a Subscription written straight into Pumpkit's copy and has
-finished Onboarding, and has no Inspiration authors, Posts, X connection or Scheduled posts, so
-Home and Scheduled show their tools without calling any provider.
+finished Onboarding, and has no Positioning, Inspiration authors, Posts, X connection or
+Scheduled posts, so Home and Scheduled show their tools without calling any provider.
 
 Run inside the backend container: `docker compose -f compose.dev.yml exec -T backend python - < e2e/seed/seed_user.py`.
 """
@@ -18,6 +18,7 @@ from pumpkit.authors.models import InspirationAuthor
 from pumpkit.billing.models import Subscription
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.onboarding.models import OnboardingFinish
+from pumpkit.positioning.models import Positioning
 from pumpkit.posts.models import Brief
 from pumpkit.scheduling.models import ScheduledPost
 from pumpkit.x_connection.models import XConnection
@@ -43,6 +44,7 @@ async def main() -> None:
         await db.flush()
 
         await db.execute(delete(InspirationAuthor).where(InspirationAuthor.user_id == user.id))
+        await db.execute(delete(Positioning).where(Positioning.user_id == user.id))
         await db.execute(delete(XConnection).where(XConnection.user_id == user.id))
         await db.execute(delete(ScheduledPost).where(ScheduledPost.user_id == user.id))
         # Deleting a Brief deletes its Ideas and their Posts.

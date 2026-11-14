@@ -57,7 +57,7 @@ async def test_a_post_whose_first_version_failed_still_has_its_brief(
 ):
     fake_llm.replies = [LLMError("no reply")]
 
-    assert (await client.post(POSTS, json={"brief": "ship small things"})).status_code == 502
+    assert (await client.post(POSTS, json={"brief": "ship small things"})).status_code == 201
 
     assert [(text, order) for _, text, order, _ in await _stored(db)] == [("ship small things", 1)]
 

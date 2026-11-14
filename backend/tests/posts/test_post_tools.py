@@ -59,25 +59,29 @@ async def test_starting_a_post_returns_its_first_versions_final_and_character_co
     result = await mcp.call_tool("start_post", brief="  ship small things ")
 
     assert result["isError"] is False
-    post = result["structuredContent"]
-    assert post["id"].startswith("post_")
-    assert post == {
-        "id": post["id"],
+    started = result["structuredContent"]
+    assert started["id"].startswith("post_")
+    assert started == {
+        "id": started["id"],
         "brief": "ship small things",
         "plan": PLAN,
-        "versions": [
-            {
-                "id": post["versions"][0]["id"],
-                "number": 1,
-                "feedback": None,
-                "format": "post",
-                "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
-                "first_reply": False,
-                "starting_text": None,
-                "created_at": "2026-10-10T12:00:30Z",
-            }
-        ],
+        "versions": [],
+        "writing_state": "writing",
     }
+    post = (await mcp.call_tool("get_post", post_id=started["id"]))["structuredContent"]
+    assert post["writing_state"] is None
+    assert post["versions"] == [
+        {
+            "id": post["versions"][0]["id"],
+            "number": 1,
+            "feedback": None,
+            "format": "post",
+            "parts": [{"text": "the final", "char_count": 9, "char_limit": X_POST_MAX_CHARS}],
+            "first_reply": False,
+            "starting_text": None,
+            "created_at": "2026-10-10T12:00:30Z",
+        }
+    ]
 
 
 async def test_starting_a_post_the_planner_makes_a_thread_returns_its_parts(
@@ -89,7 +93,8 @@ async def test_starting_a_post_the_planner_makes_a_thread_returns_its_parts(
     result = await mcp.call_tool("start_post", brief="ship small things, as a thread")
 
     assert result["isError"] is False
-    [version] = result["structuredContent"]["versions"]
+    post_id = result["structuredContent"]["id"]
+    [version] = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["versions"]
     assert (version["format"], version["parts"]) == (
         "thread",
         [
@@ -317,6 +322,8 @@ WRITING_TOOLS = ["start_post", "give_feedback"]
 
 @pytest.mark.parametrize("tool", WRITING_TOOLS)
 async def test_a_model_failure_is_a_reported_tool_error(post_id, mcp, fake_llm, fake_posthog, tool):
+    # Starting a Post answers once the Brief is planned, so only the plan call fails it.
+    fake_llm.standing[POST_IDEAS] = LLMError("provider down")
     fake_llm.replies = [LLMError("provider down")]
 
     result = await mcp.call_tool(tool, **_writing_call(tool, post_id))

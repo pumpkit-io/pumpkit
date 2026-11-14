@@ -187,7 +187,7 @@ async def test_a_failed_attempt_takes_nothing_from_a_top_up(
     await _use_allowance(db, user.id)
     fake_llm.replies = [LLMError("down")]
 
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 502
+    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
 
     assert await _generations_left(client) == (0, [2])
 

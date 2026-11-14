@@ -1,5 +1,12 @@
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
+import { act, render, screen } from '@testing-library/react';
+import {
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  type NavigateFunction,
+} from 'react-router-dom';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS } from '@/features/instance/testInstances';
@@ -41,6 +48,7 @@ export function renderSignedIn(
                 {signedInRoutes()}
               </Routes>
               <CurrentPath />
+              <Navigator />
             </MemoryRouter>
           </ThemeProvider>
         </OnboardingProvider>
@@ -59,6 +67,20 @@ function splitPath(path: string): { pathname: string; search: string } {
 /** Where the router is now, as `CurrentPath` shows it. */
 export function currentPath(): string | null {
   return screen.getByRole('status', { name: 'Current path' }).textContent;
+}
+
+let navigate: NavigateFunction | null = null;
+
+/** Moves the router to `path` as an in-app link would, keeping the pages it shares mounted. */
+export function goTo(path: string): void {
+  act(() => {
+    void navigate?.(path);
+  });
+}
+
+function Navigator() {
+  navigate = useNavigate();
+  return null;
 }
 
 /** Shows the router's path and state so a test can read where a click or a redirect landed. */

@@ -105,7 +105,7 @@ async def test_failed_attempts_count_toward_the_limit(
     first = clock()
     await _store_attempts(db, user.id, [first + timedelta(minutes=n) for n in range(29)])
     fake_llm.replies = [LLMError("provider down")]
-    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 502
+    assert (await client.post(POSTS, json={"brief": "ship"})).status_code == 201
     fake_llm.calls.clear()
 
     response = await client.post(POSTS, json={"brief": "ship"})

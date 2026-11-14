@@ -26,6 +26,7 @@ from tests.posts.writing_replies import (
     planned_thread,
     revised_thread,
     sketched_thread,
+    written_post,
 )
 
 POSTS = "/api/v1/posts"
@@ -184,8 +185,7 @@ async def test_a_thread_plan_writes_a_thread_with_five_sketches_a_merge_and_a_hu
 ):
     response = await _write_thread(client, fake_llm, final=["Ship—on Fridays.", "Keep a log…"])
 
-    assert response.status_code == 201, response.text
-    started = response.json()
+    started = await written_post(client, response)
     assert (started["plan"]["format"], started["plan"]["length"]) == ("thread", None)
     assert started["plan"]["structure"] == "hook_list_closer"
     [version] = started["versions"]
@@ -448,7 +448,8 @@ async def test_a_thread_on_a_premium_account_states_the_accounts_limit_per_part(
 
     response = await _write_thread(client, fake_llm)
 
-    assert {part["char_limit"] for part in response.json()["versions"][0]["parts"]} == {25000}
+    [version] = (await written_post(client, response))["versions"]
+    assert {part["char_limit"] for part in version["parts"]} == {25000}
     sketch = _system_text(_calls(fake_llm, SKETCHED_THREAD)[0])
     assert "- Each part is at most 25,000 characters as X counts them" in sketch
     humanizer = _system_text(_calls(fake_llm, HUMANIZED_THREAD)[0])
@@ -489,13 +490,14 @@ TOO_MANY = [f"part {n}" for n in range(1, THREAD_MAX_PARTS + 2)]
     ],
 )
 async def test_a_merge_or_humanizer_reply_outside_the_part_bounds_fails_the_attempt(
-    client, db, ready, fake_llm, assert_reported_502, merge, final
+    client, db, ready, fake_llm, fake_posthog, merge, final
 ):
     fake_llm.standing[MERGED_THREAD] = merged_thread(merge)
 
     response = await _write_thread(client, fake_llm, final=final)
 
-    assert_reported_502(response)
+    assert (await written_post(client, response))["writing_state"] == "not_written"
+    fake_posthog.capture_exception.assert_called_once()
     attempt = await _version(db)
     assert (attempt.status, attempt.format, attempt.parts) == ("failed", "thread", None)
     assert await _generations_used(client) == 0
@@ -507,7 +509,8 @@ async def test_a_thread_of_the_most_parts_allowed_is_kept_whole(client, ready, f
 
     response = await _write_thread(client, fake_llm, final=parts)
 
-    assert [part["text"] for part in response.json()["versions"][0]["parts"]] == parts
+    [version] = (await written_post(client, response))["versions"]
+    assert [part["text"] for part in version["parts"]] == parts
 
 
 async def test_a_sketch_outside_the_part_bounds_is_skipped_like_a_failed_sketch(
@@ -543,24 +546,27 @@ async def test_a_sketch_outside_the_part_bounds_is_skipped_like_a_failed_sketch(
 
 
 async def test_when_every_sketch_is_outside_the_part_bounds_the_attempt_fails(
-    client, db, ready, fake_llm, assert_reported_502
+    client, db, ready, fake_llm, fake_posthog
 ):
     fake_llm.standing[SKETCHED_THREAD] = sketched_thread(TOO_MANY)
 
     response = await _write_thread(client, fake_llm)
 
-    assert_reported_502(response)
+    assert (await written_post(client, response))["writing_state"] == "not_written"
+    fake_posthog.capture_exception.assert_called_once()
     assert _calls(fake_llm, MERGED_THREAD) == []
     assert (await _version(db)).status == "failed"
 
 
 async def test_a_failed_thread_humanizer_call_fails_the_attempt(
-    client, db, ready, fake_llm, assert_reported_502
+    client, db, ready, fake_llm, fake_posthog
 ):
     fake_llm.standing[POST_IDEAS] = ideas(planned_thread())
     fake_llm.replies = [LLMError("acme: APIConnectionError: down")]
 
-    assert_reported_502(await client.post(POSTS, json={"brief": BRIEF}))
+    response = await client.post(POSTS, json={"brief": BRIEF})
+    assert (await written_post(client, response))["writing_state"] == "not_written"
+    fake_posthog.capture_exception.assert_called_once()
     assert (await _version(db)).format == "thread"
 
 
@@ -586,7 +592,8 @@ async def test_start_post_over_mcp_takes_no_format_and_writes_the_thread_the_pla
     result = await mcp.call_tool("start_post", brief=BRIEF)
 
     assert result["isError"] is False, result
-    post = result["structuredContent"]
+    post_id = result["structuredContent"]["id"]
+    post = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]
     assert (post["plan"]["format"], post["plan"]["length"]) == ("thread", None)
     assert [part["text"] for part in post["versions"][0]["parts"]] == FINAL
 
