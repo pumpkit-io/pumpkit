@@ -2,7 +2,7 @@
 
 Its tokens are fakes: nothing in the smoke tests reaches X, and `seed_user.py` removes the
 connection again on the next run. Run it like `seed_user.py`, after it. An email argument
-connects that seeded user instead, as `onboarding_user.py`'s to pass the X step.
+connects that seeded user instead, as `onboarding_user.py`'s, so its draft reads X.
 """
 
 import asyncio

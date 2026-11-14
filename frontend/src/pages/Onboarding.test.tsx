@@ -19,17 +19,9 @@ vi.mock('@/services/billingService', () => ({
     fetchPlans: vi.fn().mockResolvedValue({ plans: [], termsVersion: '2026-10-11' }),
   },
 }));
-vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
-  inspirationAuthorService: {
-    list: vi.fn(),
-    add: vi.fn(),
-    remove: vi.fn(),
-    refresh: vi.fn(),
-  },
-}));
-vi.mock('@/services/authorDirectoryService', () => ({
-  authorDirectoryService: { list: vi.fn() },
+vi.mock('@/services/positioningService', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/services/positioningService')>()),
+  positioningService: { get: vi.fn(), save: vi.fn(), draft: vi.fn() },
 }));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: { get: vi.fn().mockResolvedValue(null), startAuthorization: vi.fn() },
@@ -57,58 +49,49 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 import { SELLS_PLANS } from '@/features/instance/testInstances';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
-import {
-  authorDirectoryService,
-  type AuthorDirectoryEntry,
-} from '@/services/authorDirectoryService';
 import { billingService } from '@/services/billingService';
-import { inspirationAuthorService } from '@/services/inspirationAuthorService';
 import { onboardingService } from '@/services/onboardingService';
+import { positioningService } from '@/services/positioningService';
 import { xConnectionService } from '@/services/xConnectionService';
-import { LEVELSIO, SUBSCRIBED, apiError, currentPath, renderSignedIn } from './testing/signedInApp';
+import { SUBSCRIBED, apiError, currentPath, renderSignedIn } from './testing/signedInApp';
 
-function entry(handle: string, name: string, personaCount = 0): AuthorDirectoryEntry {
-  return { handle, name, photoUrl: null, personaCount };
-}
-
-// Real seed names from `backend/alembic/data/author_seeds.json`.
-const DIRECTORY: AuthorDirectoryEntry[] = [
-  entry('levelsio', 'Pieter Levels', 3),
-  entry('paulg', 'Paul Graham', 5),
-  entry('naval', 'Naval Ravikant', 5),
-];
-
-const PIETER = { ...LEVELSIO, name: 'Pieter Levels' };
+const DRAFTED = "I'm a solo founder building a pricing tool. I post about pricing for founders.";
+const EDITED = `${DRAFTED} I post to earn sign-ups.`;
+const NOT_READ = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
 
 function renderOnboarding(path = '/onboarding') {
   return renderSignedIn(path, { nextStep: 'persona' });
 }
 
 async function step() {
-  return within(
-    await screen.findByRole('region', { name: 'Choose up to three authors to write like' }),
-  );
+  return within(await screen.findByRole('region', { name: 'Who you are on X' }));
 }
 
-async function pick(query: string) {
-  const field = await (await step()).findByRole('combobox', { name: 'Find an author' });
-  fireEvent.focus(field);
-  fireEvent.change(field, { target: { value: query } });
-  fireEvent.keyDown(field, { key: 'Enter' });
+async function field() {
+  return (await step()).findByRole('textbox', { name: 'Who you are on X' });
 }
 
 function continueButton() {
   return screen.getByRole('button', { name: 'Continue' });
 }
 
+/** Renders the step and waits for the draft to fill the textarea. */
+async function drafted() {
+  renderOnboarding();
+  await waitFor(async () => expect(await field()).toHaveValue(DRAFTED));
+}
+
 describe('Onboarding', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
-    vi.mocked(inspirationAuthorService.list).mockReset().mockResolvedValue([]);
-    vi.mocked(inspirationAuthorService.add).mockReset();
-    vi.mocked(inspirationAuthorService.remove).mockReset();
-    vi.mocked(authorDirectoryService.list).mockReset().mockResolvedValue(DIRECTORY);
+    vi.mocked(positioningService.get).mockReset().mockResolvedValue({ text: null, canDraft: true });
+    vi.mocked(positioningService.draft)
+      .mockReset()
+      .mockResolvedValue({ text: DRAFTED, reason: null, canDraft: true });
+    vi.mocked(positioningService.save)
+      .mockReset()
+      .mockImplementation(async (text) => ({ text }));
     vi.mocked(onboardingService.fetchNextStep).mockReset().mockResolvedValue('persona');
     vi.mocked(onboardingService.finish).mockReset().mockResolvedValue(undefined);
     vi.mocked(xConnectionService.startAuthorization).mockReset();
@@ -133,104 +116,181 @@ describe('Onboarding', () => {
       await waitFor(() => expect(currentPath()).toBe('/new'));
     });
 
-    it('sends a User who is not Subscribed from /onboarding to the Paywall', async () => {
+    it('sends a User who is not Subscribed from /onboarding to the Paywall, reading nothing from X', async () => {
       renderSignedIn('/onboarding', { nextStep: 'paywall' });
 
       await waitFor(() => expect(currentPath()).toBe('/subscribe'));
+      expect(positioningService.draft).not.toHaveBeenCalled();
     });
   });
 
   describe('the Persona step', () => {
-    it('renders in the onboarding shell, with Persona as the current step', async () => {
+    it('renders in the onboarding shell, titled by the Positioning panel, with Persona as the current step', async () => {
       renderOnboarding();
 
       await step();
+      expect(screen.getByRole('heading', { level: 1, name: 'Who you are on X' })).toBeVisible();
       const steps = screen.getByRole('navigation', { name: 'Steps' });
       expect(steps.querySelector('[aria-current="step"]')).toHaveTextContent('Persona');
       expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
     });
 
     it('records that the Persona step was viewed, once', async () => {
-      renderOnboarding();
+      await drafted();
 
-      await step();
       expect(vi.mocked(track).mock.calls).toEqual([
         ['onboarding_step_viewed', { step: 'persona' }],
       ]);
     });
 
-    it('resumes with the authors the User already picked', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([PIETER]);
+    it('shows "Reading your X profile…" with the textarea and Continue disabled while the draft is on its way', async () => {
+      vi.mocked(positioningService.draft).mockReturnValue(new Promise(() => {}));
       renderOnboarding();
 
-      const panel = await step();
-      expect(await panel.findByRole('list', { name: '1 of 3 places taken' })).toBeInTheDocument();
-      expect(panel.getByText('Pieter Levels')).toBeInTheDocument();
+      const textarea = await field();
+      await waitFor(() =>
+        expect(textarea).toHaveAttribute('placeholder', 'Reading your X profile…'),
+      );
+      expect(textarea).toBeDisabled();
+      expect(textarea).toHaveValue('');
+      expect(continueButton()).toBeDisabled();
+      expect(positioningService.draft).toHaveBeenCalledTimes(1);
+    });
+
+    it('fills the textarea with the draft, which the User can edit, and saves nothing yet', async () => {
+      await drafted();
+
+      const textarea = await field();
+      expect(textarea).toBeEnabled();
+      fireEvent.change(textarea, { target: { value: EDITED } });
+      expect(textarea).toHaveValue(EDITED);
+      expect(continueButton()).toBeEnabled();
+      expect(positioningService.draft).toHaveBeenCalledTimes(1);
+      expect(positioningService.save).not.toHaveBeenCalled();
+    });
+
+    it('names the five things a Positioning covers under the textarea', async () => {
+      await drafted();
+
+      expect(await field()).toHaveAccessibleDescription(
+        'Cover: who you are · what you post about · who you write for · what you post for · what you can point to',
+      );
+    });
+
+    it('opens an empty textarea with the note when no draft can be made, and Continue waits for text', async () => {
+      vi.mocked(positioningService.draft).mockResolvedValue({
+        text: null,
+        reason: NOT_READ,
+        canDraft: true,
+      });
+      renderOnboarding();
+
+      const region = await step();
+      expect(await region.findByText(NOT_READ)).toBeInTheDocument();
+      const textarea = await field();
+      expect(textarea).toBeEnabled();
+      expect(textarea).toHaveValue('');
+      expect(textarea).toHaveAccessibleDescription(
+        `${NOT_READ} Cover: who you are · what you post about · who you write for · what you post for · what you can point to`,
+      );
+      expect(continueButton()).toBeDisabled();
+
+      fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
       expect(continueButton()).toBeEnabled();
     });
 
-    it('keeps Continue disabled until a slot is filled and done fetching', async () => {
-      let added: (author: typeof PIETER) => void = () => {};
-      vi.mocked(inspirationAuthorService.add).mockReturnValue(
-        new Promise((resolve) => (added = resolve)),
-      );
+    it('opens an empty textarea with the note when the draft request fails', async () => {
+      vi.mocked(positioningService.draft).mockRejectedValue(apiError(502, 'Bad gateway'));
       renderOnboarding();
 
-      const panel = await step();
-      expect(continueButton()).toBeDisabled();
-
-      await pick('levels');
-      expect(await panel.findByText("Reading @levelsio's posts…")).toBeInTheDocument();
-      expect(continueButton()).toBeDisabled();
-
-      added(PIETER);
-      await waitFor(() => expect(continueButton()).toBeEnabled());
-      expect(panel.getByText('Pieter Levels')).toBeInTheDocument();
+      const textarea = await field();
+      await waitFor(() => expect(textarea).toBeEnabled());
+      expect(textarea).toHaveValue('');
+      expect((await step()).getByRole('alert')).toBeInTheDocument();
     });
 
-    it('says more authors give a steadier style', async () => {
+    it('asks for no draft when the User has used up the day’s drafts, and says when they can again', async () => {
+      vi.mocked(positioningService.get).mockResolvedValue({ text: null, canDraft: false });
       renderOnboarding();
 
-      expect((await step()).getByText('More authors give a steadier style.')).toBeInTheDocument();
+      const textarea = await field();
+      await waitFor(() => expect(textarea).toBeEnabled());
+      expect(textarea).toHaveValue('');
+      expect((await step()).getByText('You can draft again tomorrow.')).toBeInTheDocument();
+      expect(positioningService.draft).not.toHaveBeenCalled();
     });
 
-    it('records the finish and lands on New post when Continue is pressed', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([PIETER]);
-      renderOnboarding();
-      await step();
+    it('saves the edited Positioning, finishes Onboarding and lands on New post when Continue is pressed', async () => {
+      await drafted();
+      fireEvent.change(await field(), { target: { value: EDITED } });
       vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
 
       fireEvent.click(continueButton());
 
       await waitFor(() => expect(currentPath()).toBe('/new'));
+      expect(positioningService.save).toHaveBeenCalledWith(EDITED);
       expect(onboardingService.finish).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(positioningService.save).mock.invocationCallOrder[0]).toBeLessThan(
+        vi.mocked(onboardingService.finish).mock.invocationCallOrder[0],
+      );
       expect(track).toHaveBeenCalledWith('onboarding_finished');
     });
 
-    it('shows why the finish was refused and stays on the step', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([PIETER]);
-      vi.mocked(onboardingService.finish).mockRejectedValue(
-        apiError(409, 'Pick at least one inspiration author to continue.'),
+    it('shows "Continuing…" and locks the textarea while Continue is on its way', async () => {
+      vi.mocked(positioningService.save).mockReturnValue(new Promise(() => {}));
+      await drafted();
+
+      fireEvent.click(continueButton());
+
+      const button = await screen.findByRole('button', { name: 'Continuing…' });
+      expect(button).toBeDisabled();
+      expect(await field()).toBeDisabled();
+      expect(await field()).toHaveValue(DRAFTED);
+      expect(
+        (await step()).getByRole('button', { name: 'Draft again from my X profile' }),
+      ).toBeDisabled();
+    });
+
+    it('keeps the text and says why under the textarea when the save fails, and stays on the step', async () => {
+      vi.mocked(positioningService.save).mockRejectedValue(
+        Object.assign(new Error('Network Error'), { isAxiosError: true }),
       );
-      renderOnboarding();
-      await step();
+      await drafted();
 
       fireEvent.click(continueButton());
 
       expect(
-        await screen.findByText('Pick at least one inspiration author to continue.'),
+        await (await step()).findByText("Couldn't save your positioning. Try again."),
+      ).toBeInTheDocument();
+      expect(await field()).toHaveValue(DRAFTED);
+      expect(onboardingService.finish).not.toHaveBeenCalled();
+      expect(currentPath()).toBe('/onboarding');
+      expect(continueButton()).toBeEnabled();
+    });
+
+    it('shows why the finish was refused and stays on the step', async () => {
+      vi.mocked(onboardingService.finish).mockRejectedValue(
+        apiError(409, 'Write your positioning to continue.'),
+      );
+      await drafted();
+
+      fireEvent.click(continueButton());
+
+      expect(
+        await (await step()).findByText('Write your positioning to continue.'),
       ).toBeInTheDocument();
       expect(currentPath()).toBe('/onboarding');
+      expect(continueButton()).toBeEnabled();
       expect(track).not.toHaveBeenCalledWith('onboarding_finished');
     });
 
     it('sends a User whose Subscription ended to the Paywall when Continue is refused for it', async () => {
-      vi.mocked(inspirationAuthorService.list).mockResolvedValue([PIETER]);
-      vi.mocked(onboardingService.finish).mockRejectedValue(
-        apiError(403, 'This needs a subscription. Subscribe to continue.'),
+      vi.mocked(positioningService.save).mockRejectedValue(
+        apiError(403, 'This needs a subscription. Subscribe to continue.', {
+          code: 'subscription_required',
+        }),
       );
-      renderOnboarding();
-      await step();
+      await drafted();
       vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('paywall');
 
       fireEvent.click(continueButton());
