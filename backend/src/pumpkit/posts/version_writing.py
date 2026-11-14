@@ -26,6 +26,7 @@ from pumpkit.posts.plans import Plan
 from pumpkit.posts.schemas import (
     FailedFeedbackResponse,
     PartResponse,
+    PlaceInBriefResponse,
     PlanResponse,
     StartingTextResponse,
     TextPartResponse,
@@ -189,6 +190,23 @@ def plan_response(plan: Optional[Plan]) -> Optional[PlanResponse]:
         length=plan.length,
         structure=plan.structure,
     )
+
+
+def place_in_brief(post_ids: list[str], post_id: str) -> PlaceInBriefResponse:
+    """The Post's place among `post_ids`, its Brief's Posts in order."""
+    index = post_ids.index(post_id)
+    return PlaceInBriefResponse(
+        position=index + 1,
+        post_count=len(post_ids),
+        previous_post_id=post_ids[index - 1] if index > 0 else None,
+        next_post_id=post_ids[index + 1] if index + 1 < len(post_ids) else None,
+    )
+
+
+async def place_in_brief_of(db: AsyncSession, post: Post) -> PlaceInBriefResponse:
+    brief_id = post.idea.brief_id
+    post_ids = await service.post_ids_of_briefs(db, brief_ids={brief_id})
+    return place_in_brief(post_ids[brief_id], post.id)
 
 
 def version_response(attempt: VersionAttempt, char_limit: int) -> VersionResponse:

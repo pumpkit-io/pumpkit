@@ -691,6 +691,8 @@ async def get_post(
     return PostDetailResponse(
         id=post.id,
         brief=post.brief,
+        brief_id=post.idea.brief_id,
+        place_in_brief=await version_writing.place_in_brief_of(db, post),
         plan=version_writing.plan_response(post.idea.plan),
         text=version_writing.text_response(post, char_limit),
         versions=[
@@ -724,7 +726,9 @@ def _scheduled_post_summary(
     )
 
 
-def _post_list_item(listed: service.ListedPost, *, now: datetime) -> PostListItemResponse:
+def _post_list_item(
+    listed: service.ListedPost, brief_post_ids: dict[str, list[str]], *, now: datetime
+) -> PostListItemResponse:
     post, scheduled_post = listed.post, listed.scheduled_post
     versions = version_writing.versions_of(post)
     latest = versions[-1]
@@ -739,6 +743,8 @@ def _post_list_item(listed: service.ListedPost, *, now: datetime) -> PostListIte
     return PostListItemResponse(
         id=post.id,
         brief=post.brief,
+        brief_id=post.idea.brief_id,
+        place_in_brief=version_writing.place_in_brief(brief_post_ids[post.idea.brief_id], post.id),
         status=post_status(scheduled_post.state if scheduled_post else None),
         parts=parts,
         format=format,
@@ -763,9 +769,13 @@ async def list_posts(
     listed = await service.list_posts(
         db, user_id=user.id, status=status, limit=limit + 1, offset=offset
     )
+    page = listed[:limit]
+    brief_post_ids = await posts_service.post_ids_of_briefs(
+        db, brief_ids={item.post.idea.brief_id for item in page}
+    )
     counts = await service.count_posts(db, user_id=user.id)
     return PostsPageResponse(
-        data=[_post_list_item(item, now=now) for item in listed[:limit]],
+        data=[_post_list_item(item, brief_post_ids, now=now) for item in page],
         counts=PostCountsResponse(**counts),
         next_offset=offset + limit if len(listed) > limit else None,
     )

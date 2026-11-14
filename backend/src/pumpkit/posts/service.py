@@ -145,6 +145,25 @@ async def posts_of_ideas(db: AsyncSession, *, idea_ids: list[str]) -> dict[str, 
     return {post.idea_id: post for post in result.scalars()}
 
 
+async def post_ids_of_briefs(db: AsyncSession, *, brief_ids: set[str]) -> dict[str, list[str]]:
+    """
+    Each Brief's Post ids in the order of its Ideas, written, being written or not written alike.
+    An Idea with no Post has no place.
+    """
+    if not brief_ids:
+        return {}
+    result = await db.execute(
+        select(Idea.brief_id, Post.id)
+        .join(Post, Post.idea_id == Idea.id)
+        .where(Idea.brief_id.in_(brief_ids))
+        .order_by(Idea.whole_brief.desc(), Idea.posting_order, Idea.id)
+    )
+    post_ids: dict[str, list[str]] = {}
+    for brief_id, post_id in result.tuples():
+        post_ids.setdefault(brief_id, []).append(post_id)
+    return post_ids
+
+
 async def store_planned_brief(
     db: AsyncSession, *, user_id: str, text: str, planned: PlannedBrief, now: datetime
 ) -> Brief:

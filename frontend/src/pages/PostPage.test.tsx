@@ -107,6 +107,7 @@ import {
   WRITING_POLL_MS,
   textOf,
   type Part,
+  type PlaceInBrief,
   type Plan,
   type PostDetail,
   type PostText,
@@ -164,6 +165,15 @@ function version(number: number, texts: string[], extra: Partial<Version> = {}):
   };
 }
 
+const ALONE: PlaceInBrief = { position: 1, postCount: 1, previousPostId: null, nextPostId: null };
+/** The second of a Brief's four Posts. */
+const SECOND_OF_FOUR: PlaceInBrief = {
+  position: 2,
+  postCount: 4,
+  previousPostId: 'post_00',
+  nextPostId: 'post_03',
+};
+
 /** `post` with `versions`, its Text set from the last of them, as the server sets it. */
 function withVersions<P extends PostDetail>(post: P, versions: Version[]): P {
   const latest = versions[versions.length - 1]!;
@@ -175,6 +185,8 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
     {
       id: 'post_01',
       brief: 'ship small things',
+      briefId: 'brief_01',
+      placeInBrief: ALONE,
       plan: null,
       text: null,
       versions: [],
@@ -5981,7 +5993,14 @@ describe('A post before its first version', () => {
   };
 
   function unwritten(writingState: UnwrittenPost['writingState']): UnwrittenPost {
-    return { id: 'post_01', brief: 'ship small things', plan: PLANNED, writingState };
+    return {
+      id: 'post_01',
+      brief: 'ship small things',
+      briefId: 'brief_01',
+      placeInBrief: ALONE,
+      plan: PLANNED,
+      writingState,
+    };
   }
 
   async function poll() {
@@ -6255,5 +6274,107 @@ describe('A post before its first version', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByText(/You've used this month's 500 generations/)).toBeInTheDocument();
+  });
+});
+
+describe("A post among its brief's posts", () => {
+  beforeEach(() => {
+    vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
+    vi.mocked(postService.get).mockReset();
+    vi.mocked(postService.retry).mockReset();
+    vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+    vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
+    vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
+  });
+
+  function among(placeInBrief: PlaceInBrief, id = 'post_02'): PostDetail {
+    return { ...postWith(`the text of ${id}`), id, placeInBrief };
+  }
+
+  function briefNav() {
+    return within(screen.getByRole('navigation', { name: 'Posts from your brief' }));
+  }
+
+  it('links back to the brief and shows "2 of 4" with the previous and next posts', async () => {
+    renderPost(among(SECOND_OF_FOUR));
+    await textCard();
+
+    const nav = briefNav();
+    expect(nav.getByRole('link', { name: 'Posts from your brief' })).toHaveAttribute(
+      'href',
+      '/briefs/brief_01',
+    );
+    expect(nav.getByText('2 of 4')).toBeInTheDocument();
+    expect(nav.getByRole('link', { name: 'Previous post' })).toHaveAttribute(
+      'href',
+      '/posts/post_00',
+    );
+    expect(nav.getByRole('link', { name: 'Next post' })).toHaveAttribute('href', '/posts/post_03');
+  });
+
+  it('disables previous on the first post and next on the last', async () => {
+    renderPost(
+      among({ position: 1, postCount: 2, previousPostId: null, nextPostId: 'post_02' }, 'post_01'),
+    );
+    await textCard();
+
+    const previous = briefNav().getByRole('link', { name: 'Previous post' });
+    expect(previous).toHaveAttribute('aria-disabled', 'true');
+    expect(previous).not.toHaveAttribute('href');
+    expect(briefNav().getByRole('link', { name: 'Next post' })).toHaveAttribute(
+      'href',
+      '/posts/post_02',
+    );
+  });
+
+  it('opens the next post in place', async () => {
+    vi.mocked(postService.get).mockImplementation(async (id) =>
+      id === 'post_03'
+        ? among({ position: 3, postCount: 4, previousPostId: 'post_02', nextPostId: null }, id)
+        : among(SECOND_OF_FOUR),
+    );
+    renderSignedIn('/posts/post_02');
+    await textCard();
+
+    fireEvent.click(briefNav().getByRole('link', { name: 'Next post' }));
+
+    expect(await screen.findByText('3 of 4')).toBeInTheDocument();
+    expect((await textCard()).getByText('the text of post_03')).toBeInTheDocument();
+    expect(currentPath()).toBe('/posts/post_03');
+  });
+
+  it('shows a post from a brief with one post as before, with no brief links', async () => {
+    renderPost(postWith('the final text'));
+    await textCard();
+
+    expect(
+      screen.queryByRole('navigation', { name: 'Posts from your brief' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/ of \d/)).not.toBeInTheDocument();
+  });
+
+  it('keeps its place while a post of the brief is written again', async () => {
+    const unwritten: UnwrittenPost = {
+      id: 'post_02',
+      brief: 'ship small things',
+      briefId: 'brief_01',
+      placeInBrief: SECOND_OF_FOUR,
+      plan: null,
+      writingState: 'not_written',
+    };
+    vi.mocked(postService.get).mockResolvedValue(unwritten);
+    vi.mocked(postService.retry).mockResolvedValue({
+      id: 'post_02',
+      brief: 'ship small things',
+      plan: null,
+      writingState: 'writing',
+    });
+    renderSignedIn('/posts/post_02');
+    expect(await screen.findByText('2 of 4')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Writing…')).toBeInTheDocument();
+    expect(briefNav().getByText('2 of 4')).toBeInTheDocument();
   });
 });
