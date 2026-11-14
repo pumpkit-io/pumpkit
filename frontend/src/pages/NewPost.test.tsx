@@ -191,7 +191,17 @@ function writing(brief: Brief, ideaIds: string[]): Brief {
     ...brief,
     ideas: brief.ideas.map((idea) =>
       ideaIds.includes(idea.id)
-        ? { ...idea, post: { id: `post_${idea.id}`, writingState: 'writing', text: null } }
+        ? {
+            ...idea,
+            post: {
+              id: `post_${idea.id}`,
+              writingState: 'writing',
+              status: null,
+              publishing: false,
+              text: null,
+              textMedia: [],
+            },
+          }
         : idea,
     ),
   };
@@ -208,7 +218,14 @@ const STARTED: Brief = {
       postingOrder: 1,
       wholeBrief: true,
       plan: null,
-      post: { id: 'post_01', writingState: 'writing', text: null },
+      post: {
+        id: 'post_01',
+        writingState: 'writing',
+        status: null,
+        publishing: false,
+        text: null,
+        textMedia: [],
+      },
     },
   ],
   generationsLeft: 381,
@@ -915,7 +932,14 @@ describe('New post', () => {
         ideas: [
           {
             ...ideaOf('idea_only', 'Ship small things, often', 1, true),
-            post: { id: 'post_only', writingState: 'writing', text: null },
+            post: {
+              id: 'post_only',
+              writingState: 'writing',
+              status: null,
+              publishing: false,
+              text: null,
+              textMedia: [],
+            },
           },
         ],
       });

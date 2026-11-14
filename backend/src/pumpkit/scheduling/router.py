@@ -28,6 +28,7 @@ from pumpkit.scheduling.rules import (
 )
 from pumpkit.scheduling.schemas import (
     WRITE_RATE,
+    BriefDetailResponse,
     CommunityLookupRequest,
     CommunityResponse,
     FeedbackRequest,
@@ -338,6 +339,19 @@ async def list_posts(
         offset=page.offset,
         now=clock(),
     )
+
+
+@posts_router.get(
+    "/briefs/{brief_id}", response_model=BriefDetailResponse, status_code=status.HTTP_200_OK
+)
+async def get_brief(
+    brief_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> BriefDetailResponse:
+    """The Brief with its Ideas and their Posts, each Post's writing state and status included."""
+    return await mediator.get_brief(db, user=current_user, brief_id=brief_id, now=clock())
 
 
 @posts_router.get(

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import pumpkit.auth.service.users as users_service
 import pumpkit.billing.service as billing_service
 import pumpkit.connected_apps.service.connections as app_connections_service
+import pumpkit.posts.brief_reading as brief_reading
 import pumpkit.posts.media as media_service
 import pumpkit.posts.media_files as media_files
 import pumpkit.posts.media_upload_links as media_upload_links
@@ -47,7 +48,7 @@ from pumpkit.posts.media_fetcher import MediaUrlFetcher
 from pumpkit.posts.media_upload import ReceivedMedia
 from pumpkit.posts.media_upload_links import NewUploadLink
 from pumpkit.posts.models import Media, Post
-from pumpkit.posts.schemas import MEDIA_RATE, MediaResponse, TextResponse
+from pumpkit.posts.schemas import MEDIA_RATE, IdeaResponse, MediaResponse, TextResponse
 from pumpkit.posts.writing.post_writing import revise_version
 from pumpkit.posts.writing.versions import WrittenVersion
 from pumpkit.posts.writing_state import writing_state
@@ -56,6 +57,7 @@ from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
     PUBLISHED,
+    PUBLISHING,
     SCHEDULED,
     ScheduledPost,
 )
@@ -76,7 +78,10 @@ from pumpkit.scheduling.rules import (
 )
 from pumpkit.scheduling.schemas import (
     AllowanceUsageResponse,
+    BriefDetailResponse,
+    BriefPostDetailResponse,
     CommunityResponse,
+    IdeaDetailResponse,
     PastCommunitiesResponse,
     PlacedMediaResponse,
     PostCountsResponse,
@@ -675,6 +680,32 @@ async def cancel_scheduled_post(
     await rebalance_top_ups(db, user_id=user.id, moments=[publish_at], now=now)
     await db.commit()
     return post_id
+
+
+async def get_brief(
+    db: AsyncSession, *, user: User, brief_id: str, now: datetime
+) -> BriefDetailResponse:
+    """The Brief with its Ideas and Posts as they are now, each written Post with its status."""
+    brief = await brief_reading.read_brief(db, user=user, brief_id=brief_id, now=now)
+    written = [idea.post.id for idea in brief.ideas if idea.post and idea.post.text]
+    states = await service.states_of_posts(db, post_ids=written)
+
+    def idea_detail(idea: IdeaResponse) -> IdeaDetailResponse:
+        post = idea.post
+        return IdeaDetailResponse(
+            **idea.model_dump(exclude={"post"}),
+            post=BriefPostDetailResponse(
+                **post.model_dump(),
+                status=post_status(states.get(post.id)) if post.text else None,
+                publishing=states.get(post.id) == PUBLISHING,
+            )
+            if post
+            else None,
+        )
+
+    return BriefDetailResponse(
+        **brief.model_dump(exclude={"ideas"}), ideas=[idea_detail(idea) for idea in brief.ideas]
+    )
 
 
 async def get_post(

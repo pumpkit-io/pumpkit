@@ -34,6 +34,14 @@ Only a Draft can be discarded. Discarding deletes the Post and its Versions for 
 
 A Post written before this change gets a Brief and an Idea of its own, so every Post belongs to an Idea. It gets no Plan, so it is refused Feedback, with a message saying so.
 
+## The Brief's page
+
+The Brief's page shows a card for each of the Brief's Posts, written, being written or not written, in the Brief's order: the single-post Idea's Post first, then the split Ideas' Posts in posting order. A card's number is its place among those Posts, not its Idea's posting order, so writing the first and third Ideas gives cards 1 and 2. The header reads "n of m written", where n counts those Posts and m adds the Ideas the page offers under "Not written".
+
+The single-post Idea and the split Ideas are alternatives, so "Not written" offers only the kind that already has a Post. When both kinds have one, which takes two requests, it offers the split Ideas left. While no Idea has a Post, it offers every split Idea in posting order and then the single-post one, labelled "One post covering everything", so a Brief left unwritten for want of Generations can be written from the page.
+
+A Brief with one Post and no Idea left to offer never shows the page: it opens that Post's page, also right after "Write this one" writes a one-idea Brief.
+
 ## MCP tools (amends ADR 0012)
 
 - `plan_posts` takes a Brief and returns it with its Ideas and their Plans, the single-post Idea included. It starts nothing, even when there are no split Ideas.

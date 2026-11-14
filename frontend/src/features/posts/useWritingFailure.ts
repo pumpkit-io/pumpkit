@@ -10,6 +10,23 @@ export function isRefusal(e: unknown): boolean {
   return status !== null && status >= 400 && status < 500;
 }
 
+/**
+ * What a failed request to write says: a notice for the hourly limit on attempts, since trying
+ * again before `retry_at` won't help, otherwise an error.
+ */
+export function refusalMessage(
+  e: unknown,
+  fallback: string,
+): { error: string | null; notice: string | null } {
+  const retryAt = errorRetryAt(e);
+  if (retryAt)
+    return {
+      error: null,
+      notice: `${errorMessage(e, fallback)} You can write again at ${timeOfDay(retryAt)}.`,
+    };
+  return { error: errorMessage(e, fallback), notice: null };
+}
+
 /** How writing a Version went wrong, shared by starting a Post and giving Feedback. */
 export function useWritingFailure() {
   const { refresh: refreshSubscribed } = useSubscribed();
@@ -27,10 +44,9 @@ export function useWritingFailure() {
         return;
       }
       if (caught(e)) return;
-      const retryAt = errorRetryAt(e);
-      if (retryAt)
-        setNotice(`${errorMessage(e, fallback)} You can write again at ${timeOfDay(retryAt)}.`);
-      else setError(errorMessage(e, fallback));
+      const message = refusalMessage(e, fallback);
+      setError(message.error);
+      setNotice(message.notice);
     },
     [refreshSubscribed, caught],
   );
