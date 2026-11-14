@@ -154,6 +154,12 @@ class Post(Base):
     text_first_reply: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # When Feedback's Version started being written, which then becomes the Text; None otherwise.
     writing_since: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # The Feedback being written, kept once its write fails or times out, so the page offers it again
+    # until the User sends Feedback, changes the Text or dismisses it; None otherwise.
+    unwritten_feedback: Mapped[Optional[str]] = mapped_column(Text)
+    unwritten_feedback_format: Mapped[Optional[Format]] = mapped_column(
+        PgEnum(*get_args(Format), name="version_format_enum")
+    )
 
     user: Mapped["User"] = relationship()
     # Read with the Post, since the Brief's text is read through it.

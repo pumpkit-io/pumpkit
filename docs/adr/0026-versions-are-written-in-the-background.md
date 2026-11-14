@@ -25,13 +25,13 @@ ADR 0015 gives a Post four statuses, each taken from its Scheduled post or the l
 
 A write that produces no Version is never called Failed. Failed stays the status of a Scheduled post Pumpkit gave up publishing.
 
-A Post that Feedback is rewriting keeps its status while the next Version is written.
+A Post that Feedback is rewriting keeps its status while the next Version is written. It can't be scheduled or posted now meanwhile, so the task's own check of the status only catches a race.
 
 ## The timeout rule
 
 The task lives in the backend process and nothing else records that it is running, so a restart loses the writes in flight. Pumpkit therefore treats a Post whose writing state is older than a timeout as one it couldn't write, and shows it with Retry. Retry reuses the Idea's Plan and counts toward the hourly attempt limit again.
 
-The timeout is 15 minutes (`WRITING_TIMEOUT`) for the first Version, and for Feedback once #481 writes it in the background. Until then Feedback keeps its 30-minute hold (`FEEDBACK_WRITING_TIMEOUT`), because it still runs in the request and a late Feedback would record over an edit made after the shorter hold ended. A write is three steps whose model calls each time out at 240 seconds once they hold a slot under the in-flight cap, plus the wait for a slot; real writes take about 40 seconds. A write that ends after its Post was retried records nothing, so a Post never gets two first Versions or two charges.
+The timeout is 15 minutes (`WRITING_TIMEOUT`), for the first Version and for Feedback alike. A write is three steps whose model calls each time out at 240 seconds once they hold a slot under the in-flight cap, plus the wait for a slot; real writes take about 40 seconds. A write that ends after the timeout records nothing and charges nothing, since the User was already told it failed and its Generation no longer counts as held. A write superseded sooner records nothing either: a Retry or another Feedback started another write. So a Post never gets two first Versions or two charges, and a late Feedback never replaces a Text the User changed. A Feedback that fails or times out leaves the Text as it was. The Post keeps that Feedback and its Format, and shows them when it is next opened, with Try again, until the User sends Feedback again, changes the Text or dismisses the failure.
 
 This holds because the backend runs as one process: `backend/start.sh` starts one uvicorn worker, and the tasks and the in-flight cap live in that process. Running several workers or replicas would keep every write working, since each task records its own outcome in the database, but each process would have its own cap on model calls in flight.
 

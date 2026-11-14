@@ -73,6 +73,17 @@ async def retry_post(
     )
 
 
+@router.delete("/posts/{post_id}/failed-feedback", status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_failed_feedback(
+    post_id: str,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> None:
+    """Stops showing the Post's last Feedback as failed; a Feedback still being written stays."""
+    await mediator.dismiss_failed_feedback(db, user=current_user, post_id=post_id, now=clock())
+
+
 _CHUNK_BYTES = 256 * 1024
 # A Media's preview and file never change under its id.
 _MEDIA_HEADERS = {"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"}

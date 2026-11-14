@@ -6,6 +6,7 @@ import {
   type PostDetail,
   type PostText,
   type Version,
+  VersionNotWritten,
 } from '@/services/postService';
 import { sameParts } from '../textHistory';
 import type { Clock, TimerId } from './clock';
@@ -169,6 +170,16 @@ export class MemoryBackend {
         this.versions = [...this.versions, version];
         this.text = textOf(version);
         return version;
+      }),
+    awaitVersion: (after: number, signal: AbortSignal) =>
+      new Promise<Version>((resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+        this.answer('awaitVersion', [after], () => {
+          const latest = this.versions[this.versions.length - 1];
+          if (!latest || latest.number <= after) throw new VersionNotWritten();
+          this.text = textOf(latest);
+          return latest;
+        }).then(resolve, reject);
       }),
   };
 

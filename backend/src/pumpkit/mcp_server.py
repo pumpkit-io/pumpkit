@@ -60,7 +60,10 @@ since the version it came from.
 - Feedback rewrites the post's text as it is, the user's hand edits included, and makes the \
 next version, which becomes the text. The writing sees every version in order, so feedback such \
 as "like version 2, with a different hook" works. A version whose feedback was given on a text \
-other than the version before keeps that text as its starting text.
+other than the version before keeps that text as its starting text. Pumpkit writes it in the \
+background: `give_feedback` answers with `writing_state` "writing", and the text can't change \
+until `get_post` says null. A new version then means it was written; none means Pumpkit couldn't \
+write it, the text is as it was, and `failed_feedback` holds the feedback to give again.
 - Each version has a format: a single X post, or a thread. A thread is several ordered parts, \
 each one X post, published on X with each part replying to the one before. Pumpkit chooses the \
 format when it plans the post: a thread when the material needs more room than one post on the \

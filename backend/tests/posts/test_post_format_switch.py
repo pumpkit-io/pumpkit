@@ -13,6 +13,7 @@ from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_LONG_POST_MAX_CHARS, X_POST_MAX_CHARS
 from pumpkit.x_connection.x_publisher import XAccount
 from tests.positioning.positioning import TEXT, save_positioning
+from tests.posts.feedback import latest_version, written_version
 from tests.posts.writing_replies import (
     HUMANIZED_POST,
     HUMANIZED_THREAD,
@@ -117,10 +118,8 @@ async def test_feedback_with_the_thread_format_turns_a_single_post_into_a_thread
     post_id = await _start(client, fake_llm, "post")
     fake_llm.replies = [{"parts": ["final one", "final two"]}]
 
-    response = await _feedback(client, post_id, "expand it", "thread")
+    version = await written_version(client, post_id, "expand it", format="thread")
 
-    assert response.status_code == 201, response.text
-    version = response.json()
     assert version["format"] == "thread"
     assert [part["text"] for part in version["parts"]] == ["final one", "final two"]
     assert [part["char_limit"] for part in version["parts"]] == [280, 280]
@@ -133,9 +132,8 @@ async def test_feedback_with_the_post_format_turns_a_thread_into_a_single_post(
     post_id = await _start(client, fake_llm, "thread")
     fake_llm.replies = [{"post": "final post"}]
 
-    response = await _feedback(client, post_id, "condense it", "post")
+    version = await written_version(client, post_id, "condense it", format="post")
 
-    version = response.json()
     assert (version["format"], version["parts"]) == (
         "post",
         [{"text": "final post", "char_count": 10, "char_limit": X_POST_MAX_CHARS}],
@@ -153,9 +151,9 @@ async def test_feedback_without_a_format_keeps_the_latest_versions_format(
     post_id = await _start(client, fake_llm, format)
     fake_llm.replies = replies
 
-    response = await _feedback(client, post_id, "warmer")
+    version = await written_version(client, post_id, "warmer")
 
-    assert response.json()["format"] == format
+    assert version["format"] == format
 
 
 async def test_feedback_without_a_format_keeps_the_format_of_a_switched_version(
@@ -165,9 +163,9 @@ async def test_feedback_without_a_format_keeps_the_format_of_a_switched_version(
     fake_llm.replies = [{"parts": ["a", "b"]}, {"parts": ["c", "d"]}]
     await _feedback(client, post_id, "expand it", "thread")
 
-    response = await _feedback(client, post_id, "warmer")
+    version = await written_version(client, post_id, "warmer")
 
-    assert response.json()["format"] == "thread"
+    assert version["format"] == "thread"
     assert [call.response_model for call in fake_llm.calls][-2:] == [
         REVISED_THREAD,
         HUMANIZED_THREAD,
@@ -175,14 +173,15 @@ async def test_feedback_without_a_format_keeps_the_format_of_a_switched_version(
 
 
 async def test_a_failed_switch_records_the_format_it_was_asked_for(
-    client, db, ready, fake_llm, assert_reported_502
+    client, db, ready, fake_llm, fake_posthog
 ):
     post_id = await _start(client, fake_llm, "post")
     fake_llm.replies = [LLMError("provider down")]
 
     response = await _feedback(client, post_id, "expand it", "thread")
 
-    assert_reported_502(response)
+    assert response.status_code == 202, response.text
+    fake_posthog.capture_exception.assert_called_once()
     result = await db.execute(select(Post).options(selectinload(Post.attempts)))
     [post] = result.scalars()
     assert [(a.status, a.format) for a in post.attempts] == [
@@ -197,14 +196,16 @@ async def test_a_failed_switch_records_the_format_it_was_asked_for(
     ids=["one Part", "eleven Parts", "a blank Part"],
 )
 async def test_a_revised_thread_outside_the_part_bounds_fails_the_attempt(
-    client, ready, fake_llm, assert_reported_502, parts
+    client, ready, fake_llm, fake_posthog, parts
 ):
     post_id = await _start(client, fake_llm, "thread")
     fake_llm.standing[REVISED_THREAD] = revised_thread(parts)
 
     response = await _feedback(client, post_id, "shorter")
 
-    assert_reported_502(response)
+    assert response.status_code == 202, response.text
+    fake_posthog.capture_exception.assert_called_once()
+    assert (await latest_version(client, post_id))["number"] == 1
     assert _calls(fake_llm, HUMANIZED_THREAD) == []
 
 
@@ -260,9 +261,9 @@ async def test_a_thread_switched_to_a_post_on_a_premium_account_is_a_long_post(
     post_id = await _start(client, fake_llm, "thread")
     fake_llm.replies = [{"post": "final post"}]
 
-    response = await _feedback(client, post_id, "condense it", "post")
+    version = await written_version(client, post_id, "condense it", format="post")
 
-    assert response.json()["parts"][0]["char_limit"] == X_LONG_POST_MAX_CHARS
+    assert version["parts"][0]["char_limit"] == X_LONG_POST_MAX_CHARS
     [revise] = _calls(fake_llm, REVISED_POST)
     prompt = _system_text(revise)
     assert "# Format: long post" in prompt
@@ -413,9 +414,9 @@ async def test_feedback_after_restoring_a_thread_keeps_the_texts_format_and_says
     fake_llm.replies = [{"parts": ["final c", "final d"]}]
     fake_llm.calls.clear()
 
-    response = await _feedback(client, post_id, "warmer")
+    version = await written_version(client, post_id, "warmer")
 
-    assert response.json()["format"] == "thread"
+    assert version["format"] == "thread"
     revise, humanizer = fake_llm.calls
     assert _system_text(revise).startswith("# Role\n\nYou revise one thread on X")
     assert revise.messages[-1] == _user(

@@ -9,6 +9,7 @@ import pytest
 
 from pumpkit.core.llm import FakeLLM, LLMError, get_llm
 from pumpkit.main import app
+from pumpkit.posts.writing_state import WRITING_TIMEOUT
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import REVISED_POST, revised
@@ -27,7 +28,7 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
     assert started.status_code == 201, started.text
     fake_llm.replies = [{"post": "Version two."}]
     given = await client.post(f"{POSTS}/{started.json()['id']}/versions", json={"feedback": "more"})
-    assert given.status_code == 201, given.text
+    assert given.status_code == 202, given.text
     return started.json()
 
 
@@ -80,7 +81,7 @@ async def test_a_restore_while_feedback_is_written_is_refused(client, post):
 
     response = await client.post(f"{POSTS}/{post['id']}/versions", json={"feedback": "shorter"})
 
-    assert response.status_code == 201, response.text
+    assert response.status_code == 202, response.text
     assert answers[0].status_code == 409
     assert answers[0].json()["detail"] == BEING_WRITTEN
     assert (await _text_of(client, post["id"]))["version_number"] == 3
@@ -94,7 +95,7 @@ async def test_the_restore_version_tool_refuses_while_feedback_is_written(client
 
     response = await client.post(f"{POSTS}/{post['id']}/versions", json={"feedback": "shorter"})
 
-    assert response.status_code == 201, response.text
+    assert response.status_code == 202, response.text
     assert error_text(answers[0]) == BEING_WRITTEN
 
 
@@ -106,7 +107,7 @@ async def test_more_feedback_while_feedback_is_written_is_refused(client, post):
 
     response = await client.post(f"{POSTS}/{post['id']}/versions", json={"feedback": "shorter"})
 
-    assert response.status_code == 201, response.text
+    assert response.status_code == 202, response.text
     assert answers[0].status_code == 409
     assert answers[0].json()["detail"] == BEING_WRITTEN
     versions = (await client.get(f"{POSTS}/{post['id']}")).json()["versions"]
@@ -119,13 +120,13 @@ async def test_the_text_changes_again_once_a_write_fails(client, post):
 
     response = await client.put(f"{POSTS}/{post['id']}/text", json={"parts": ["Typed after."]})
 
-    assert failed.status_code >= 500
+    assert failed.status_code == 202, failed.text
     assert response.status_code == 200, response.text
 
 
-async def test_feedback_still_holds_the_text_twenty_minutes_in(client, post, fixed_clock):
+async def test_feedback_still_holds_the_text_just_before_the_timeout(client, post, fixed_clock):
     async def save_later():
-        fixed_clock.advance(timedelta(minutes=20))
+        fixed_clock.advance(WRITING_TIMEOUT - timedelta(seconds=1))
         return await client.put(f"{POSTS}/{post['id']}/text", json={"parts": ["Typed later."]})
 
     answers = _llm_that_meanwhile(save_later, *_written_next())
@@ -136,13 +137,18 @@ async def test_feedback_still_holds_the_text_twenty_minutes_in(client, post, fix
     assert answers[0].json()["detail"] == BEING_WRITTEN
 
 
-async def test_a_write_running_past_its_time_stops_holding_the_text(client, post, fixed_clock):
-    async def save_much_later():
-        fixed_clock.advance(timedelta(hours=1))
+async def test_a_write_running_past_the_timeout_stops_holding_the_text_and_records_nothing(
+    client, post, fixed_clock
+):
+    async def save_later():
+        fixed_clock.advance(WRITING_TIMEOUT)
         return await client.put(f"{POSTS}/{post['id']}/text", json={"parts": ["Typed later."]})
 
-    answers = _llm_that_meanwhile(save_much_later, *_written_next())
+    answers = _llm_that_meanwhile(save_later, *_written_next())
 
     await client.post(f"{POSTS}/{post['id']}/versions", json={"feedback": "shorter"})
 
     assert answers[0].status_code == 200, answers[0].text
+    text = await _text_of(client, post["id"])
+    assert [p["text"] for p in text["parts"]] == ["Typed later."]
+    assert text["version_number"] == 2

@@ -409,6 +409,8 @@ function PostPageFor({ id }: { id: string }) {
     gone,
     text,
     sendFeedback,
+    failedFeedback,
+    dismissFailedFeedback,
     rewritesDropped,
     error,
     notice,
@@ -422,7 +424,15 @@ function PostPageFor({ id }: { id: string }) {
         post={load.post}
         text={text}
         controller={load.controller}
-        feedback={{ isWriting: text.writing, error, notice, allowanceUsedUp, onSend: sendFeedback }}
+        feedback={{
+          isWriting: text.writing,
+          error,
+          notice,
+          allowanceUsedUp,
+          failed: failedFeedback,
+          onSend: sendFeedback,
+          onDismiss: dismissFailedFeedback,
+        }}
         rewritesDropped={rewritesDropped}
         onScheduledPost={setScheduledPost}
         onGone={gone}

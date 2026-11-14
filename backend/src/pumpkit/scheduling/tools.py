@@ -4,7 +4,9 @@ from typing import Optional
 
 from pumpkit.auth.models import User
 from pumpkit.authors.x_reader import get_x_reader
+from pumpkit.core.background import get_background_tasks
 from pumpkit.core.config import settings
+from pumpkit.core.db.session import get_session_maker
 from pumpkit.core.errors import RefusedError
 from pumpkit.core.llm import get_llm
 from pumpkit.core.mcp_tools import (
@@ -22,7 +24,7 @@ from pumpkit.posts.formats import Format
 from pumpkit.posts.media_fetcher import get_media_url_fetcher
 from pumpkit.posts.media_upload_links import LIFETIME as UPLOAD_LINK_LIFETIME
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
-from pumpkit.posts.schemas import TextResponse, VersionResponse
+from pumpkit.posts.schemas import TextResponse
 from pumpkit.scheduling import mediator
 from pumpkit.scheduling.models import FAILED, PUBLISHED
 from pumpkit.scheduling.post_status import PostStatus
@@ -297,7 +299,7 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
 
 async def give_feedback(
     call: ToolCall[User], post_id: str, feedback: str, format: Optional[Format] = None
-) -> VersionResponse:
+) -> PostDetailResponse:
     """
     Give feedback in plain words on one of the user's posts, such as "shorter", "end with a
     question", "make part 3 punchier" or "like version 2, with a different hook". It rewrites
@@ -306,18 +308,24 @@ async def give_feedback(
     to "post" (a single X post) or "thread"; leave it out to keep the text's format. A post's
     first reply moves into a thread's last part. A post written before plans existed is refused.
     Only a draft or a failed post takes feedback: a scheduled one is edited or deleted first, and
-    a published one is done. Show the user the new version's text, with every part and its
-    character count. Takes up to a minute.
+    a published one is done. It answers at once with the post and `writing_state` "writing":
+    Pumpkit writes the new version in the background, which takes about a minute, and the text
+    can't change meanwhile. Read the post with `get_post` until `writing_state` is null. If it
+    has a new version, show the user its text, with every part and its character count; if not,
+    Pumpkit couldn't write it, the text is as it was, and `failed_feedback` holds the feedback to
+    give again.
     """
     feedback_request = FeedbackRequest(feedback=feedback, format=format)
     return await mediator.give_feedback(
         db=call.db,
         llm=await call.provide(get_llm),
+        tasks=await call.provide(get_background_tasks),
+        sessions=await call.provide(get_session_maker),
         user=call.user,
         post_id=post_id,
         feedback=feedback_request.feedback,
         format=feedback_request.format,
-        now=call.now,
+        clock=await call.provide(get_clock),
     )
 
 

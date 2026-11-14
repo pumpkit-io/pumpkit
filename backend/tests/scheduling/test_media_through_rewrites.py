@@ -13,6 +13,7 @@ from pumpkit.main import app
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.media_files import png
 from tests.positioning.positioning import save_positioning
+from tests.posts.feedback import latest_version, written_version
 from tests.posts.writing_replies import REVISED_THREAD, revised_thread, start_thread
 
 POSTS = "/api/v1/posts"
@@ -42,10 +43,8 @@ async def _attach(client, post_id: str, *, part: int, name: str = "photo.png") -
 
 
 async def _feedback(client, post_id: str, feedback: str, format: Optional[str] = None):
-    body = {"feedback": feedback} if format is None else {"feedback": feedback, "format": format}
-    response = await client.post(f"{POSTS}/{post_id}/versions", json=body)
-    assert response.status_code == 201, response.text
-    return response.json()
+    body = {} if format is None else {"format": format}
+    return await written_version(client, post_id, feedback, **body)
 
 
 async def _media_by_part(client, post_id: str) -> list[list[str]]:
@@ -236,7 +235,7 @@ async def test_restoring_a_version_that_would_put_media_on_a_part_already_on_x_i
     assert await _media_by_part(client, post_id) == [[], [], [on_three]]
 
 
-async def test_feedback_that_would_put_media_on_a_part_already_on_x_is_refused(
+async def test_feedback_that_would_put_media_on_a_part_already_on_x_fails(
     client, with_positioning, fake_llm, fake_x_publisher
 ):
     post_id = await _start_thread(client, fake_llm, "a", "b", "c")
@@ -244,10 +243,10 @@ async def test_feedback_that_would_put_media_on_a_part_already_on_x_is_refused(
     await _fail_after(client, fake_x_publisher, post_id, live=2)
     fake_llm.replies = [{"parts": ["a", "b"]}]
 
-    refused = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "two parts"})
+    given = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "two parts"})
 
-    assert refused.status_code == 409, refused.text
-    assert "Part 2 is already on X" in refused.json()["detail"]
+    assert given.status_code == 202, given.text
     assert await _media_by_part(client, post_id) == [[], [], [on_three]]
+    assert (await latest_version(client, post_id))["number"] == 1
     fake_llm.replies = [{"parts": ["a", "b", "d"]}]
     assert (await _feedback(client, post_id, "change the last part"))["number"] == 2
