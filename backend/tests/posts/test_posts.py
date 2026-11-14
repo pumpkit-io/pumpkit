@@ -12,7 +12,7 @@ from pumpkit.core.time import as_utc
 from pumpkit.posts.models import Post
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import writing_calls, written, written_thread
+from tests.posts.writing_replies import writing_calls, written_thread
 
 AUTHORS = "/api/v1/inspiration-authors"
 POSTS = "/api/v1/posts"
@@ -69,7 +69,6 @@ async def test_a_version_response_has_the_versions_text_and_no_sketch(
 ):
     fake_llm.replies = [
         {"post": "final one"},
-        written("sketch two"),
         {"post": "final two"},
     ]
     post = (await client.post(POSTS, json={"brief": "ship"})).json()

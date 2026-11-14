@@ -226,12 +226,12 @@ class VersionAttempt(Base):
     humanizing_usage: Mapped[Optional[dict]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )
-    # Why the writing call opened the post as it did, and the library Hook it opened with; the
-    # name is None for an opening with no library Hook or one the library doesn't have.
+    # Why the writing call opened the post as it did, or the revise call's reasoning, and the
+    # library Hook it opened with; the name is None for an opening with no library Hook.
     hook_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     hook_name: Mapped[Optional[str]] = mapped_column(String)
-    # The psychological levers, hook types and CTA type the merge chose, on a Version written from
-    # a Plan. These and the sketches and merge below are kept, never shown.
+    # The psychological levers, hook types and CTA type the merge chose, or the revise call's CTA
+    # type, on a Version written from a Plan. These and the sketches and merge below are kept, never shown.
     hook_levers: Mapped[Optional[list[str]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql")
     )

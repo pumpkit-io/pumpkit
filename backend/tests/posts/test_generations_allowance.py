@@ -18,7 +18,6 @@ from tests.posts.writing_replies import (
     ideas,
     merged,
     sketched,
-    written,
 )
 
 AUTHORS = "/api/v1/inspiration-authors"
@@ -278,7 +277,7 @@ async def test_restoring_a_version_and_editing_the_text_use_no_generation(
     fake_llm.replies = [{"post": "final"}]
     post_id = (await client.post(POSTS, json={"brief": "ship"})).json()["id"]
     await client.put(f"{POSTS}/{post_id}/text", json={"parts": ["edited by hand"]})
-    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+    fake_llm.replies = [{"post": "final 2"}]
 
     response = await client.post(f"{POSTS}/{post_id}/versions", json={"feedback": "shorter"})
 

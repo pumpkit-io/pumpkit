@@ -30,6 +30,8 @@ from pumpkit.posts.schemas import (
     VersionResponse,
 )
 from pumpkit.posts.writing.corpus import Corpus
+from pumpkit.posts.writing.post_writing import revision_inputs
+from pumpkit.posts.writing.prompts.post import PostInputs
 from pumpkit.posts.writing.starting_text import StartingText, starting_text
 from pumpkit.posts.writing.versions import EarlierVersion
 from pumpkit.x_connection.x_length import x_post_max_chars, x_weighted_length
@@ -245,6 +247,8 @@ class NextVersion:
     """What writing the Version after a Post's latest needs, read before the model calls."""
 
     corpus: Corpus
+    # What the revise call writes from; None when the Feedback is written from the corpus.
+    inputs: Optional[PostInputs]
     earlier: list[EarlierVersion]
     # The Post's Text, when it isn't the latest Version as written.
     starting_text: Optional[StartingText]
@@ -264,20 +268,30 @@ async def prepare_next_version(
     now: datetime,
 ) -> NextVersion:
     """
-    For Feedback on `post`'s Text, in `format` or else the Text's, with the corpus the Post
-    started with, and holds the Text until the Version is recorded. Raises when the Post has no
-    Text yet, when another Version is being written, when `sent_text` isn't the saved Text, when
-    the Post has no corpus, or when the User is over the attempt limit or has no Generation left.
+    For Feedback on `post`'s Text, in `format` or else the Text's: a single post kept single from
+    its Plan and its Brief's Positioning, anything else from the corpus the Post started with.
+    Holds the Text until the Version is recorded. Raises when the Post has no Text yet, when
+    another Version is being written, when `sent_text` isn't the saved Text, when Feedback that
+    needs the corpus finds none, or when the User is over the attempt limit or has no Generation
+    left.
     """
     versions = versions_of(post)
     text = post_text(post)
     if not versions or text is None:
         raise ConflictError("This post has no version to give feedback on. Start a new post.")
-    # Feedback is written from the corpus, which a single post written from its Plan may lack.
-    if not post.corpus_post_ids:
+    char_limit = await char_limit_for(db, user_id=user.id)
+    inputs = revision_inputs(
+        brief=post.brief,
+        positioning=post.idea.brief.positioning,
+        plan=post.idea.plan,
+        text_format=text.format,
+        format=format or text.format,
+        char_limit=char_limit,
+    )
+    if inputs is None and not post.corpus_post_ids:
         raise ConflictError(
-            "Feedback can't revise a post written without inspiration authors yet. "
-            "Start a new post instead."
+            "Feedback can't turn a post written without inspiration authors into a thread yet. "
+            "Send it without switching to a thread, or start a new post."
         )
     service.check_not_writing(post, now=now)
     if sent_text is not None and sent_text != text.parts:
@@ -288,6 +302,7 @@ async def prepare_next_version(
     service.start_writing(post, now=now)
     return NextVersion(
         corpus=await service.corpus_for_post(db, post=post),
+        inputs=inputs,
         earlier=[
             EarlierVersion(
                 number=v.version_number or 0,
@@ -302,5 +317,5 @@ async def prepare_next_version(
         format=format or text.format,
         sequence=len(post.attempts) + 1,
         number=len(versions) + 1,
-        char_limit=await char_limit_for(db, user_id=user.id),
+        char_limit=char_limit,
     )

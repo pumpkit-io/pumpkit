@@ -1,6 +1,6 @@
 """
-The library Hook, chosen and written by a Thread's sketch call and by the revision call, seen
-through the Posts API and the scripted model. A single post's first Version has none.
+The library Hook, chosen and written by a Thread's sketch call and revision call, seen through
+the Posts API and the scripted model. A single post's Versions have none.
 """
 
 import logging
@@ -129,11 +129,12 @@ async def test_an_unknown_hook_name_is_logged_and_stored_as_none(
 async def test_a_feedback_version_stores_the_revision_calls_hook_without_a_classifier_question(
     client, db, with_author, fake_llm, fake_classifier
 ):
-    fake_llm.replies = [{"post": "the final"}]
-    started = await client.post(POSTS, json={"brief": "ship small things"})
-    post_id = started.json()["id"]
+    post_id = (await _start(client, fake_llm, _thread("every week i ship one tiny thing")))["id"]
     fake_llm.calls.clear()
-    fake_llm.replies = [written(SKETCH, "stop_x_do_y", HOOK_REASONING), {"post": "final 2"}]
+    fake_llm.replies = [
+        _thread(SKETCH, "stop_x_do_y", HOOK_REASONING),
+        {"parts": ["final 2", "part two"]},
+    ]
 
     response = await client.post(
         f"{POSTS}/{post_id}/versions", json={"feedback": "open with a rule"}
@@ -141,13 +142,13 @@ async def test_a_feedback_version_stores_the_revision_calls_hook_without_a_class
 
     assert response.status_code == 201, response.text
     assert [call.response_model.__name__ for call in fake_llm.calls] == [
-        "revised_post",
-        "refined_post",
+        "revised_thread",
+        "refined_thread",
     ]
     assert fake_classifier.calls == []
     second = (await _attempts(db))[1]
     assert (second.hook_reasoning, second.hook_name, second.sketch_parts) == (
         HOOK_REASONING,
         "stop_x_do_y",
-        [SKETCH],
+        [SKETCH, "part two"],
     )

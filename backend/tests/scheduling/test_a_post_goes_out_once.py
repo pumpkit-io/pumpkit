@@ -13,7 +13,7 @@ from pumpkit.main import app
 from pumpkit.scheduling import service
 from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written
+from tests.posts.writing_replies import REVISED_POST, revised
 from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -48,7 +48,7 @@ async def post(client, subscribed, fake_x_reader, fake_llm, fixed_clock, connect
 
 
 async def _give_feedback(client, fake_llm, post: dict, feedback: str = "punchier"):
-    fake_llm.replies = [written("sketch next"), {"post": f"Version after {feedback}."}]
+    fake_llm.replies = [{"post": f"Version after {feedback}."}]
     return await client.post(f"/api/v1/posts/{post['id']}/versions", json={"feedback": feedback})
 
 
@@ -217,7 +217,9 @@ async def test_a_post_scheduled_while_its_feedback_version_is_written_does_not_t
                 )
             return await super().structured(**kwargs)
 
-    llm = SchedulingLLM(replies=[written("sketch next"), {"post": "Version after punchier."}])
+    llm = SchedulingLLM(
+        replies=[{"post": "Version after punchier."}], standing={REVISED_POST: revised()}
+    )
     app.dependency_overrides[get_llm] = lambda: llm
     response = await client.post(
         f"/api/v1/posts/{post['id']}/versions", json={"feedback": "punchier"}

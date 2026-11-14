@@ -18,7 +18,7 @@ from pumpkit.x_connection.x_publisher import (
     XReconnectNeededError,
 )
 from tests.positioning.positioning import save_positioning
-from tests.posts.writing_replies import written, written_thread
+from tests.posts.writing_replies import written_thread
 from tests.scheduling.reading import scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
@@ -526,7 +526,7 @@ async def test_scheduling_a_post_copies_its_text_from_the_latest_feedback(
     client, post, fake_llm, fake_x_publisher, fixed_clock, connect_x
 ):
     await connect_x()
-    fake_llm.replies = [written("sketch two"), {"post": "Version two."}]
+    fake_llm.replies = [{"post": "Version two."}]
     rewritten = await client.post(
         f"/api/v1/posts/{post['id']}/versions", json={"feedback": "punchier"}
     )

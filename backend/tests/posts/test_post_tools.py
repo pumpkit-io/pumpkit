@@ -12,7 +12,13 @@ from pumpkit.core.llm import LLMError
 from pumpkit.posts.models import Post, VersionAttempt
 from pumpkit.x_connection.x_length import X_POST_MAX_CHARS
 from tests.mcp_client import error_text
-from tests.posts.writing_replies import PLAN, written, written_thread
+from tests.posts.writing_replies import (
+    HUMANIZED_POST,
+    PLAN,
+    REVISED_POST,
+    revised,
+    written_thread,
+)
 
 
 @pytest.fixture
@@ -118,7 +124,7 @@ async def post_id(with_author, mcp, fake_llm) -> str:
 async def test_giving_feedback_returns_the_next_versions_final_and_character_count(
     post_id, mcp, fake_llm, fixed_clock
 ):
-    fake_llm.replies = [written("sketch 2"), {"post": "shorter final"}]
+    fake_llm.replies = [{"post": "shorter final"}]
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback=" shorter\n")
 
@@ -138,11 +144,11 @@ async def test_giving_feedback_returns_the_next_versions_final_and_character_cou
 async def test_giving_feedback_rewrites_the_text_as_restored_and_edited_on_the_web(
     client, post_id, mcp, fake_llm
 ):
-    fake_llm.replies = [written("sketch 2"), {"post": "final 2"}]
+    fake_llm.replies = [{"post": "final 2"}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="punchier")
     await mcp.call_tool("restore_version", post_id=post_id, version_number=1)
     await client.put(f"/api/v1/posts/{post_id}/text", json={"parts": ["final 1. Mine now."]})
-    fake_llm.replies = [written("sketch 3"), {"post": "final 3"}]
+    fake_llm.replies = [{"post": "final 3"}]
     fake_llm.calls.clear()
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="warmer")
@@ -152,7 +158,7 @@ async def test_giving_feedback_rewrites_the_text_as_restored_and_edited_on_the_w
         "That was Version 2. I went back to Version 1 and changed it to:\n\n"
         "<post>\nfinal 1. Mine now.\n</post>\n\nChange my post above according to this feedback"
     )
-    assert "<sentence>Mine now.</sentence>" in humanizer.messages[6]["content"]
+    assert "<sentence>Mine now.</sentence>" in humanizer.messages[5]["content"]
     starting_text = {
         "format": "post",
         "parts": [{"text": "final 1. Mine now.", "char_count": 18, "char_limit": X_POST_MAX_CHARS}],
@@ -165,7 +171,7 @@ async def test_giving_feedback_rewrites_the_text_as_restored_and_edited_on_the_w
 
 
 async def test_get_post_reads_the_text_from_the_newest_version(post_id, mcp, fake_llm):
-    fake_llm.replies = [written("sketch 2"), {"post": "shorter final"}]
+    fake_llm.replies = [{"post": "shorter final"}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
 
     text = (await mcp.call_tool("get_post", post_id=post_id))["structuredContent"]["text"]
@@ -217,22 +223,30 @@ async def test_feedback_without_a_format_keeps_the_latest_versions_thread(post_i
     )
 
 
-async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_the_web_app(
+async def test_feedback_through_the_tools_is_revised_from_the_posts_plan_as_on_the_web_app(
     db, post_id, mcp, fake_llm
 ):
-    reasoning = "The feedback asks to open with a rule, so my_rule fits."
-    fake_llm.replies = [written("My rule.\n\nsketch 2", "my_rule", reasoning), {"post": "final 2"}]
+    reasoning = "The feedback asks to open with a rule; the rest stays."
+    fake_llm.standing[REVISED_POST] = revised("My rule.\n\nsketch 2", reasoning=reasoning)
+    fake_llm.replies = [{"post": "final 2"}]
+    fake_llm.calls.clear()
 
     result = await mcp.call_tool("give_feedback", post_id=post_id, feedback="open with a rule")
 
     assert result["isError"] is False
+    revise, humanizer = fake_llm.calls
+    assert (revise.response_model, humanizer.response_model) == (REVISED_POST, HUMANIZED_POST)
+    assert revise.messages[1]["content"].startswith(
+        "<raw_input>\nship small things\n</raw_input>\n\n"
+        "<positioning>\nI post about bootstrapping.\n</positioning>"
+    )
     version = await db.scalar(
         select(VersionAttempt).where(VersionAttempt.id == result["structuredContent"]["id"])
     )
     assert version is not None
-    assert (version.sketch_parts, version.hook_name, version.hook_reasoning) == (
+    assert (version.sketch_parts, version.parts, version.hook_reasoning) == (
         ["My rule.\n\nsketch 2"],
-        "my_rule",
+        ["final 2"],
         reasoning,
     )
 
@@ -240,7 +254,7 @@ async def test_feedback_through_the_tools_stores_the_revision_calls_hook_as_on_t
 async def test_reading_a_post_returns_every_version_but_not_failed_attempts(post_id, mcp, fake_llm):
     fake_llm.replies = [LLMError("provider down")]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="shorter")
-    fake_llm.replies = [written("sketch 2"), {"post": "final two"}]
+    fake_llm.replies = [{"post": "final two"}]
     await mcp.call_tool("give_feedback", post_id=post_id, feedback="warmer")
 
     result = await mcp.call_tool("get_post", post_id=post_id)

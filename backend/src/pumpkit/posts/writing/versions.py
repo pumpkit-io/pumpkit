@@ -153,9 +153,10 @@ class WrittenVersion:
     humanizing_model: str
     sketch_usage: Optional[dict]
     humanizing_usage: Optional[dict]
-    # The library Hook of a Version written with a corpus; None for one written from a Plan.
+    # The library Hook of a Version written with a corpus; the revise call's reasoning, with no
+    # name, on one revised from a Plan; None on a first Version written from a Plan.
     hook: Optional[Hook] = None
-    # What the merge chose, on a single post written from a Plan; None otherwise.
+    # What the merge chose on a first Version written from a Plan; the revise call names a CTA only.
     hook_levers: Optional[list[str]] = None
     hook_types: Optional[list[str]] = None
     cta_type: Optional[str] = None
@@ -232,14 +233,15 @@ def revision_humanizer_messages(
         messages.append(user_message(earlier_feedback_message(earlier_feedback)))
     messages.append(user_message(previous_final_message(*previous)))
     messages.append(user_message(latest_feedback_message(feedback, previous[0], format)))
-    hand_written = _hand_written(earlier, starting)
-    if hand_written:
-        messages.append(user_message(hand_written_message(hand_written, format)))
+    written_by_hand = hand_written(earlier, starting)
+    if written_by_hand:
+        messages.append(user_message(hand_written_message(written_by_hand, format)))
     messages.append(user_message(revised_sketch_message(previous[0], format, sketch_parts)))
     return messages
 
 
-def _hand_written(earlier: Sequence[EarlierVersion], starting: Optional[StartingText]) -> list[str]:
+def hand_written(earlier: Sequence[EarlierVersion], starting: Optional[StartingText]) -> list[str]:
+    """The sentences the User wrote into `starting` by hand; none when there is no Starting text."""
     if starting is None:
         return []
     began_from = next(v for v in earlier if v.number == starting.version_number)
@@ -278,14 +280,25 @@ def revision_messages(
     format: Format,
     char_limit: int,
 ) -> list[dict]:
+    """The sketch call's conversation continued, under the new Format's prompt."""
+    return sketch_messages(corpus, brief, format, char_limit) + replayed_versions(
+        earlier, starting, feedback, format
+    )
+
+
+def replayed_versions(
+    earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
+    feedback: str,
+    format: Format,
+) -> list[dict]:
     """
-    The sketch call's conversation continued, under the new Format's prompt: the Brief, each
-    Version's text in its own Format as the model's answer after the Feedback that asked for it,
-    then the new Feedback, given on `starting` when the Text isn't the latest Version as written.
-    Each Feedback names the Version before it and says what the User did to the Text, and one that
-    switched Format says so. Sketches stay out: the User never reacted to them.
+    Each Version's text in its own Format as the model's answer after the Feedback that asked for
+    it, then the new Feedback, given on `starting` when the Text isn't the latest Version as
+    written. Each Feedback names the Version before it and says what the User did to the Text, and
+    one that switched Format says so. Sketches stay out: the User never reacted to them.
     """
-    messages = sketch_messages(corpus, brief, format, char_limit)
+    messages: list[dict] = []
     for index, version in enumerate(earlier):
         if index > 0 and version.feedback is not None:
             framed = _framed_feedback(

@@ -1,12 +1,14 @@
 """
-Writing a single post's first Version from its Plan, as pumpkit-new-architecture-v5 does: sketches
-in parallel, each trying a different hook type first, then the merge, the scrub, the humanizer and
-the scrub again (ADR 0026). The merged sketch, scrubbed, is the Version's Sketch.
+Writing a single post's Versions from its Plan, as pumpkit-new-architecture-v5 does (ADR 0026).
+The first: sketches in parallel, each trying a different hook type first, then the merge, the
+scrub, the humanizer and the scrub again; the merged sketch, scrubbed, is the Version's Sketch.
+After Feedback: the revise call, the scrub, the revision humanizer and the scrub again; the
+revised post, scrubbed, is the Sketch.
 """
 
 import asyncio
 import logging
-from typing import Any, Optional, TypeVar, Union
+from typing import Any, Optional, Sequence, TypeVar, Union
 
 from pydantic import BaseModel
 
@@ -18,24 +20,47 @@ from pumpkit.posts.formats import FORMAT_POST, FORMAT_THREAD, Format
 from pumpkit.posts.plans import Plan
 from pumpkit.posts.writing.constants import MAX_TOKENS, SKETCHES_PER_POST
 from pumpkit.posts.writing.corpus import Corpus
-from pumpkit.posts.writing.post_replies import HookType, HumanizedPost, MergedSketch, SketchedPost
+from pumpkit.posts.writing.post_replies import (
+    HookType,
+    HumanizedPost,
+    MergedSketch,
+    RevisedPost,
+    SketchedPost,
+)
 from pumpkit.posts.writing.prompts.post import (
     PostInputs,
     brief_message,
     humanizer_prompt,
     merge_prompt,
     merge_user,
+    post_inputs_block,
     post_message,
     sketch_angle,
     sketch_prompt,
     sketch_user,
 )
+from pumpkit.posts.writing.prompts.revise import (
+    previous_post_message,
+    revise_prompt,
+    revised_post_message,
+)
+from pumpkit.posts.writing.prompts.revision_humanizer import (
+    earlier_feedback_message,
+    hand_written_message,
+    latest_feedback_message,
+)
 from pumpkit.posts.writing.scrub import scrub
+from pumpkit.posts.writing.starting_text import StartingText
 from pumpkit.posts.writing.versions import (
+    EarlierVersion,
+    Hook,
     WrittenVersion,
+    hand_written,
+    replayed_versions,
     system_message,
     user_message,
     write_first_version,
+    write_next_version,
 )
 
 logger = logging.getLogger(__name__)
@@ -210,3 +235,139 @@ async def write_planned_version(
         return await write_first_version(llm, corpus, brief, format, char_limit)
     inputs = PostInputs(brief=brief, positioning=positioning, plan=plan, char_limit=char_limit)
     return await write_post(llm, inputs, user_id=user_id)
+
+
+def revision_inputs(
+    *,
+    brief: str,
+    positioning: Optional[str],
+    plan: Optional[Plan],
+    text_format: Format,
+    format: Format,
+    char_limit: int,
+) -> Optional[PostInputs]:
+    """
+    What the revise call writes Feedback from, or None when the Feedback is written the pumpkit-v6
+    way: on a Thread either side of it, or on a Post planned without a single post's Plan.
+    """
+    if positioning is None or plan is None or plan.format != FORMAT_POST:
+        return None
+    if text_format != FORMAT_POST or format != FORMAT_POST:
+        return None
+    return PostInputs(brief=brief, positioning=positioning, plan=plan, char_limit=char_limit)
+
+
+def revise_messages(
+    inputs: PostInputs,
+    earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
+    feedback: str,
+) -> list[dict]:
+    """v5's revise conversation, with Pumpkit's Feedback framings: Versions and Feedback only."""
+    return [
+        system_message(revise_prompt(inputs)),
+        user_message(post_inputs_block(inputs)),
+        *replayed_versions(earlier, starting, feedback, FORMAT_POST),
+    ]
+
+
+def revision_humanizer_messages(
+    inputs: PostInputs,
+    earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
+    feedback: str,
+    revised: tuple[str, Optional[str]],
+) -> list[dict]:
+    """
+    v5's revision humanizer, plus Pumpkit's message of the sentences the User wrote by hand. The
+    post the Feedback was given on is the Starting text, or else the latest Version.
+    """
+    [previous] = earlier[-1].parts if starting is None else starting.parts
+    messages = [
+        system_message(humanizer_prompt(inputs)),
+        user_message(brief_message(inputs)),
+    ]
+    earlier_feedback = [v.feedback for v in earlier if v.feedback is not None]
+    if earlier_feedback:
+        messages.append(user_message(earlier_feedback_message(earlier_feedback)))
+    # The Text holds no first reply yet (#475), so the previous post never has one.
+    messages.append(user_message(previous_post_message(previous, None)))
+    messages.append(user_message(latest_feedback_message(feedback, FORMAT_POST, FORMAT_POST)))
+    written_by_hand = hand_written(earlier, starting)
+    if written_by_hand:
+        messages.append(user_message(hand_written_message(written_by_hand, FORMAT_POST)))
+    messages.append(user_message(revised_post_message(*revised)))
+    return messages
+
+
+async def revise_post(
+    llm: LLM,
+    inputs: PostInputs,
+    earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
+    feedback: str,
+) -> WrittenVersion:
+    """
+    Write a single post's next Version from Feedback on `starting`, or else the latest Version.
+    Raises an `LLMError` when either call fails or writes a blank post; stores nothing.
+    """
+    revised = await _call(
+        llm,
+        settings.LLM_REVISING_MODEL,
+        revise_messages(inputs, earlier, starting, feedback),
+        RevisedPost,
+    )
+    revised_post = _clean(revised.parsed.post)
+    if not revised_post:
+        raise LLMError("The revise call wrote a blank post")
+    revised_reply = _clean(revised.parsed.first_reply) if revised.parsed.first_reply else None
+
+    humanized = await _call(
+        llm,
+        settings.LLM_HUMANIZING_MODEL,
+        revision_humanizer_messages(
+            inputs, earlier, starting, feedback, (revised_post, revised_reply)
+        ),
+        HumanizedPost,
+    )
+    post = _clean(humanized.parsed.post)
+    if not post:
+        raise LLMError("The revision humanizer call wrote a blank post")
+    first_reply = (
+        _clean(humanized.parsed.first_reply)
+        if humanized.parsed.first_reply and revised_reply
+        else None
+    )
+
+    return WrittenVersion(
+        format=FORMAT_POST,
+        sketch_parts=[revised_post],
+        parts=[post],
+        sketch_model=revised.model,
+        humanizing_model=humanized.model,
+        sketch_usage=_usage(revised),
+        humanizing_usage=_usage(humanized),
+        hook=Hook(reasoning=drop_unstorable(revised.parsed.reasoning), name=None),
+        cta_type=revised.parsed.cta_type,
+        first_reply=first_reply or None,
+    )
+
+
+async def write_planned_next_version(
+    llm: LLM,
+    *,
+    inputs: Optional[PostInputs],
+    corpus: Corpus,
+    brief: str,
+    earlier: Sequence[EarlierVersion],
+    starting: Optional[StartingText],
+    feedback: str,
+    format: Format,
+    char_limit: int,
+) -> WrittenVersion:
+    """The Version after `earlier`: by the revise call from `inputs`, or else from the corpus."""
+    if inputs is None:
+        return await write_next_version(
+            llm, corpus, brief, earlier, starting, feedback, format, char_limit
+        )
+    return await revise_post(llm, inputs, earlier, starting, feedback)
