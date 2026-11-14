@@ -1,3 +1,4 @@
+import logging
 from dataclasses import replace
 from datetime import datetime, timedelta
 from io import StringIO
@@ -256,6 +257,43 @@ async def test_a_checkout_lost_on_the_way_back_is_recovered_without_a_browser(
     assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"]["ends_at"] == free[
         "ends_at"
     ]
+
+
+async def test_a_refused_checkout_logs_the_provider_reason_and_stays_pending(
+    authed_client, coupons, fake_billing, caplog
+):
+    fake_billing.fail_on.add("create_paid_signup_checkout")
+    with caplog.at_level(logging.ERROR):
+        _, _, opened = await _open(authed_client, coupons)
+    assert opened["status"] == "pending" and opened["url"] is None
+    assert "set to fail create_paid_signup_checkout" in caplog.text
+
+
+async def test_a_signup_waits_while_an_earlier_setup_checkout_is_still_open(
+    authed_client, coupons, fake_billing, monkeypatch, db_session_maker, fixed_clock
+):
+    fake_billing.fail_on.add("create_paid_signup_checkout")
+    _, request, _ = await _open(authed_client, coupons)
+    fake_billing.fail_on.clear()
+
+    async def setup_checkout_open(*, customer_id):
+        return True
+
+    monkeypatch.setattr(fake_billing, "has_pending_checkout", setup_checkout_open)
+    waiting = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
+    assert waiting.status_code == 200, waiting.text
+    assert waiting.json()["status"] == "pending" and waiting.json()["url"] is None
+    assert (
+        await run_cli(
+            ["recover"], sessions=db_session_maker, gateway=fake_billing, clock=fixed_clock
+        )
+        == 1
+    )
+    assert fake_billing.paid_signup_checkouts == {}
+
+    monkeypatch.undo()
+    opened = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
+    assert opened.json()["status"] == "pending" and opened.json()["url"], opened.text
 
 
 async def test_open_signup_blocks_billing_coupon_and_deletion_until_cancelled_without_losing_free_access(
@@ -577,7 +615,7 @@ async def _dispatched_before_upgrade(
     client, coupons, fake_billing, db_session_maker, creation_state
 ):
     """
-    A signup 0.11 dispatched with subscriptions.create from a setup Checkout, which reads no longer
+    A signup the old flow dispatched with subscriptions.create from a setup Checkout, which reads no longer
     list, before Stripe listed its Subscription.
     """
     free, request, opened = await _open(client, coupons)
