@@ -93,10 +93,11 @@ def offered_ideas(ideas: Sequence[tuple[Idea, Optional[Post]]]) -> list[Idea]:
     """
     The Ideas a Brief's page offers under "Not written" (ADR 0025): only the kind that has a Post,
     the split Ideas when both have; while none has, every split Idea and then the single-post one.
+    An Idea with no Plan, which a Post from before Plans got, is never offered: it can't be written.
     The web app's `notWrittenIdeas` applies the same rule to the Brief it reads; both run the cases in
     `tests/posts/offered_ideas_cases.json`.
     """
-    unwritten = [idea for idea, post in ideas if post is None]
+    unwritten = [idea for idea, post in ideas if post is None and idea.plan is not None]
     split = [idea for idea in unwritten if not idea.whole_brief]
     written = [idea for idea, post in ideas if post is not None]
     if any(not idea.whole_brief for idea in written):

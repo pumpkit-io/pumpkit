@@ -56,11 +56,11 @@ page of the web app.
 - Writing posts takes two steps. First, `plan_posts` takes a brief, what the user wants to post \
 about and what they think about it, and answers with the ideas Pumpkit found in it, each a \
 separate post with its plan, and `single_post`, one post covering the whole brief. It writes \
-nothing. Show the user the core idea of each idea and ask which to write, or whether they want \
-one post covering everything instead. Then `write_posts` starts writing the ideas they picked, \
-or the single post alone, never both. Call it only with the user's choice. When the brief \
-holds one idea, `ideas` is empty: show its single post's core idea, then write it once the user \
-agrees.
+nothing. Show the user each idea's core idea and ask which to write, or whether they want one \
+post covering everything instead. Then `write_posts` starts writing the ideas they picked, or \
+the single post alone, never both, not even in two calls. Call it only with the user's \
+choice. When the brief holds one idea, `ideas` is empty: show its single post's core idea, then \
+write it once the user agrees.
 - Pumpkit writes each post in the background, in parallel, which takes about a minute. \
 `write_posts` answers with the posts' ids: read each with `get_post` until `writing_state` is \
 null, then show the user its text. "not_written" means Pumpkit couldn't write it, which the \
@@ -97,12 +97,13 @@ scheduled, edit it, or delete it first, which makes the post a draft again. Only
 failed post takes feedback: a scheduled or published one doesn't.
 - `delete_post` discards a draft for good, with every version and its media; its idea stays on \
 its brief, and the generations it used stay used. A scheduled, published or failed post is \
-refused, and so is one still being written. It can't be undone, so get the user's yes first.
+refused, and so is one still being written or one with no version yet. It can't be undone, so \
+get the user's yes first.
 - Each post written and each feedback uses one generation of the user's allowance. Planning \
-and writing that fails use none, and `plan_posts` answers with the generations left, so tell \
-the user before they pick more ideas than that. Each X post published uses one X post, each part of a thread and each \
-first reply counting as one. Write a new version only when the user asks for one. `get_usage` says what is \
-left and when it resets.
+uses none, and neither does a post or a version Pumpkit couldn't write. `plan_posts` answers \
+with the generations left, so tell the user before they pick more ideas than that. Each X post \
+published uses one X post, each part of a thread and each first reply counting as one. Write a \
+new version only when the user asks for one. `get_usage` says what is left and when it resets.
 - `attach_media` attaches an image, a GIF or a video to a part from a public URL, or, without \
 one, answers with a one-time upload link and the `curl` command that sends local media to it. `remove_media` \
 takes one off. On a draft or a failed post they change the post's text, and on a scheduled \

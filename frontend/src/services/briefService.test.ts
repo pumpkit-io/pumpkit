@@ -8,6 +8,8 @@ interface OfferedIdeasCase {
   note: string;
   /** Each Idea's id ("whole" for the single-post Idea) and its Post's writing state, or null. */
   ideas: [string, 'written' | 'writing' | 'not_written' | null][];
+  /** The Ideas with no Plan, as a Post from before Plans existed left its Idea. */
+  unplanned?: string[];
   offered: string[];
 }
 
@@ -193,15 +195,23 @@ describe('briefService', () => {
 
 describe('notWrittenIdeas', () => {
   const [whole, split] = BRIEF.ideas as [Idea, Idea];
-  const ideaOf = ([id, state]: OfferedIdeasCase['ideas'][number]): Idea => ({
-    ...(id === 'whole' ? whole : split),
-    id,
-    post:
-      state === null ? null : { ...split.post!, writingState: state === 'written' ? null : state },
-  });
+  const ideaOf =
+    (unplanned: string[]) =>
+    ([id, state]: OfferedIdeasCase['ideas'][number]): Idea => {
+      const idea = id === 'whole' ? whole : split;
+      return {
+        ...idea,
+        id,
+        plan: unplanned.includes(id) ? null : idea.plan,
+        post:
+          state === null
+            ? null
+            : { ...split.post!, writingState: state === 'written' ? null : state },
+      };
+    };
 
-  it.each(OFFERED_IDEAS_CASES)('$note', ({ ideas, offered }) => {
-    const brief: Brief = { ...BRIEF, ideas: ideas.map(ideaOf) };
+  it.each(OFFERED_IDEAS_CASES)('$note', ({ ideas, unplanned = [], offered }) => {
+    const brief: Brief = { ...BRIEF, ideas: ideas.map(ideaOf(unplanned)) };
     expect(notWrittenIdeas(brief).map((idea) => idea.id)).toEqual(offered);
   });
 });

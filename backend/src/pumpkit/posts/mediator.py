@@ -171,13 +171,14 @@ async def write_ideas(
     if not wanted <= {idea.id for idea in brief.ideas}:
         raise NotFoundError("Idea not found.")
     picked = [idea for idea in brief.ideas if idea.id in wanted]
-    if len(picked) > 1 and any(idea.whole_brief for idea in picked):
-        # The whole Brief and a part of it would be two Posts saying the same thing.
-        raise RefusedError("Write one post covering everything, or one post per idea, not both.")
     posts = await service.posts_of_ideas(db, idea_ids=[idea.id for idea in brief.ideas])
     if any(idea.id in posts for idea in picked):
         # A client whose last write request lost its answer finds the Posts on the Brief's page.
         raise ConflictError("One of these ideas is already written.", code="IDEAS_ALREADY_WRITTEN")
+    with_posts = [idea for idea in brief.ideas if idea.id in posts]
+    if len({idea.whole_brief for idea in [*picked, *with_posts]}) > 1:
+        # The whole Brief and a part of it would be two Posts saying the same thing.
+        raise RefusedError("Write one post covering everything, or one post per idea, not both.")
     if brief.positioning is None or any(idea.plan is None for idea in picked):
         raise ConflictError("This brief was never planned, so its ideas can't be written.")
     await check_attempt_limit(db, user_id=user_id, now=now, count=len(picked))
@@ -234,6 +235,8 @@ async def retry_post(
     Positioning its Brief was planned with, in the background. Counts as a new attempt.
     """
     now = clock()
+    # User then Post, as every write does, so two writes can't both take the last Generation.
+    await users_service.lock_user_id(db, user_id=user.id)
     post = await user_post(db, user=user, post_id=post_id, for_update=True)
     state = writing_state(post, now=now)
     if state == WRITING:

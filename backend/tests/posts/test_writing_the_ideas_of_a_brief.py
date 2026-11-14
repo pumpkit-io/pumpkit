@@ -391,6 +391,26 @@ async def test_the_single_post_idea_with_split_ideas_is_refused_and_writes_nothi
     assert await _generations_used(client) == 0
 
 
+@pytest.mark.parametrize("first_kind", ["whole", "split"])
+async def test_an_idea_of_the_other_kind_than_a_written_one_is_refused_in_a_later_request(
+    client, ready, fake_llm, split, first_kind
+):
+    planned = await _plan(client)
+    whole, split_idea = _whole_idea(planned)["id"], _split_ideas(planned)[0]["id"]
+    first, later = (whole, split_idea) if first_kind == "whole" else (split_idea, whole)
+    assert (await _write(client, planned, [first])).status_code == 202
+
+    response = await _write(client, planned, [later])
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == (
+        "Write one post covering everything, or one post per idea, not both."
+    )
+    brief = await _read(client, planned["id"])
+    assert [idea["id"] for idea in brief["ideas"] if idea["post"]] == [first]
+    assert await _generations_used(client) == 1
+
+
 async def test_another_users_brief_is_not_found(
     client, ready, fake_llm, split, sign_in_as_another_subscribed_user
 ):

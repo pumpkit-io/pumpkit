@@ -160,7 +160,7 @@ REVISE_PROMPT_TAIL = """\
 - reasoning: written before the post, in two to five sentences: what my feedback asks for, which lines change and how, and what stays as it is. When you write a new hook, name the levers and hook types you chose and the question the hook raises in the reader's mind.
 - cta_type: the CTA the revised post makes, or "none".
 - post: the whole revised post and nothing else. No preamble, no quotes around it, no notes about what you changed. Line breaks as they should appear on X.
-- first_reply: the text of my first reply under the post, only when the CTA needs an external link or a follow-up there. Keep the one the latest version has unless my feedback changes it. Use a link only if the raw input or my feedback gives one; otherwise write [link] where it goes. null in every other case.
+- first_reply: the text of my first reply under the post, only when the CTA needs an external link or a follow-up there. Keep the one the latest version has unless my feedback changes it. When the CTA needs a link, the first reply holds it: the link the raw input or my feedback gives, or [link] where it goes if they give none. null in every other case.
 """
 
 BRIEF_AND_PLAN = (

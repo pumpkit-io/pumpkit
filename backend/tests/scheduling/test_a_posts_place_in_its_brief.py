@@ -136,21 +136,6 @@ async def test_a_post_not_written_counts_and_its_neighbours_lead_to_it(
     assert first["place_in_brief"]["next_post_id"] == ids[CORE_IDEAS[1]]
 
 
-async def test_the_post_covering_the_whole_brief_comes_before_the_split_posts(client, ready, split):
-    planned = await _plan(client)
-    split_ids = await _write(client, planned, _split(planned)[:1])
-    whole_ids = await _write(client, planned, [_whole(planned)])
-
-    whole = await _read(client, whole_ids[WHOLE])
-
-    assert whole["place_in_brief"] == {
-        "position": 1,
-        "post_count": 2,
-        "previous_post_id": None,
-        "next_post_id": split_ids[CORE_IDEAS[0]],
-    }
-
-
 async def test_draft_rows_carry_their_brief_and_place(client, ready, fake_llm, split):
     planned = await _plan(client)
     ids = await _write(client, planned, _split(planned)[:2])

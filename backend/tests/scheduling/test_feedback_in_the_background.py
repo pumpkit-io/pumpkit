@@ -300,6 +300,42 @@ async def test_a_failed_feedback_goes_once_the_user_edits_restores_or_dismisses_
     assert (await _post(client, post_id))["failed_feedback"] is None
 
 
+async def test_a_failed_feedback_goes_once_the_post_is_posted_now(
+    client, post_id, fake_llm, background_tasks, connect_x
+):
+    await connect_x()
+    fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
+    await _feedback(client, post_id)
+    await background_tasks.wait()
+
+    response = await client.post(
+        "/api/v1/scheduled-posts", json={"post_id": post_id, "publish_now": True}
+    )
+
+    assert response.status_code == 201, response.text
+    assert (await _post(client, post_id))["failed_feedback"] is None
+
+
+async def test_a_failed_feedback_goes_once_the_post_is_scheduled_and_stays_gone_after_unscheduling(
+    client, post_id, fake_llm, background_tasks, connect_x, clock
+):
+    await connect_x()
+    fake_llm.standing[HUMANIZED_POST] = LLMError("provider down")
+    await _feedback(client, post_id)
+    await background_tasks.wait()
+    later = (clock() + timedelta(days=1)).replace(second=0, microsecond=0).isoformat()
+
+    scheduled = await client.post(
+        "/api/v1/scheduled-posts", json={"post_id": post_id, "publish_at": later}
+    )
+
+    assert scheduled.status_code == 201, scheduled.text
+    assert (await _post(client, post_id))["failed_feedback"] is None
+    cancelled = await client.delete(f"/api/v1/scheduled-posts/{scheduled.json()['id']}")
+    assert cancelled.status_code == 204, cancelled.text
+    assert (await _post(client, post_id))["failed_feedback"] is None
+
+
 async def test_dismissing_leaves_a_feedback_being_written_alone(
     client, post_id, fake_llm, background_tasks, revising, clock
 ):

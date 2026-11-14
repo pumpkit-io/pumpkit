@@ -10,8 +10,8 @@ from pumpkit.posts import mediator
 from pumpkit.posts.schemas import (
     WRITE_RATE,
     BriefRequest,
-    IdeaFields,
     PlannedBriefToolResponse,
+    PlannedIdeaToolResponse,
     StartedPostsToolResponse,
     StartedPostToolResponse,
     WriteIdeasRequest,
@@ -30,7 +30,8 @@ async def plan_posts(call: ToolCall[User], brief: str) -> PlannedBriefToolRespon
     of each, then ask which to write: any of `ideas`, or `single_post` alone. Planning uses no
     generation, but a user can plan 20 briefs an hour. `generations_left` is how many posts the
     user can still have written, null with no cap. Refused until the user has a positioning,
-    which `set_positioning` saves.
+    which `set_positioning` saves, and while the user is at the hourly limit on writing attempts,
+    as `write_posts` would be.
     """
     plan_request = BriefRequest(brief=brief)
     planned = await mediator.plan_posts(
@@ -43,8 +44,10 @@ async def plan_posts(call: ToolCall[User], brief: str) -> PlannedBriefToolRespon
     single, *split = planned.ideas
     return PlannedBriefToolResponse(
         brief_id=planned.id,
-        ideas=[IdeaFields.model_validate(idea, from_attributes=True) for idea in split],
-        single_post=IdeaFields.model_validate(single, from_attributes=True),
+        ideas=[
+            PlannedIdeaToolResponse.model_validate(idea, from_attributes=True) for idea in split
+        ],
+        single_post=PlannedIdeaToolResponse.model_validate(single, from_attributes=True),
         generations_left=planned.generations_left,
     )
 
@@ -54,8 +57,8 @@ async def write_posts(
 ) -> StartedPostsToolResponse:
     """
     Start writing a post of each idea `plan_posts` gave for the brief, by the ids in `idea_ids`:
-    any of its `ideas`, or its `single_post` alone, never both, since that would post the whole
-    brief and a part of it. The posts are written in parallel in the background, which takes about
+    any of its `ideas`, or its `single_post` alone, never both, not even in two calls, since that
+    would post the whole brief and a part of it. The posts are written in parallel in the background, which takes about
     a minute. It answers with each post's id: read each one with `get_post` until `writing_state`
     is null, then show the user its text, meant for X, with every part and its character count.
     "not_written" means Pumpkit couldn't write it, and the user can retry from the post's page in

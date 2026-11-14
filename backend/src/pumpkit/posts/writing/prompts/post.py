@@ -53,7 +53,7 @@ SKETCH_FIELDS = (
     HOOK_FIELDS
     + """
 - post: the post text and nothing else. No preamble, no quotes around it, no notes. Line breaks as they should appear on X.
-- first_reply: the text of my first reply under the post, only when the CTA needs an external link or a follow-up there. Use a link only if the raw input gives one; otherwise write [link] where it goes. null in every other case."""
+- first_reply: the text of my first reply under the post, only when the CTA needs an external link or a follow-up there. When the CTA needs a link, the first reply holds it: the link the raw input gives, or [link] where it goes if it gives none. null in every other case."""
 )
 
 
@@ -175,7 +175,7 @@ The final sketch must follow it too.
 - reasoning: written before the final sketch, after the reviews. Go through the final post piece by piece, in order: the hook, each part of the structure, the closer and the CTA. For each piece say which sketch (by number) it comes from, quote the lines you take, and say why they beat the same piece in the other sketches. Then say how the pieces join into one voice: what you reword at the joins, what you cut so nothing repeats, and what the total length comes to against the format's limit.
 - hook_levers, hook_types, cta_type: as they are in the final sketch.
 - post: the final sketch's text and nothing else. No preamble, no quotes around it, no notes. Line breaks as they should appear on X.
-- first_reply: the text of my first reply under the post, only when the CTA needs an external link or a follow-up there. Use a link only if the raw input gives one; otherwise write [link] where it goes. null in every other case.
+- first_reply: the text of my first reply under the post, only when the CTA needs an external link or a follow-up there. When the CTA needs a link, the first reply holds it: the link the raw input gives, or [link] where it goes if it gives none. null in every other case.
 """
 
 
@@ -224,13 +224,14 @@ The post you are given was planned on purpose. The brief lists the plan. Removin
 - The hook: keep what it promises, its specifics and its place at the top. Reword it only where the wording itself is an AI-teller. Don't flatten it into a plain statement that no longer makes a reader stop.
 - The structure ({inputs.plan.structure}): keep the order of the parts and the line breaks that carry it. One thought per line in short paragraphs is intended here; merge lines only where every sentence sits alone between blank lines.
 - The closer and the CTA: keep the one specific ask the post makes, if it makes one. Remove an ask only if it is generic engagement bait.
+- The first reply: keep a link or a [link] placeholder in it exactly as it is: I replace [link] with the link before posting.
 - The facts: every number, name and claim stays as it is. Add none.
 - The length: at most {limit:,} characters as X counts them (a link counts as 23). Don't make the post longer than it is.
 
 # Output
 
 - post: the rewritten post text and nothing else - no preamble, no quotes around it, no notes about what you changed.
-- first_reply: the rewritten first reply, if one was given with the post. null otherwise.
+- first_reply: the rewritten first reply, if one was given with the post, with its link or [link] exactly as it is. null otherwise.
 """
     )
 
