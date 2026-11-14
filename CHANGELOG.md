@@ -37,6 +37,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - Self-hosters can make Stripe the seller of their Instance with the new optional setting `STRIPE_MANAGED_PAYMENTS=true`: every Subscription and Top-up Checkout then runs with Stripe's Managed Payments, so Stripe calculates, collects and files VAT and sends receipts and invoices. Left unset, nothing changes: the Instance stays the seller and charges VAT through Stripe Tax. Turning it on needs Stripe billing configured and a Managed Payments tax code on each product, and applies only to Subscriptions started afterwards.
 
+- A User with free access from a coupon who arranges a paid subscription now goes through one Stripe Checkout that shows the plan and the first payment date and starts the subscription when completed, instead of saving a card for Pumpkit to subscribe them with later. The arrangement also works with `STRIPE_MANAGED_PAYMENTS` on. Free access ending within 49 hours is too soon to arrange: Stripe needs the first payment to be at least two days out, so Settings stops offering it and the User subscribes once free access ends.
+
 ## [0.11.1] - 2026-11-10
 
 - Users can switch annual subscriptions in Stripe classic mode to monthly billing after coupon free access without an immediate charge or lost access. Existing interrupted changes retain their original recovery request.

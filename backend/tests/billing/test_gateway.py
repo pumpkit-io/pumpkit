@@ -695,6 +695,14 @@ async def test_pending_subscription_checkout_read_is_customer_scoped_and_does_no
     assert parse_qs(urlsplit(http.urls[0]).query)["status"] == ["open"]
 
 
+def _setup_checkout(intent_status: str) -> dict:
+    return {
+        "mode": "setup",
+        "status": "complete",
+        "setup_intent": {"id": "seti_check", "object": "setup_intent", "status": intent_status},
+    }
+
+
 @pytest.mark.parametrize(
     "state,pending",
     [
@@ -745,6 +753,11 @@ async def test_pending_subscription_checkout_read_is_customer_scoped_and_does_no
             False,
         ),
         ({"mode": "payment", "status": "expired", "payment_status": "unpaid"}, False),
+        # Paid signup in 0.11 and earlier left setup Checkouts, finished by their SetupIntent.
+        (_setup_checkout("succeeded"), False),
+        (_setup_checkout("canceled"), False),
+        (_setup_checkout("requires_action"), True),
+        ({"mode": "setup", "status": "open"}, True),
         ({"mode": "payment", "status": "complete"}, True),
         ({"mode": "payment", "payment_status": "paid"}, True),
         ({"status": "complete", "payment_status": "paid"}, True),
@@ -779,6 +792,10 @@ async def test_pending_checkout_read_includes_async_payment_and_fails_closed(sta
     query = parse_qs(urlsplit(http.urls[0]).query)
     assert query["customer"] == ["cus_Contract"]
     assert "status" not in query
+    expanded = {
+        value for key, values in query.items() if key.startswith("expand") for value in values
+    }
+    assert expanded == {"data.payment_intent", "data.setup_intent"}
 
 
 async def test_coupon_deferral_sends_absolute_target_without_proration_and_stable_identity():
@@ -869,163 +886,95 @@ async def test_deferral_error_classifies_definite_refusal_and_ambiguous_provider
     assert isinstance(caught.value, DeferralRefused) is (status == 400)
 
 
-async def test_future_signup_collects_setup_without_checkout_trial_or_charge(monkeypatch):
-    body = {
-        "id": "cs_setup",
+_ARRANGED_CHECKOUT = json.dumps(
+    {
+        "id": "cs_arranged",
         "object": "checkout.session",
-        "mode": "setup",
+        "mode": "subscription",
         "status": "open",
         "customer": "cus_Contract",
         "metadata": {"pumpkit_paid_signup": "paid_signup_contract"},
-        "url": "https://checkout.test/setup",
+        "url": "https://checkout.test/arranged",
     }
-    http = _RecordedStripe(json.dumps(body))
-    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
-    setup = await gateway.create_paid_signup_setup(
+)
+
+
+async def _arrange(gateway: StripeBillingGateway):
+    return await gateway.create_paid_signup_checkout(
         customer_id="cus_Contract",
         user_id="user_contract",
         operation_id="paid_signup_contract",
-        currency="eur",
-        expires_at=datetime(2028, 1, 31, tzinfo=timezone.utc),
-    )
-    form = http.forms[0]
-    assert setup.id == "cs_setup"
-    assert form["mode"] == ["setup"]
-    assert form["billing_address_collection"] == ["required"]
-    assert form["tax_id_collection[enabled]"] == ["true"]
-    assert form["customer_update[address]"] == ["auto"]
-    assert form["customer_update[name]"] == ["auto"]
-    assert form["payment_method_types[0]"] == ["card"]
-    assert form["metadata[pumpkit_paid_signup]"] == ["paid_signup_contract"]
-    assert form["setup_intent_data[metadata][pumpkit_paid_signup]"] == ["paid_signup_contract"]
-    assert not any(
-        key.startswith(("subscription_data", "automatic_tax", "line_items")) for key in form
-    )
-    assert form["success_url"] == [settings.billing_page_url()]
-    assert http.headers[0]["Idempotency-Key"] == "paid_signup_contract:setup"
-
-
-@pytest.mark.parametrize("offset", [172799, 172800, 172801, 1])
-async def test_direct_future_signup_uses_absolute_date_and_owned_card_without_trial_day_rounding(
-    offset,
-):
-    end = datetime.fromtimestamp(1_830_297_600 + offset, tz=timezone.utc)
-    http = _RecordedStripe(json.dumps({"id": "sub_future", "object": "subscription"}))
-    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
-    await gateway.create_paid_signup(
-        customer_id="cus_Contract",
         price_id="price_monthly",
-        payment_method_id="pm_accepted",
-        operation_id="paid_signup_contract",
-        first_payment_at=end,
+        first_payment_at=datetime(2028, 1, 31, 9, 30, tzinfo=timezone.utc),
+        expires_at=datetime(2027, 12, 1, tzinfo=timezone.utc),
     )
-    form = http.forms[0]
-    assert form["trial_end"] == [str(int(end.timestamp()))]
-    assert form["items[0][price]"] == ["price_monthly"]
-    assert form["items[0][quantity]"] == ["1"]
-    assert form["default_payment_method"] == ["pm_accepted"]
-    assert form["automatic_tax[enabled]"] == ["true"]
-    assert form["proration_behavior"] == ["none"]
-    assert form["payment_behavior"] == ["error_if_incomplete"]
+
+
+@pytest.mark.parametrize("managed", [False, True], ids=["seller", "managed-payments"])
+async def test_an_arranged_signup_checkout_sends_the_plan_trial_end_metadata_and_seller_settings(
+    monkeypatch, managed
+):
+    monkeypatch.setattr(settings, "STRIPE_MANAGED_PAYMENTS", managed)
+    gateway, http = _recorded_gateway(_ARRANGED_CHECKOUT)
+
+    checkout = await _arrange(gateway)
+
+    assert checkout.id == "cs_arranged"
+    assert checkout.status == "open"
+    assert checkout.url == "https://checkout.test/arranged"
+    [form] = http.forms
+    assert form["mode"] == ["subscription"]
+    assert form["customer"] == ["cus_Contract"]
+    assert form["client_reference_id"] == ["user_contract"]
+    assert form["line_items[0][price]"] == ["price_monthly"]
+    assert form["line_items[0][quantity]"] == ["1"]
+    assert form["subscription_data[trial_end]"] == ["1832923800"]
+    assert form["subscription_data[metadata][pumpkit_paid_signup]"] == ["paid_signup_contract"]
     assert form["metadata[pumpkit_paid_signup]"] == ["paid_signup_contract"]
-    assert "trial_period_days" not in form
-    assert http.headers[0]["Idempotency-Key"] == "paid_signup_contract:subscription"
+    assert form["expires_at"] == ["1827619200"]
+    assert form["success_url"] == [settings.billing_page_url()]
+    assert form["cancel_url"] == [settings.billing_page_url()]
+    assert "subscription_data[trial_period_days]" not in form
+    assert "allow_promotion_codes" not in form
+    assert not [key for key in form if key.startswith(("payment_method_types", "setup_intent"))]
+    assert http.headers[0]["Idempotency-Key"] == "paid_signup_contract:checkout"
+    if managed:
+        assert form["managed_payments[enabled]"] == ["true"]
+        assert not [key for key in form if key.startswith(_SELLER_ONLY_PARAMS)]
+    else:
+        assert form["managed_payments[enabled]"] == ["false"]
+        assert form["automatic_tax[enabled]"] == ["true"]
+        assert form["tax_id_collection[enabled]"] == ["true"]
 
 
-async def test_setup_recovery_reads_current_intent_and_payment_method_ownership():
-    session = {
-        "id": "cs_setup",
+async def test_arranged_subscription_checkouts_are_read_back_with_their_subscription():
+    arranged = {
+        "id": "cs_arranged",
         "object": "checkout.session",
-        "mode": "setup",
+        "mode": "subscription",
         "status": "complete",
         "customer": "cus_Contract",
         "metadata": {"pumpkit_paid_signup": "paid_signup_contract"},
-        "setup_intent": {
-            "id": "seti_1",
-            "object": "setup_intent",
-            "customer": "cus_Contract",
-            "status": "succeeded",
-            "usage": "off_session",
-            "metadata": {"pumpkit_paid_signup": "paid_signup_contract"},
-            "payment_method": {
-                "id": "pm_selected",
-                "object": "payment_method",
-                "customer": "cus_Contract",
-            },
-        },
+        "subscription": "sub_arranged",
+        "url": None,
     }
-    http = _RecordedStripe(
-        json.dumps({"object": "list", "data": [session], "has_more": False}), json.dumps(session)
-    )
-    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
-    setups = await gateway.list_paid_signup_setups(customer_id="cus_Contract")
-    assert len(setups) == 1
-    assert setups[0].setup_status == "succeeded"
-    assert setups[0].payment_method_id == "pm_selected"
-    assert setups[0].setup_customer_id == "cus_Contract"
-    assert setups[0].payment_method_customer_id == "cus_Contract"
-    assert "setup_intent.payment_method" in parse_qs(urlsplit(http.urls[1]).query)["expand[0]"]
-
-
-async def test_completed_setup_no_longer_blocks_billing_or_account_deletion():
-    session = {
-        "id": "cs_setup",
+    ordinary = {
+        "id": "cs_ordinary",
         "object": "checkout.session",
-        "mode": "setup",
-        "status": "complete",
+        "mode": "subscription",
+        "status": "open",
         "customer": "cus_Contract",
-        "setup_intent": {"id": "seti_done", "status": "succeeded"},
+        "metadata": {},
     }
-    http = _RecordedStripe(json.dumps({"object": "list", "data": [session], "has_more": False}))
-    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
-    assert await gateway.has_pending_checkout(customer_id="cus_Contract") is False
-
-
-async def test_future_signup_refuses_elapsed_absolute_date_before_any_provider_write():
-    http = _RecordedStripe("{}")
-    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
-    with pytest.raises(DeferralRefused):
-        await gateway.create_paid_signup(
-            customer_id="cus_Contract",
-            price_id="price_monthly",
-            payment_method_id="pm_1",
-            operation_id="paid_signup_contract",
-            first_payment_at=datetime(2000, 1, 1, tzinfo=timezone.utc),
-        )
-    assert http.methods == []
-
-
-async def test_in_progress_signup_idempotency_key_is_uncertain_not_definite_refusal():
-    class InProgressStripe(_RecordedStripe):
-        def request(self, method, url, headers, post_data=None, *, _usage=None):
-            return (
-                json.dumps(
-                    {
-                        "error": {
-                            "type": "invalid_request_error",
-                            "code": "idempotency_key_in_use",
-                            "message": "Still running",
-                        }
-                    }
-                ),
-                400,
-                {},
-            )
-
-    gateway = StripeBillingGateway(
-        stripe.StripeClient(
-            "sk_test_contract", http_client=InProgressStripe("{}"), max_network_retries=0
-        )
+    gateway, http = _recorded_gateway(
+        json.dumps({"object": "list", "data": [ordinary, arranged], "has_more": False})
     )
-    with pytest.raises(BillingProviderError) as caught:
-        await gateway.create_paid_signup(
-            customer_id="cus_Contract",
-            price_id="price_monthly",
-            payment_method_id="pm_owned",
-            operation_id="paid_signup_original",
-            first_payment_at=datetime(2028, 1, 31, tzinfo=timezone.utc),
-        )
-    assert not isinstance(caught.value, DeferralRefused)
+
+    checkouts = await gateway.list_paid_signup_checkouts(customer_id="cus_Contract")
+
+    assert [(c.id, c.operation_id, c.status, c.subscription_id) for c in checkouts] == [
+        ("cs_arranged", "paid_signup_contract", "complete", "sub_arranged")
+    ]
 
 
 async def test_interval_change_retains_trial_anchor_and_cancellation_without_proration():
