@@ -1,9 +1,6 @@
 """
-Opt-in provider experiment: every Subscription update Pumpkit makes, on Subscriptions Stripe records
-as Managed Payments ones; ordinary test runs never contact Stripe. It completes each hosted Checkout
-in headless Chromium through `e2e/stripe-checkout.mjs`, so it needs `npm ci` and
-`npx playwright install chromium` in `e2e/`. `PUMPKIT_STRIPE_RESULTS` names a JSON file for the
-record of each call: whether Stripe accepted it, its error, and the Subscription's state after it.
+Opt-in Stripe test-mode check of paid signup, Subscribe now, Coupon deferral, plan change, cancel_at
+and Top-up refunds on Managed Payments Subscriptions; e2e/README.md says how to run it.
 """
 
 import asyncio
@@ -11,6 +8,7 @@ import json
 import os
 import subprocess
 import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
@@ -29,6 +27,8 @@ CHECKOUT_SCRIPT = Path(__file__).resolve().parents[3] / "e2e" / "stripe-checkout
 # Software as a service, business use: eligible for Managed Payments.
 TAX_CODE = "txcd_10103001"
 MONTHLY, ANNUAL, TOP_UP = 1900, 19000, 1000
+# Pumpkit opens the paid signup Checkout no later than 48 hours 5 minutes before Free access ends.
+FIRST_PAYMENT_LEAD = 48 * 3600 + 5 * 60
 
 
 @pytest.fixture(scope="module")
@@ -75,11 +75,18 @@ def provider():
     finally:
         # Deleting a customer cancels its Subscriptions.
         for customer in created["customers"]:
-            client.v1.customers.delete(customer)
+            best_effort(client.v1.customers.delete, customer)
         for price in created["prices"]:
-            client.v1.prices.update(price, {"active": False})
+            best_effort(client.v1.prices.update, price, {"active": False})
         for product in created["products"]:
-            client.v1.products.update(product, {"active": False})
+            best_effort(client.v1.products.update, product, {"active": False})
+
+
+def best_effort(cleanup: Callable[..., Any], *args: Any) -> None:
+    try:
+        cleanup(*args)
+    except stripe.StripeError as error:
+        warnings.warn(f"Stripe cleanup {args[0]} failed: {error}", stacklevel=2)
 
 
 @pytest.fixture
@@ -115,7 +122,10 @@ async def eventually(read: Callable[[], Awaitable[list[Any]]], ready: Callable[[
 def subscription_facts(client: stripe.StripeClient, subscription_id: str) -> dict[str, Any]:
     subscription = client.v1.subscriptions.retrieve(subscription_id).to_dict()
     item = subscription["items"]["data"][0]
-    invoices = client.v1.invoices.list({"subscription": subscription_id, "limit": 100}).data
+    invoices = [
+        invoice.to_dict()
+        for invoice in client.v1.invoices.list({"subscription": subscription_id, "limit": 100})
+    ]
     return {
         "status": subscription["status"],
         "managed_payments": (subscription.get("managed_payments") or {}).get("enabled"),
@@ -126,9 +136,9 @@ def subscription_facts(client: stripe.StripeClient, subscription_id: str) -> dic
         "current_period_end": item["current_period_end"],
         "metadata": subscription.get("metadata"),
         "charged": [
-            {"amount_paid": i.amount_paid, "tax": (i.to_dict().get("total_taxes") or []) != []}
-            for i in invoices
-            if i.amount_due
+            {"amount_paid": invoice["amount_paid"], "tax": bool(invoice.get("total_taxes"))}
+            for invoice in invoices
+            if invoice["amount_due"]
         ],
     }
 
@@ -181,8 +191,7 @@ async def test_arranged_paid_subscription_takes_every_free_access_update(managed
     client, prices, customers, gateway = managed
     customer = await new_customer(gateway, customers, "paid-signup")
     now = int(time.time())
-    # Pumpkit opens the Checkout no later than 48 hours 5 minutes before Free access ends.
-    agreed = now + 48 * 3600 + 5 * 60
+    agreed = now + FIRST_PAYMENT_LEAD
     operation = f"verify-paid-signup-{now}"
     checkout = await attempt(
         record,
@@ -288,7 +297,7 @@ async def test_arranged_paid_subscription_takes_every_free_access_update(managed
     assert portal.startswith("https://billing.stripe.com/")
 
 
-async def test_paid_signup_completed_a_day_late_charges_at_the_agreed_second(managed, record):
+async def test_paid_signup_completed_23h50m_late_charges_at_the_agreed_second(managed, record):
     client, prices, _, gateway = managed
     now = int(time.time())
     clock = client.v1.test_helpers.test_clocks.create({"frozen_time": now, "name": "pumpkit-mp"})
@@ -296,14 +305,20 @@ async def test_paid_signup_completed_a_day_late_charges_at_the_agreed_second(man
         customer = client.v1.customers.create(
             {"test_clock": clock.id, "email": "managed-payments-late@example.com"}
         ).id
-        agreed = now + 48 * 3600 + 5 * 60
-        checkout = await gateway.create_paid_signup_checkout(
-            customer_id=customer,
-            user_id="managed-payments-late",
-            operation_id=f"verify-late-signup-{now}",
-            price_id=prices["month"],
-            first_payment_at=at(agreed),
-            expires_at=at(now + 23 * 3600 + 55 * 60),
+        agreed = now + FIRST_PAYMENT_LEAD
+        checkout = await attempt(
+            record,
+            "paid signup Checkout completed with trial_end 24h15m away (test clock)",
+            gateway.create_paid_signup_checkout(
+                customer_id=customer,
+                user_id="managed-payments-late",
+                operation_id=f"verify-late-signup-{now}",
+                price_id=prices["month"],
+                first_payment_at=at(agreed),
+                expires_at=at(now + 23 * 3600 + 55 * 60),
+            ),
+            client,
+            None,
         )
         assert checkout.url
         # The User finishes Checkout just before it expires, with trial_end then under 48 hours away.
@@ -315,13 +330,7 @@ async def test_paid_signup_completed_a_day_late_charges_at_the_agreed_second(man
             lambda found: found.status == "complete" and found.subscription_id,
         )
         started = subscription_facts(client, listed.subscription_id)
-        record.append(
-            {
-                "case": "paid signup Checkout completed with trial_end 24h15m away (test clock)",
-                "accepted": True,
-                "state": started,
-            }
-        )
+        record[-1]["state"] = started
         assert started["status"] == "trialing"
         assert started["trial_end"] == started["billing_cycle_anchor"] == agreed
         advance(client, clock.id, agreed + 3600)
@@ -330,20 +339,26 @@ async def test_paid_signup_completed_a_day_late_charges_at_the_agreed_second(man
         assert charged["status"] == "active"
         assert charged["charged"] == [{"amount_paid": MONTHLY, "tax": True}]
     finally:
-        client.v1.test_helpers.test_clocks.delete(clock.id)
+        best_effort(client.v1.test_helpers.test_clocks.delete, clock.id)
 
 
 async def test_cancel_signup_expires_the_paid_signup_checkout(managed, record):
     client, prices, customers, gateway = managed
     customer = await new_customer(gateway, customers, "cancel-signup")
     now = int(time.time())
-    checkout = await gateway.create_paid_signup_checkout(
-        customer_id=customer,
-        user_id="managed-payments-cancel-signup",
-        operation_id=f"verify-cancel-signup-{now}",
-        price_id=prices["month"],
-        first_payment_at=at(now + 48 * 3600 + 5 * 60),
-        expires_at=at(now + 23 * 3600),
+    checkout = await attempt(
+        record,
+        "paid signup Checkout to cancel",
+        gateway.create_paid_signup_checkout(
+            customer_id=customer,
+            user_id="managed-payments-cancel-signup",
+            operation_id=f"verify-cancel-signup-{now}",
+            price_id=prices["month"],
+            first_payment_at=at(now + FIRST_PAYMENT_LEAD),
+            expires_at=at(now + 23 * 3600),
+        ),
+        client,
+        None,
     )
     await attempt(
         record,
@@ -360,12 +375,18 @@ async def test_cancel_signup_expires_the_paid_signup_checkout(managed, record):
 async def test_paid_subscription_takes_subscribe_now_deferral_and_cancellation(managed, record):
     client, prices, customers, gateway = managed
     customer = await new_customer(gateway, customers, "subscriber")
-    checkout = await gateway.create_subscription_checkout(
-        customer_id=customer,
-        price_id=prices["month"],
-        quantity=1,
-        user_id="managed-payments-subscriber",
-        trial_period_days=7,
+    checkout = await attempt(
+        record,
+        "Checkout for a Subscription with a 7-day Trial",
+        gateway.create_subscription_checkout(
+            customer_id=customer,
+            price_id=prices["month"],
+            quantity=1,
+            user_id="managed-payments-subscriber",
+            trial_period_days=7,
+        ),
+        client,
+        None,
     )
     complete_checkout(client, checkout.id, checkout.url)
     state = await eventually(lambda: gateway.list_subscriptions(customer_id=customer), bool)
@@ -455,14 +476,15 @@ async def test_refunded_top_up_reads_as_reversed(managed, record):
     refunded = await eventually(
         lambda: gateway.list_top_ups(customer_id=customer), lambda found: found.reversed
     )
+    charge_customer = await gateway.get_charge_customer(charge_id=paid.charge_id)
     record.append(
         {
             "case": "refund of a Top-up payment, read through list_top_ups",
             "accepted": True,
             "refund_status": refund.status,
             "reversed": refunded.reversed,
-            "charge_customer": await gateway.get_charge_customer(charge_id=paid.charge_id),
+            "charge_customer": charge_customer,
         }
     )
     assert refunded.reversed is True
-    assert record[-1]["charge_customer"] == customer
+    assert charge_customer == customer

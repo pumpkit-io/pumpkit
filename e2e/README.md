@@ -42,7 +42,7 @@ Live keys are refused, and the normal E2E configuration excludes these tests. Th
 
 ## Managed Payments verification
 
-`stripe-checkout.mjs` completes a Stripe test-mode hosted Checkout with Stripe's Visa test card in headless Chromium. Only the opt-in backend test `backend/tests/billing/test_stripe_managed_payments_live.py` uses it, to start Subscriptions Stripe records as Managed Payments ones and check every Subscription update Pumpkit makes on them. After `npm ci` and `npx playwright install chromium` here, run it from `backend/`:
+`stripe-checkout.mjs` completes a Stripe test-mode hosted Checkout with Stripe's Visa test card in headless Chromium. Only the opt-in backend test `backend/tests/billing/test_stripe_managed_payments_live.py` uses it, to start Subscriptions Stripe records as Managed Payments ones and check paid signup, Cancel signup, Subscribe now, Coupon deferral, plan change, `cancel_at` and Top-up refunds on them. It doesn't cover immediate cancellation or the restricted Billing portal's own changes. After `npm ci` and `npx playwright install chromium` here, run it from `backend/`:
 
 ```sh
 PUMPKIT_STRIPE_TEST_KEY=<sk_test_ key> uv run --extra dev pytest tests/billing/test_stripe_managed_payments_live.py

@@ -1,5 +1,5 @@
 // Completes a Stripe test-mode hosted Checkout with Stripe's published Visa test card.
-// Used by backend/tests/billing/test_stripe_managed_payments_live.py; never points at live mode.
+// Used by backend/tests/billing/test_stripe_managed_payments_live.py.
 import { chromium } from 'playwright';
 
 const [url] = process.argv.slice(2);
@@ -17,10 +17,11 @@ try {
     // The accordion's cover takes the pointer, so the click goes straight to the button.
     await page.getByTestId('card-accordion-item-button').dispatchEvent('click');
   }
-  await page.locator('#cardNumber').pressSequentially('4242424242424242', { delay: 30 });
+  await card.pressSequentially('4242424242424242', { delay: 30 });
   await page.locator('#cardExpiry').pressSequentially('1234', { delay: 30 });
   await page.locator('#cardCvc').pressSequentially('123', { delay: 30 });
   await page.locator('#billingName').pressSequentially('Synthetic Tester', { delay: 20 });
+  // Checkout validates the typed card in the background and exposes no signal for when it's done.
   await page.waitForTimeout(1500);
   // Stripe redirects to the success URL once the Checkout completes; that page needn't load.
   const redirected = page.waitForRequest(
