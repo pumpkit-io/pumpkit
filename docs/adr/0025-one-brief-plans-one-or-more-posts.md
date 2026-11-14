@@ -42,6 +42,18 @@ The single-post Idea and the split Ideas are alternatives, so "Not written" offe
 
 A Brief with one Post and no Idea left to offer never shows the page: it opens that Post's page, also right after "Write this one" writes a one-idea Brief.
 
+## Recent briefs on New post
+
+New post lists the User's ten latest Briefs, newest by creation time first, so they can return to Posts still being written and to Briefs they planned but didn't write. Each row shows the start of the Brief's text and one label, read from the same counts as the Brief's page: the Brief's Posts by writing state, and the Ideas its page offers. The first that applies:
+
+1. "Writing…" while any of its Posts is being written before its first Version, a Post the User hasn't seen yet.
+2. "1 post couldn't be written" (or "n posts…") while any Post's first Version failed or was lost, since that Post waits for Retry.
+3. "Not written yet" with no Post: a split Brief whose Ideas the User didn't pick, or a Brief stored unwritten for want of Generations.
+4. "n of m written", the Brief page's header, while Ideas are still offered.
+5. "n written" when nothing is offered.
+
+A Post that Feedback is rewriting already has a Text the User has seen, so it counts as written, and New post doesn't read the list again for it. From the third case on, every Post counted is written, so the row and the page header agree wherever both show a count. A row opens the Brief's page, or its Post by the rule above when the Brief has one Post and nothing to offer. The section is left out while the User has no Brief. New post reads the list when it opens and again every ten seconds while any first Version is being written, more slowly than a Brief's page, since the list only signals that work is under way.
+
 ## MCP tools (amends ADR 0012)
 
 - `plan_posts` takes a Brief and returns it with its Ideas and their Plans, the single-post Idea included. It starts nothing, even when there are no split Ideas.

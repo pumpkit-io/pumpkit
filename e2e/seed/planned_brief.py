@@ -4,6 +4,7 @@ The plan call and writing a Post would call the LLM, so the Brief, its Ideas and
 Posts are written straight into the database. Run it like `seed_user.py`, after it:
 
 - `planned_brief.py plan` stores the Brief and prints `BRIEF_ID=<id>`.
+- `planned_brief.py ideas <brief_id>` prints the split Ideas' ids in posting order.
 - `planned_brief.py writing <brief_id> <idea_id>...` starts a Post of each Idea, being written,
   or of each split Idea when it names none.
 - `planned_brief.py written <brief_id>` writes the first Version of each Post being written.
@@ -82,6 +83,14 @@ async def main(command: str, args: list[str]) -> None:
             db.add(brief)
             await db.flush()
             print(f"BRIEF_ID={brief.id}")
+        elif command == "ideas":
+            [brief_id] = args
+            ideas = await db.scalars(
+                select(Idea)
+                .where(Idea.brief_id == brief_id, Idea.whole_brief.is_(False))
+                .order_by(Idea.posting_order)
+            )
+            print(" ".join(idea.id for idea in ideas))
         elif command == "writing":
             brief_id, *idea_ids = args
             picked = Idea.id.in_(idea_ids) if idea_ids else Idea.whole_brief.is_(False)

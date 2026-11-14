@@ -45,7 +45,7 @@ test('a brief of several ideas is written as the ideas picked, which fill in on 
   });
   await page.goto('/new');
 
-  await page.getByLabel('Brief').fill('Three things my failed SaaS taught me.');
+  await page.getByRole('textbox', { name: 'Brief' }).fill('Three things my failed SaaS taught me.');
   await page.getByRole('button', { name: 'Plan posts' }).click();
 
   const step = page.getByRole('region', { name: 'We found 3 ideas in your brief' });
@@ -102,6 +102,28 @@ test('a brief of several ideas is written as the ideas picked, which fill in on 
   );
   await place.getByRole('link', { name: 'Posts from your brief' }).click();
   await expect(page).toHaveURL(new RegExp(`/briefs/${briefId}$`));
+});
+
+test('recent briefs on New post show a brief writing, update when it is written, and open its page', async ({
+  page,
+}) => {
+  const ideaIds = runSeedScript('planned_brief.py', ['ideas', briefId])
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2);
+  runSeedScript('planned_brief.py', ['writing', briefId, ...ideaIds]);
+  await page.goto('/new');
+
+  const recent = page.getByRole('region', { name: 'Recent briefs' });
+  const row = recent.getByRole('link', { name: /^Three things my failed SaaS taught me/ });
+  await expect(row).toContainText('Writing…');
+
+  runSeedScript('planned_brief.py', ['written', briefId]);
+  await expect(row).toContainText('2 of 3 written', { timeout: 20_000 });
+
+  await row.click();
+  await expect(page).toHaveURL(new RegExp(`/briefs/${briefId}$`));
+  await expect(page.getByText('2 of 3 written')).toBeVisible();
 });
 
 test('a draft is discarded from its card and from its page, and its idea is offered again', async ({

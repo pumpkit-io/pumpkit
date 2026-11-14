@@ -7,6 +7,7 @@ import { BRIEF_MAX_CHARS } from '@/services/postService';
 import { errorCode } from '@/services/apiErrors';
 import { briefPosts, briefService, splitIdeas, type Brief } from '@/services/briefService';
 import { IdeasStep, type IdeasChoice } from '@/features/briefs/IdeasStep';
+import { RecentBriefs } from '@/features/briefs/RecentBriefs';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Composer } from './Composer';
 import { Notice } from '@/components/Notice';
@@ -106,8 +107,9 @@ function usePlanBrief() {
 }
 
 /**
- * The line and the composer: a Brief, sent with the arrow or ⌘Enter. The planner chooses a single
- * post or a thread, so a User who wants a thread asks for one in the Brief.
+ * The line and the composer: a Brief, sent with the arrow or ⌘Enter, and the recent Briefs under
+ * it. The planner chooses a single post or a thread, so a User who wants a thread asks for one in
+ * the Brief.
  */
 export function PostWriter() {
   const hasPositioning = useHasPositioning();
@@ -171,37 +173,40 @@ export function PostWriter() {
     ) : undefined;
 
   return (
-    <section aria-labelledby="new-post-line" className="space-y-3">
-      <h2
-        id="new-post-line"
-        className="pb-1.5 font-sans text-2xl/[30px] font-semibold tracking-[-0.015em] text-foreground"
-      >
-        What&apos;s the post about?
-      </h2>
-      <Composer
-        ref={briefRef}
-        autoFocus
-        label="Brief"
-        placeholder="Write a new post about…"
-        value={brief}
-        onChange={setBrief}
-        maxLength={BRIEF_MAX_CHARS}
-        sendLabel="Plan posts"
-        busyLabel="Reading your brief…"
-        onSend={send}
-        isWriting={isPlanning}
-        sendDisabled={hasPositioning === null}
-        gate={gate}
-      />
-      {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}
-      {isPlanning && (
-        <p role="status" className="font-sans text-[13px] text-muted-foreground">
-          Reading your brief…
-        </p>
-      )}
-      {error && <ErrorBanner message={error} onRetry={typed ? send : undefined} />}
-      {notice && <Notice message={notice} />}
-      {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
-    </section>
+    <>
+      <section aria-labelledby="new-post-line" className="space-y-3">
+        <h2
+          id="new-post-line"
+          className="pb-1.5 font-sans text-2xl/[30px] font-semibold tracking-[-0.015em] text-foreground"
+        >
+          What&apos;s the post about?
+        </h2>
+        <Composer
+          ref={briefRef}
+          autoFocus
+          label="Brief"
+          placeholder="Write a new post about…"
+          value={brief}
+          onChange={setBrief}
+          maxLength={BRIEF_MAX_CHARS}
+          sendLabel="Plan posts"
+          busyLabel="Reading your brief…"
+          onSend={send}
+          isWriting={isPlanning}
+          sendDisabled={hasPositioning === null}
+          gate={gate}
+        />
+        {!allowanceUsedUp && <LowUsageWarning allowance={usage?.allowance} count="generations" />}
+        {isPlanning && (
+          <p role="status" className="font-sans text-[13px] text-muted-foreground">
+            Reading your brief…
+          </p>
+        )}
+        {error && <ErrorBanner message={error} onRetry={typed ? send : undefined} />}
+        {notice && <Notice message={notice} />}
+        {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
+      </section>
+      <RecentBriefs />
+    </>
   );
 }

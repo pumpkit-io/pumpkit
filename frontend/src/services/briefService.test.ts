@@ -1,6 +1,23 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiService } from './apiService';
 import { briefService, notWrittenIdeas, type Brief, type Idea } from './briefService';
+
+interface OfferedIdeasCase {
+  note: string;
+  /** Each Idea's id ("whole" for the single-post Idea) and its Post's writing state, or null. */
+  ideas: [string, 'written' | 'writing' | 'not_written' | null][];
+  offered: string[];
+}
+
+// The backend's cases, so the Brief's page offers the Ideas its row on New post counts.
+const OFFERED_IDEAS_CASES: OfferedIdeasCase[] = JSON.parse(
+  readFileSync(
+    path.resolve(__dirname, '../../../backend/tests/posts/offered_ideas_cases.json'),
+    'utf8',
+  ),
+);
 
 const PLAN = {
   core_idea: 'Ship small.',
@@ -135,6 +152,37 @@ describe('briefService', () => {
     expect(brief.ideas[1]!.post).toMatchObject({ status: 'scheduled', publishing: true });
   });
 
+  it('lists the recent briefs with their posts counted', async () => {
+    const get = vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        data: [
+          {
+            id: 'brief_01',
+            text_start: 'so I have been testing…',
+            posts_written: 2,
+            posts_writing: 1,
+            posts_not_written: 0,
+            ideas_offered: 1,
+            post_ids: ['post_01', 'post_02', 'post_03'],
+          },
+        ],
+      },
+    } as never);
+
+    expect(await briefService.recent()).toEqual([
+      {
+        id: 'brief_01',
+        textStart: 'so I have been testing…',
+        postsWritten: 2,
+        postsWriting: 1,
+        postsNotWritten: 0,
+        ideasOffered: 1,
+        postIds: ['post_01', 'post_02', 'post_03'],
+      },
+    ]);
+    expect(get).toHaveBeenCalledWith('/briefs');
+  });
+
   it('reads a brief', async () => {
     vi.spyOn(apiService, 'get').mockResolvedValue({ data: BRIEF_API } as never);
 
@@ -145,32 +193,15 @@ describe('briefService', () => {
 
 describe('notWrittenIdeas', () => {
   const [whole, split] = BRIEF.ideas as [Idea, Idea];
-  const unwritten = (n: number): Idea => ({
-    ...split,
-    id: `idea_${n}`,
-    postingOrder: n,
-    post: null,
-  });
-  const withIdeas = (...ideas: Idea[]): Brief => ({ ...BRIEF, ideas });
-  const ids = (brief: Brief) => notWrittenIdeas(brief).map((idea) => idea.id);
-
-  it('offers every split idea and then the one post covering everything while none is written', () => {
-    expect(ids(withIdeas({ ...whole, post: null }, unwritten(1), unwritten(2)))).toEqual([
-      'idea_1',
-      'idea_2',
-      'idea_whole',
-    ]);
+  const ideaOf = ([id, state]: OfferedIdeasCase['ideas'][number]): Idea => ({
+    ...(id === 'whole' ? whole : split),
+    id,
+    post:
+      state === null ? null : { ...split.post!, writingState: state === 'written' ? null : state },
   });
 
-  it('offers only the split ideas left once a split idea is written', () => {
-    expect(ids(withIdeas({ ...whole, post: null }, split, unwritten(2)))).toEqual(['idea_2']);
-  });
-
-  it('offers nothing once the one post covering everything is written', () => {
-    expect(ids(withIdeas({ ...whole, post: split.post }, unwritten(1), unwritten(2)))).toEqual([]);
-  });
-
-  it('offers the split ideas left when posts of both kinds are written', () => {
-    expect(ids(withIdeas({ ...whole, post: split.post }, split, unwritten(2)))).toEqual(['idea_2']);
+  it.each(OFFERED_IDEAS_CASES)('$note', ({ ideas, offered }) => {
+    const brief: Brief = { ...BRIEF, ideas: ideas.map(ideaOf) };
+    expect(notWrittenIdeas(brief).map((idea) => idea.id)).toEqual(offered);
   });
 });

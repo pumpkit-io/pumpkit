@@ -61,7 +61,12 @@ vi.mock('@/services/postService', async (importOriginal) => ({
 }));
 vi.mock('@/services/briefService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/briefService')>()),
-  briefService: { plan: vi.fn(), get: vi.fn(), write: vi.fn() },
+  briefService: {
+    plan: vi.fn(),
+    get: vi.fn(),
+    write: vi.fn(),
+    recent: vi.fn().mockResolvedValue([]),
+  },
 }));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: {
