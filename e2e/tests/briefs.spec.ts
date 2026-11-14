@@ -94,11 +94,11 @@ test('a brief of several ideas is written as the ideas picked, which fill in on 
   await expect(page).toHaveURL(/\/posts\/post_/);
 
   const place = page.getByRole('navigation', { name: 'Posts from your brief' });
-  await expect(place.getByText('1 of 2')).toBeVisible();
+  await expect(place.getByText('1 of 3')).toBeVisible();
   await place.getByRole('link', { name: 'Next post' }).click();
-  await expect(place.getByText('2 of 2')).toBeVisible();
+  await expect(place.getByText('2 of 3')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Post text' })).toHaveValue(
-    "Written: Don't make OAuth integrations your core value.",
+    /^Written: Charge at least 20 euros/,
   );
   await place.getByRole('link', { name: 'Posts from your brief' }).click();
   await expect(page).toHaveURL(new RegExp(`/briefs/${briefId}$`));
