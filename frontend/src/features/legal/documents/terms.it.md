@@ -158,7 +158,7 @@ Se sei un consumatore, nulla nei presenti Termini limita i diritti che ti ricono
 
 ## 18. Cessazione del contratto {#ending}
 
-Puoi porre fine al contratto in qualsiasi momento. Disdici il tuo Abbonamento come descritto nella clausola 12 e, per eliminare il tuo account, scrivi a support@pumpkit.io dall'indirizzo email del tuo account. Il Gestore elimina l'account entro 30 giorni. L'eliminazione dell'account fa cessare immediatamente qualsiasi Abbonamento in corso (Running), senza rimborso per il periodo non utilizzato, e quanto resta dei tuoi Top-up va perso, senza rimborso.
+Puoi porre fine al contratto in qualsiasi momento. Disdici il tuo Abbonamento come descritto nella clausola 12, oppure elimina il tuo account con Delete account nella pagina Settings, che lo elimina immediatamente. Se non riesci ad accedere, scrivi a support@pumpkit.io dall'indirizzo email del tuo account e il Gestore elimina l'account entro 30 giorni. L'eliminazione dell'account fa cessare immediatamente qualsiasi Abbonamento in corso (Running), senza rimborso per il periodo non utilizzato, e quanto resta dei tuoi Top-up va perso, senza rimborso.
 
 Eliminare l’account fa cessare anche l’Accesso gratuito rimanente. Non ripristina l’idoneità al Trial introduttivo né a riscattare lo stesso Coupon: restano i dati minimi descritti nell’Informativa sulla privacy. Il Gestore può porre fine al contratto come descritto nella clausola 9.
 

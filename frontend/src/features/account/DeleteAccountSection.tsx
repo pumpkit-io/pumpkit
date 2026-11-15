@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,11 +10,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useBilling } from '@/features/billing/useBilling';
 import { usePostCounts } from '@/features/posts/usePostCounts';
 import { trackBeforeLeaving } from '@/lib/analytics';
 import { session } from '@/lib/session';
 import { useProfile } from '@/pages/layout/ProfileContext';
 import { errorMessage } from '@/services/apiErrors';
+import type { SubscriptionStatus } from '@/services/billingService';
+import { usageService } from '@/services/usageService';
 import { userService } from '@/services/userService';
 
 /** The handle as the backend matches it: without "@", in any case. */
@@ -22,10 +25,42 @@ function normalizeHandle(handle: string): string {
   return handle.trim().replace(/^@/, '').toLowerCase();
 }
 
+/** The statuses of a Running Subscription, which deleting the account cancels at once. */
+const RUNNING: ReadonlySet<SubscriptionStatus> = new Set([
+  'trialing',
+  'active',
+  'past_due',
+  'unpaid',
+  'paused',
+]);
+
+/** Whether the User holds a Top-up with something left; only a Subscribed User's usage lists them. */
+function useHoldsTopUps(subscribed: boolean): boolean {
+  const [holds, setHolds] = useState(false);
+  useEffect(() => {
+    if (!subscribed) return;
+    let live = true;
+    usageService
+      .get()
+      .then((usage) => live && setHolds((usage.allowance?.topUps.length ?? 0) > 0))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [subscribed]);
+  return holds;
+}
+
 /** What deleting takes away, from what Settings already loaded, each line only when it applies. */
 function useLosses(): string[] {
+  const me = useBilling().data?.me;
+  const status = me?.subscription?.status;
+  const running = status !== undefined && RUNNING.has(status);
+  const holdsTopUps = useHoldsTopUps(Boolean(me?.subscribed));
   const waiting = usePostCounts().counts?.scheduled ?? 0;
   const losses: string[] = [];
+  if (running) losses.push('ends your subscription now, with no refund');
+  if (holdsTopUps) losses.push('loses your unused top-ups');
   if (waiting > 0) losses.push('deletes your scheduled posts before they go out');
   losses.push('disconnects X and every connected AI app');
   return losses;

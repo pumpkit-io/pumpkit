@@ -158,7 +158,7 @@ If you are a consumer, nothing in these Terms limits the rights that Italian and
 
 ## 18. Ending the contract {#ending}
 
-You can end the contract at any time. Cancel your Subscription as clause 12 describes, and to delete your account write to support@pumpkit.io from the email address of your account. The Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period, and whatever is left of your Top-ups is lost, with no refund.
+You can end the contract at any time. Cancel your Subscription as clause 12 describes, or delete your account with Delete account in Settings, which deletes it at once. If you can't sign in, write to support@pumpkit.io from the email address of your account, and the Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period, and whatever is left of your Top-ups is lost, with no refund.
 
 Deleting your account also ends remaining Free access. It does not restore introductory Trial eligibility or eligibility to claim the same Coupon: the minimal records described in the Privacy Policy remain. The Operator can end the contract as clause 9 describes.
 

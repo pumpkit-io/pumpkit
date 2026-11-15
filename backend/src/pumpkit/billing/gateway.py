@@ -1215,6 +1215,13 @@ class FakeBillingGateway:
         for session_id in expired:
             self._open_checkouts.pop(session_id, None)
             self._payment_checkouts.pop(session_id, None)
+        self._expire_lapsed_paid_signup_checkouts()
+        for checkout in list(self.paid_signup_checkouts.values()):
+            if checkout.customer_id == customer_id and checkout.status == "open":
+                self.paid_signup_checkouts[checkout.id] = replace(
+                    checkout, status="expired", url=None
+                )
+                expired.append(checkout.id)
         self.expired_checkouts.extend(expired)
         return expired
 

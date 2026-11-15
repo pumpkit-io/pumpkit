@@ -44,18 +44,38 @@ async function openPaywall(page: Page) {
   }).toPass({ timeout: 70_000 });
 }
 
-async function subscribe(page: Page) {
+interface Delivery {
+  event: string;
+  object: string;
+  customer: string | null;
+}
+
+async function deliveries(page: Page, stripe: string): Promise<Delivery[]> {
+  return (await page.request.get(`${stripe}/_pumpkit/webhook-deliveries`)).json();
+}
+
+/** Subscribes through the Stripe Emulator's Checkout; answers with its origin and the customer. */
+async function subscribe(page: Page): Promise<{ stripe: string; customer: string }> {
   await openPaywall(page);
   for (const box of await page.getByRole('checkbox').all()) await box.check();
   await page.getByRole('button', { name: MONTHLY }).click();
-  await page.getByRole('button', { name: 'Pay' }).click();
+  const pay = page.getByRole('button', { name: 'Pay' });
+  await expect(pay).toBeVisible();
+  const checkout = new URL(page.url());
+  const sessionId = checkout.pathname.split('/').pop() ?? '';
+  await pay.click();
   await expect(page).toHaveURL(/\/onboarding$/);
+  const customer = (await deliveries(page, checkout.origin)).find(
+    (d) => d.object === sessionId,
+  )?.customer;
+  if (!customer) throw new Error('The Emulator delivered no event for the Checkout');
+  return { stripe: checkout.origin, customer };
 }
 
-test('a User deletes their account from Settings and signing in again starts a fresh one', async ({
+test('a User deletes their account with a running subscription, which ends, and signing in again starts a fresh one', async ({
   page,
 }) => {
-  runSeedScript('leaver.py', ['reset']);
+  runSeedScript('leaver.py');
   // The stack's model is real and costs money, so the draft is answered here.
   await page.route('**/api/v1/positioning/draft', (route) =>
     route.fulfill({ json: { text: 'I post about leaving.', reason: null, can_draft: true } }),
@@ -65,7 +85,7 @@ test('a User deletes their account from Settings and signing in again starts a f
   await expect(page).toHaveURL(/\/subscribe$/);
   const original = await profileId(page);
   const revokedBefore = await revokes(page, emulator);
-  await subscribe(page);
+  const { stripe, customer } = await subscribe(page);
   const step = page.getByRole('region', { name: 'Who you are on X' });
   await expect(step.getByRole('textbox', { name: 'Who you are on X' })).toHaveValue(
     'I post about leaving.',
@@ -77,15 +97,11 @@ test('a User deletes their account from Settings and signing in again starts a f
   const section = page.getByRole('region', { name: 'Delete account' });
   await section.getByRole('button', { name: 'Delete account' }).click();
   const dialog = page.getByRole('alertdialog', { name: 'Delete your account?' });
+  await expect(dialog.getByText('ends your subscription now, with no refund')).toBeVisible();
   await expect(dialog.getByText('Posts already on X stay on X.')).toBeVisible();
   const confirm = dialog.getByRole('button', { name: 'Delete my account' });
   await expect(confirm).toBeDisabled();
   await dialog.getByLabel('Type @leaver to confirm').fill('@leaver');
-  await confirm.click();
-  // Until deleting ends a running subscription itself, the User is asked to cancel it first.
-  await expect(dialog.getByRole('alert')).toContainText('Your subscription is still running.');
-
-  runSeedScript('leaver.py', ['end']);
   await confirm.click();
 
   await expect(page).toHaveURL(/\/login$/);
@@ -95,6 +111,15 @@ test('a User deletes their account from Settings and signing in again starts a f
   expect(await page.evaluate(() => localStorage.getItem('pumpkit:session'))).toBeNull();
   // The revoke runs in the background after the deletion answers.
   await expect.poll(() => revokes(page, emulator)).toBe(revokedBefore + 1);
+  // The Emulator sends its webhook after answering the cancel.
+  await expect
+    .poll(
+      async () =>
+        (await deliveries(page, stripe)).filter(
+          (d) => d.customer === customer && d.event === 'customer.subscription.deleted',
+        ).length,
+    )
+    .toBe(1);
 
   await signIn(page);
   await expect(page).toHaveURL(/\/subscribe$/);

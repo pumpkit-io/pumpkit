@@ -1,10 +1,9 @@
 """
-Settle the account deletion journey's User, Leaver (X ID 1004), through this stack's Stripe
-Emulator: `end` cancels their Subscriptions; `reset` also deletes the account a failed run left.
+Delete the account a failed run of the account deletion journey left for its User, Leaver
+(X ID 1004), ending their Subscriptions through this stack's Stripe Emulator first.
 """
 
 import asyncio
-import sys
 
 from sqlalchemy import select
 
@@ -18,7 +17,7 @@ from tests.browser_seed import x_id_for
 LEAVER_X_ID = "1004"
 
 
-async def main(action: str) -> None:
+async def main() -> None:
     # Refuses to run outside the managed local stack.
     x_id_for("leaver@e2e-user.dev")
     gateway = get_billing_gateway()
@@ -30,12 +29,10 @@ async def main(action: str) -> None:
             for state in await gateway.list_subscriptions(customer_id=user.stripe_customer_id):
                 if state.status not in {"canceled", "incomplete_expired"}:
                     await gateway.cancel_subscription(subscription_id=state.id)
-            if action == "reset":
-                await gateway.expire_open_checkouts(customer_id=user.stripe_customer_id)
-        if action == "reset":
-            await account_deletion.delete_account(db, gateway, user_id=user.id)
-            await account_deletion.delete_files(db, get_file_storage())
+            await gateway.expire_open_checkouts(customer_id=user.stripe_customer_id)
+        await account_deletion.delete_account(db, gateway, user_id=user.id)
+        await account_deletion.delete_files(db, get_file_storage())
 
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1]))
+    asyncio.run(main())

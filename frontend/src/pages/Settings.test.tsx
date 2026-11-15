@@ -1000,6 +1000,7 @@ describe('Settings', () => {
       vi.mocked(userService.deleteAccount).mockReset();
       vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
       vi.mocked(hardRedirect).mockReset();
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
     });
 
     async function openDeletion() {
@@ -1047,6 +1048,41 @@ describe('Settings', () => {
       ]);
     });
 
+    it('says a running subscription ends now, with no refund', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      const dialog = await openDeletion();
+
+      expect(await dialog.findByText('ends your subscription now, with no refund')).toBeVisible();
+      expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'ends your subscription now, with no refund',
+        'disconnects X and every connected AI app',
+      ]);
+    });
+
+    it('says unused top-ups are lost', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          topUps: [
+            {
+              generationsLeft: 40,
+              xPostsLeft: 10,
+              linkXPostsLeft: 1,
+              expiresAt: new Date('2027-01-01T00:00:00Z'),
+            },
+          ],
+        }),
+      );
+      const dialog = await openDeletion();
+
+      expect(await dialog.findByText('loses your unused top-ups')).toBeVisible();
+      expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'ends your subscription now, with no refund',
+        'loses your unused top-ups',
+        'disconnects X and every connected AI app',
+      ]);
+    });
+
     it('enables Delete my account only once the handle matches', async () => {
       const dialog = await openDeletion();
       const field = await dialog.findByLabelText('Type @ada to confirm');
@@ -1080,12 +1116,11 @@ describe('Settings', () => {
         'A billing change is still being processed. Try again in a few minutes.',
       ],
       ['unpaid_invoice', 'You have an unpaid invoice. Contact support to delete your account.'],
-      [
-        'subscription_running',
-        'Your subscription is still running. Cancel it in Plan, then delete your account once it has ended.',
-      ],
+      [null, "Couldn't end your subscription. Try again, or contact support."],
     ])('shows the %s refusal inside the dialog', async (code, message) => {
-      vi.mocked(userService.deleteAccount).mockRejectedValue(apiError(409, message, { code }));
+      vi.mocked(userService.deleteAccount).mockRejectedValue(
+        code ? apiError(409, message, { code }) : apiError(502, message),
+      );
       const dialog = await openDeletion();
 
       await confirmWith(dialog);

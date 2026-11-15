@@ -1,19 +1,23 @@
 """
 A User deleting their own account from Settings with `DELETE /users/me` (ADR 0031): confirmed by
-their handle, refused while something is in flight, and followed by revoking Pumpkit's X grant.
+their handle, ending a Running Subscription at once, refused while something is in flight, and
+followed by revoking Pumpkit's X grant.
 """
 
 import asyncio
+from dataclasses import replace
 from datetime import datetime, timezone
-from io import BytesIO
+from io import BytesIO, StringIO
 
 import pytest
 from sqlalchemy import event, select
 
-from pumpkit.account_deletion import delete_files
+from pumpkit.account_deletion import delete_files, run_cli
 from pumpkit.account_deletion_router import router as account_deletion_router
 from pumpkit.auth.models import User
+from pumpkit.billing.gateway import SubscriptionState
 from pumpkit.billing.models import Subscription
+from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.background import get_background_tasks
 from pumpkit.core.db.session import get_session_maker
 from pumpkit.core.storage import get_file_storage
@@ -21,6 +25,8 @@ from pumpkit.posts.models import AccountFileDeletion, Media
 from pumpkit.scheduling.models import PUBLISHING, ScheduledPost
 from pumpkit.x_connection.models import XConnection
 from tests.billing.test_billing import CHECKOUT, CHECKOUT_MONTHLY
+from tests.billing.test_coupon_preview import coupons as coupons
+from tests.billing.test_paid_signups import _open
 from tests.billing.test_trial_eligibility import BILLING_ME, ended_trial, sign_in
 from tests.billing.test_trial_eligibility import trial_app as trial_app
 from tests.billing.test_trial_eligibility import trial_browser as trial_browser
@@ -163,21 +169,29 @@ async def test_a_post_going_out_on_x_refuses_deletion(authed_client, db, user, p
     assert await user_exists(db, user)
 
 
-async def test_a_pending_checkout_refuses_deletion(authed_client, db, user, fake_billing):
+async def test_deleting_expires_an_open_checkout(authed_client, db, user, fake_billing):
     user.stripe_customer_id = "cus_ada"
     await db.commit()
     await fake_billing.create_subscription_checkout(
         customer_id="cus_ada", price_id="price_monthly", quantity=1, user_id=user.id
     )
 
-    response = await delete_me(authed_client)
+    assert (await delete_me(authed_client)).status_code == 204
 
-    assert response.status_code == 409, response.text
-    assert response.json() == {
-        "detail": "A billing change is still being processed. Try again in a few minutes.",
-        "code": "billing_operation_pending",
-    }
-    assert await user_exists(db, user)
+    assert fake_billing.expired_checkouts == ["cs_fake_1"]
+    assert not await user_exists(db, user)
+
+
+async def test_a_pending_paid_signup_doesnt_hold_up_deletion(
+    authed_client, db, user, coupons, fake_billing, fixed_clock
+):
+    fake_billing.clock = fixed_clock
+    _, _, opened = await _open(authed_client, coupons)
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert fake_billing.paid_signup_checkouts[opened["session_id"]].status == "expired"
+    assert not await user_exists(db, user)
 
 
 async def test_an_unpaid_invoice_refuses_deletion(authed_client, db, user, fake_billing):
@@ -195,14 +209,93 @@ async def test_an_unpaid_invoice_refuses_deletion(authed_client, db, user, fake_
     assert await user_exists(db, user)
 
 
-async def test_a_running_subscription_refuses_deletion_for_now(
+async def running_subscription(
+    db, user, fake_billing, status: SubscriptionStatus = "active"
+) -> None:
+    user.stripe_customer_id = "cus_ada"
+    await db.commit()
+    fake_billing.set_subscription(
+        "cus_ada",
+        SubscriptionState(
+            id="sub_ada",
+            status=status,
+            price_id="price_monthly",
+            plan_key="pumpkit_pro_monthly",
+            current_period_end=datetime(2026, 12, 1, tzinfo=timezone.utc),
+            created_at=datetime(2026, 11, 1, tzinfo=timezone.utc),
+        ),
+    )
+
+
+@pytest.mark.parametrize("status", ["active", "trialing", "past_due"])
+async def test_deleting_ends_a_running_subscription_at_once(
+    authed_client, db, user, fake_billing, status
+):
+    await running_subscription(db, user, fake_billing, status)
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert fake_billing.cancelled_subscriptions == ["sub_ada"]
+    assert not await user_exists(db, user)
+
+
+async def test_an_unpaid_invoice_refuses_before_ending_the_subscription(
+    authed_client, db, user, fake_billing
+):
+    await running_subscription(db, user, fake_billing, "past_due")
+    fake_billing.unsettled_invoice_customers.add("cus_ada")
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "unpaid_invoice"
+    assert fake_billing.cancelled_subscriptions == []
+    assert await user_exists(db, user)
+
+
+@pytest.mark.parametrize("failing", ["cancel_subscription", "expire_open_checkouts"])
+async def test_stripe_failing_to_end_billing_deletes_nothing(
+    authed_client, db, user, fake_billing, failing
+):
+    await running_subscription(db, user, fake_billing)
+    fake_billing.fail_on.add(failing)
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"] == (
+        "Couldn't end your subscription. Try again, or contact support."
+    )
+    assert await user_exists(db, user)
+
+
+async def test_a_running_subscription_stripe_doesnt_list_deletes_nothing(
     authed_client, db, user, subscribed: Subscription
 ):
     response = await delete_me(authed_client)
 
-    assert response.status_code == 409, response.text
-    assert response.json()["code"] == "subscription_running"
-    assert "Cancel it in Plan" in response.json()["detail"]
+    assert response.status_code == 502, response.text
+    assert await user_exists(db, user)
+
+
+async def test_the_operator_command_refuses_a_running_subscription(
+    db, db_session_maker, user, fake_billing, file_storage
+):
+    await running_subscription(db, user, fake_billing)
+    errors = StringIO()
+
+    result = await run_cli(
+        ["--user-id", user.id],
+        sessions=db_session_maker,
+        gateway=fake_billing,
+        storage=file_storage,
+        stdout=StringIO(),
+        stderr=errors,
+    )
+
+    assert result == 1
+    assert "subscription" in errors.getvalue()
+    assert fake_billing.cancelled_subscriptions == []
     assert await user_exists(db, user)
 
 
@@ -215,17 +308,17 @@ def deleting_trial_app(trial_app, db_session_maker, file_storage):
     return trial_app
 
 
-async def test_signing_in_again_makes_a_new_account_with_no_trial(
+async def test_signing_in_again_after_ending_a_trial_makes_a_new_account_with_no_trial(
     deleting_trial_app, trial_browser, fake_x_publisher, fake_billing, fixed_clock
 ):
     original = await sign_in(trial_browser, fake_x_publisher)
     assert (await trial_browser.post(CHECKOUT, json=CHECKOUT_MONTHLY)).status_code == 200
     customer = fake_billing.checkouts[-1].customer_id
-    fake_billing.set_subscription(customer, ended_trial(fixed_clock))
-    await fake_billing.expire_open_checkouts(customer_id=customer)
+    fake_billing.set_subscription(customer, replace(ended_trial(fixed_clock), status="trialing"))
 
     assert (await delete_me(trial_browser)).status_code == 204
 
+    assert fake_billing.cancelled_subscriptions == ["sub_used_trial"]
     recreated = await sign_in(trial_browser, fake_x_publisher)
     assert recreated["id"] != original["id"]
     offer = (await trial_browser.get(BILLING_ME)).json()

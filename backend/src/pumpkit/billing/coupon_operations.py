@@ -53,14 +53,16 @@ async def pending(
     return list(await db.scalars(query.order_by(CouponOperation.coupon_id, CouponOperation.id)))
 
 
-async def require_settled(db: AsyncSession, *, user_id: str) -> None:
+async def require_settled(
+    db: AsyncSession, *, user_id: str, include_paid_signups: bool = True
+) -> None:
     if await db.scalar(
         select(PlanChange.id).where(PlanChange.user_id == user_id, PlanChange.status == "pending")
     ):
         raise ConflictError(
             "Your billing frequency change is being confirmed. Retry its status before changing billing or deleting your account."
         )
-    if await db.scalar(
+    if include_paid_signups and await db.scalar(
         select(PaidSignup.id).where(PaidSignup.user_id == user_id, PaidSignup.status == "pending")
     ):
         raise ConflictError(
