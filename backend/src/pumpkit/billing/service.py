@@ -33,7 +33,7 @@ from pumpkit.billing.models import (
     TopUp,
     TopUpCharge,
 )
-from pumpkit.billing.subscription_status import SubscriptionStatus
+from pumpkit.billing.subscription_status import ENDED_STATUSES, SubscriptionStatus
 from pumpkit.billing.top_ups import TopUpBalance, allocate, shortfall
 from pumpkit.core.config import settings
 from pumpkit.core.time import as_utc, system_clock
@@ -41,8 +41,6 @@ from pumpkit.core.time import as_utc, system_clock
 # How long a Top-up lasts from its purchase.
 TOP_UP_MONTHS = 12
 
-# An Ended Subscription can never run again.
-_ENDED_STATUSES: set[SubscriptionStatus] = {"canceled", "incomplete_expired"}
 # A Running Subscription has started and not Ended. `incomplete` is neither.
 _RUNNING_STATUSES: set[SubscriptionStatus] = {
     "trialing",
@@ -269,7 +267,7 @@ async def sync_customer(
         if subscription is None:
             subscription = Subscription(user_id=user_id, stripe_subscription_id=state.id)
             db.add(subscription)
-        elif subscription.status in _ENDED_STATUSES:
+        elif subscription.status in ENDED_STATUSES:
             continue
         subscription.stripe_customer_id = customer_id
         subscription.stripe_price_id = state.price_id

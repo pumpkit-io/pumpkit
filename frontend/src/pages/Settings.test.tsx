@@ -1053,8 +1053,28 @@ describe('Settings', () => {
       const dialog = await openDeletion();
 
       expect(await dialog.findByText('ends your subscription now, with no refund')).toBeVisible();
+      await waitFor(() =>
+        expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+          'ends your subscription now, with no refund',
+          'disconnects X and every connected AI app',
+        ]),
+      );
+    });
+
+    it('says unused top-ups are lost when usage could not load', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
+      vi.mocked(usageService.get).mockRejectedValue(apiError(500, 'Down.'));
+      renderSettings();
+      expect(
+        await screen.findByText("Couldn't load your usage. Reload the page to try again."),
+      ).toBeInTheDocument();
+      const section = await card('Delete account');
+      fireEvent.click(section.getByRole('button', { name: 'Delete account' }));
+      const dialog = within(await screen.findByRole('alertdialog'));
+
       expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
         'ends your subscription now, with no refund',
+        'loses your unused top-ups',
         'disconnects X and every connected AI app',
       ]);
     });
@@ -1116,11 +1136,20 @@ describe('Settings', () => {
         'A billing change is still being processed. Try again in a few minutes.',
       ],
       ['unpaid_invoice', 'You have an unpaid invoice. Contact support to delete your account.'],
-      [null, "Couldn't end your subscription. Try again, or contact support."],
     ])('shows the %s refusal inside the dialog', async (code, message) => {
-      vi.mocked(userService.deleteAccount).mockRejectedValue(
-        code ? apiError(409, message, { code }) : apiError(502, message),
-      );
+      vi.mocked(userService.deleteAccount).mockRejectedValue(apiError(409, message, { code }));
+      const dialog = await openDeletion();
+
+      await confirmWith(dialog);
+
+      expect(await dialog.findByRole('alert')).toHaveTextContent(message);
+      expect(dialog.getByRole('button', { name: 'Delete my account' })).toBeEnabled();
+      expect(hardRedirect).not.toHaveBeenCalled();
+    });
+
+    it("says it couldn't end the subscription when Stripe failed, and stays open", async () => {
+      const message = "Couldn't end your subscription. Try again, or contact support.";
+      vi.mocked(userService.deleteAccount).mockRejectedValue(apiError(502, message));
       const dialog = await openDeletion();
 
       await confirmWith(dialog);

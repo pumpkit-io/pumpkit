@@ -13,10 +13,10 @@ from pumpkit.billing.models import PlanChange
 from pumpkit.billing.plan_change_recovery import run_cli
 from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.config import settings
+from tests.billing.paid_signups import SIGNUPS, open_paid_signup
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 from tests.billing.test_monthly_coupons import monthly
-from tests.billing.test_paid_signups import SIGNUPS, _open
 from tests.billing.test_paid_signups import billing_clock as billing_clock
 from tests.billing.test_top_ups import _send
 from tests.positioning.positioning import save_positioning
@@ -461,7 +461,7 @@ async def test_interval_change_keeps_used_generation_and_captured_paid_caps(
 async def test_explicit_future_signup_can_change_frequency_and_redeem_again_without_new_trial(
     authed_client, coupons, fake_billing
 ):
-    free, signup, opened = await _open(authed_client, coupons)
+    free, signup, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + signup["operation_id"])).json()[
         "status"

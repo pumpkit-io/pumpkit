@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import {
@@ -17,7 +17,7 @@ import { session } from '@/lib/session';
 import { useProfile } from '@/pages/layout/ProfileContext';
 import { errorMessage } from '@/services/apiErrors';
 import type { SubscriptionStatus } from '@/services/billingService';
-import { usageService } from '@/services/usageService';
+import type { Usage } from '@/services/usageService';
 import { userService } from '@/services/userService';
 
 /** The handle as the backend matches it: without "@", in any case. */
@@ -34,29 +34,17 @@ const RUNNING: ReadonlySet<SubscriptionStatus> = new Set([
   'paused',
 ]);
 
-/** Whether the User holds a Top-up with something left; only a Subscribed User's usage lists them. */
-function useHoldsTopUps(subscribed: boolean): boolean {
-  const [holds, setHolds] = useState(false);
-  useEffect(() => {
-    if (!subscribed) return;
-    let live = true;
-    usageService
-      .get()
-      .then((usage) => live && setHolds((usage.allowance?.topUps.length ?? 0) > 0))
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [subscribed]);
-  return holds;
-}
-
-/** What deleting takes away, from what Settings already loaded, each line only when it applies. */
-function useLosses(): string[] {
+/**
+ * What deleting takes away, from what Settings already loaded, each line only when it applies.
+ * Top-ups are listed whenever usage hasn't loaded, since a destructive dialog mustn't hide a loss.
+ */
+function useLosses(usage: Usage | null): string[] {
   const me = useBilling().data?.me;
   const status = me?.subscription?.status;
   const running = status !== undefined && RUNNING.has(status);
-  const holdsTopUps = useHoldsTopUps(Boolean(me?.subscribed));
+  // Only a Subscribed User's usage lists their Top-ups.
+  const holdsTopUps =
+    Boolean(me?.subscribed) && (usage === null || (usage.allowance?.topUps.length ?? 0) > 0);
   const waiting = usePostCounts().counts?.scheduled ?? 0;
   const losses: string[] = [];
   if (running) losses.push('ends your subscription now, with no refund');
@@ -66,8 +54,11 @@ function useLosses(): string[] {
   return losses;
 }
 
-/** The last section of Settings: deleting the account at once, confirmed by typing the @handle. */
-export function DeleteAccountSection() {
+/**
+ * The last section of Settings: deleting the account at once, confirmed by typing the @handle.
+ * `usage` is what Settings loaded for the Usage card, null until it loads.
+ */
+export function DeleteAccountSection({ usage }: { usage: Usage | null }) {
   const headingId = useId();
   const [open, setOpen] = useState(false);
 
@@ -89,14 +80,14 @@ export function DeleteAccountSection() {
       >
         Delete account
       </Button>
-      {open && <DeleteAccountDialog onClose={() => setOpen(false)} />}
+      {open && <DeleteAccountDialog usage={usage} onClose={() => setOpen(false)} />}
     </section>
   );
 }
 
-function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+function DeleteAccountDialog({ usage, onClose }: { usage: Usage | null; onClose: () => void }) {
   const handle = useProfile()?.xHandle ?? null;
-  const losses = useLosses();
+  const losses = useLosses(usage);
   const fieldId = useId();
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);

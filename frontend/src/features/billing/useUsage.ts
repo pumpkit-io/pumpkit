@@ -14,9 +14,10 @@ export interface UsageState {
 
 /**
  * What the User has left of the Allowance period holding `at` (an ISO instant), or now without
- * one. It loads on mount and again once a changed `at` settles; only the latest answer shows.
+ * one. It loads on mount, or once `enabled`, and again once a changed `at` settles; only the
+ * latest answer shows.
  */
-export function useUsage(at?: string | null): UsageState {
+export function useUsage(at?: string | null, enabled = true): UsageState {
   const [usage, setUsage] = useState<Usage | null>(null);
   const [failed, setFailed] = useState(false);
   const mounted = useRef(true);
@@ -43,13 +44,14 @@ export function useUsage(at?: string | null): UsageState {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     if (!at) {
       reload();
       return;
     }
     const timer = setTimeout(reload, AT_SETTLE_MS);
     return () => clearTimeout(timer);
-  }, [at, reload]);
+  }, [at, enabled, reload]);
 
   return { usage, failed, reload };
 }

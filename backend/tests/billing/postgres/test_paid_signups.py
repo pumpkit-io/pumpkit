@@ -11,9 +11,9 @@ from pumpkit.billing.allowance import months_after
 from pumpkit.billing.gateway import BillingProviderError
 from pumpkit.core.config import settings
 from pumpkit.core.errors import ConflictError
+from tests.billing.paid_signups import SIGNUPS, open_paid_signup
 from tests.billing.postgres.test_coupon_contention import blocked_requests
 from tests.billing.test_coupon_preview import coupons as coupons
-from tests.billing.test_paid_signups import SIGNUPS, _open
 from tests.billing.test_paid_signups import billing_clock as billing_clock
 from tests.billing.test_top_ups import _send
 
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.postgres
 async def test_independent_duplicate_recovery_and_provider_nudge_create_one_subscription(
     db_engine, db_session_maker, authed_client, coupons, user, fake_billing
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     async with db_session_maker() as control:
         await control.scalar(select(User).where(User.id == user.id).with_for_update())
@@ -55,7 +55,7 @@ async def test_independent_duplicate_recovery_and_provider_nudge_create_one_subs
 async def test_deletion_and_recovery_share_user_lock_and_cannot_orphan_future_payment(
     db_engine, db_session_maker, authed_client, coupons, user, fake_billing
 ):
-    _, request, opened = await _open(authed_client, coupons)
+    _, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
 
     async def delete():
@@ -77,7 +77,7 @@ async def test_deletion_and_recovery_share_user_lock_and_cannot_orphan_future_pa
 async def test_cancellation_racing_recovery_removes_future_payment_and_retains_free_time(
     db_engine, db_session_maker, authed_client, coupons, user, fake_billing
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     async with db_session_maker() as control:
         await control.scalar(select(User).where(User.id == user.id).with_for_update())
@@ -133,7 +133,7 @@ async def _race_late_listing(
 
 
 async def _complete_unlisted(client, coupons, fake_billing):
-    free, request, opened = await _open(client, coupons)
+    free, request, opened = await open_paid_signup(client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
     assert (await client.get(SIGNUPS + "/" + request["operation_id"])).json()["status"] == "pending"
     return free, request, opened
@@ -190,7 +190,7 @@ async def test_completed_cancellation_checkpoint_keeps_paid_access_and_excludes_
     monkeypatch,
     after_mutation,
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"

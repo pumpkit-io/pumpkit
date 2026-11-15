@@ -16,3 +16,6 @@ SubscriptionStatus = Literal[
     "unpaid",
     "paused",
 ]
+
+# An Ended Subscription can never run again.
+ENDED_STATUSES: frozenset[SubscriptionStatus] = frozenset({"canceled", "incomplete_expired"})

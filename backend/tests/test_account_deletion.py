@@ -15,7 +15,7 @@ from sqlalchemy import event, select
 from pumpkit.account_deletion import delete_files, run_cli
 from pumpkit.account_deletion_router import router as account_deletion_router
 from pumpkit.auth.models import User
-from pumpkit.billing.gateway import SubscriptionState
+from pumpkit.billing.gateway import BillingProviderError, SubscriptionState
 from pumpkit.billing.models import Subscription
 from pumpkit.billing.subscription_status import SubscriptionStatus
 from pumpkit.core.background import get_background_tasks
@@ -24,9 +24,9 @@ from pumpkit.core.storage import get_file_storage
 from pumpkit.posts.models import AccountFileDeletion, Media
 from pumpkit.scheduling.models import PUBLISHING, ScheduledPost
 from pumpkit.x_connection.models import XConnection
+from tests.billing.paid_signups import open_paid_signup
 from tests.billing.test_billing import CHECKOUT, CHECKOUT_MONTHLY
 from tests.billing.test_coupon_preview import coupons as coupons
-from tests.billing.test_paid_signups import _open
 from tests.billing.test_trial_eligibility import BILLING_ME, ended_trial, sign_in
 from tests.billing.test_trial_eligibility import trial_app as trial_app
 from tests.billing.test_trial_eligibility import trial_browser as trial_browser
@@ -37,6 +37,7 @@ from tests.x_connection.sign_in.conftest import sign_in_app as sign_in_app
 
 DELETE_ME = "/api/v1/users/me"
 NOW = datetime(2026, 11, 15, tzinfo=timezone.utc)
+NOT_ENDED = {"detail": "Couldn't end your subscription. Try again, or contact support."}
 
 
 @pytest.fixture(autouse=True)
@@ -186,7 +187,7 @@ async def test_a_pending_paid_signup_doesnt_hold_up_deletion(
     authed_client, db, user, coupons, fake_billing, fixed_clock
 ):
     fake_billing.clock = fixed_clock
-    _, _, opened = await _open(authed_client, coupons)
+    _, _, opened = await open_paid_signup(authed_client, coupons)
 
     assert (await delete_me(authed_client)).status_code == 204
 
@@ -214,10 +215,16 @@ async def running_subscription(
 ) -> None:
     user.stripe_customer_id = "cus_ada"
     await db.commit()
+    stripe_subscription(fake_billing, "cus_ada", "sub_ada", status)
+
+
+def stripe_subscription(
+    fake_billing, customer_id: str, subscription_id: str, status: SubscriptionStatus = "active"
+) -> None:
     fake_billing.set_subscription(
-        "cus_ada",
+        customer_id,
         SubscriptionState(
-            id="sub_ada",
+            id=subscription_id,
             status=status,
             price_id="price_monthly",
             plan_key="pumpkit_pro_monthly",
@@ -275,6 +282,81 @@ async def test_a_running_subscription_stripe_doesnt_list_deletes_nothing(
     response = await delete_me(authed_client)
 
     assert response.status_code == 502, response.text
+    assert response.json()["detail"] == NOT_ENDED["detail"]
+    assert await user_exists(db, user)
+
+
+async def test_a_pending_checkout_that_survives_expiry_refuses_before_ending_anything(
+    authed_client, db, user, fake_billing
+):
+    await running_subscription(db, user, fake_billing)
+    fake_billing.set_top_up_payment_pending(
+        customer_id="cus_ada", checkout_session_id="cs_top_up_delayed"
+    )
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 409, response.text
+    assert response.json() == {
+        "detail": "A billing change is still being processed. Try again in a few minutes.",
+        "code": "billing_operation_pending",
+    }
+    assert fake_billing.cancelled_subscriptions == []
+    assert await user_exists(db, user)
+
+
+async def test_a_retry_after_stripe_failed_partway_through_the_cancels_deletes(
+    authed_client, db, user, fake_billing, monkeypatch
+):
+    await running_subscription(db, user, fake_billing)
+    db.add(
+        Subscription(
+            user_id=user.id,
+            stripe_subscription_id="sub_ada_2",
+            stripe_customer_id="cus_ada_2",
+            status="active",
+            stripe_created_at=datetime(2026, 10, 1, tzinfo=timezone.utc),
+        )
+    )
+    await db.commit()
+    stripe_subscription(fake_billing, "cus_ada_2", "sub_ada_2")
+    cancel = fake_billing.cancel_subscription
+
+    async def fail_on_the_second(*, subscription_id: str) -> None:
+        if subscription_id == "sub_ada_2":
+            raise BillingProviderError("Stripe is down")
+        await cancel(subscription_id=subscription_id)
+
+    monkeypatch.setattr(fake_billing, "cancel_subscription", fail_on_the_second)
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"] == NOT_ENDED["detail"]
+    assert fake_billing.cancelled_subscriptions == ["sub_ada"]
+    assert await user_exists(db, user)
+
+    monkeypatch.setattr(fake_billing, "cancel_subscription", cancel)
+
+    assert (await delete_me(authed_client)).status_code == 204
+    assert fake_billing.cancelled_subscriptions == ["sub_ada", "sub_ada_2"]
+    assert (await authed_client.get("/api/v1/users/me")).status_code == 401
+
+
+async def test_a_subscription_stripe_still_lists_after_its_cancel_answers_502(
+    authed_client, db, user, fake_billing, monkeypatch
+):
+    await running_subscription(db, user, fake_billing)
+
+    async def cancel_that_leaves_it_running(*, subscription_id: str) -> None:
+        pass
+
+    monkeypatch.setattr(fake_billing, "cancel_subscription", cancel_that_leaves_it_running)
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"] == NOT_ENDED["detail"]
     assert await user_exists(db, user)
 
 
@@ -294,7 +376,9 @@ async def test_the_operator_command_refuses_a_running_subscription(
     )
 
     assert result == 1
-    assert "subscription" in errors.getvalue()
+    assert errors.getvalue() == (
+        "Resolve outstanding subscription and payment obligations before deleting this account.\n"
+    )
     assert fake_billing.cancelled_subscriptions == []
     assert await user_exists(db, user)
 
