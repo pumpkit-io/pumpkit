@@ -56,20 +56,25 @@ _CHAIN = re.compile(
 _AND = re.compile(r"\s(?:and|&|\+|then)\s", re.IGNORECASE)
 # Two short steps such as "Ship it. Share it." are a list, not an ask for shares.
 _STEP = re.compile(r"[^\W\d_]+\s+it(?:\s+[^\W\d_]+)?", re.IGNORECASE)
-# Three one-word steps such as "Build. Share. Repeat." are a list too, unless all ask.
+# Three one-word steps such as "Build. Share. Repeat." are a list too, unless all ask or two
+# ask for what X labels.
 _WORD = re.compile(r"[^\W\d_]+")
 _ASK_WORD = re.compile(
     r"like|share|repost|retweet|rt|follow|subscribe|comment|reply|bookmark|save|tag",
     re.IGNORECASE,
 )
-# "Record a Loom, then share it" goes on with the writer's own steps; only an order or an
-# "if" before it makes the "then" clause an ask.
+_LABELED_WORD = re.compile(r"like|share|repost|retweet|rt|follow|subscribe", re.IGNORECASE)
+# "Record a Loom, then share it" goes on with the writer's own steps; only an order on this
+# post or an "if" before it makes the "then" clause an ask.
 _THEN_CLAUSE = re.compile(r"\s*then\b", re.IGNORECASE)
+_ON_THIS = re.compile(r"\s+(?:this|it|the\s+(?:post|thread|tweet))\b|\W*$", re.IGNORECASE)
 _IF = re.compile(r"if\b", re.IGNORECASE)
 
 _QUOTE_OPEN = "\"'\u201c\u2018"
 _QUOTE_CLOSE = "\"'\u201d\u2019"
 _THIS = r"(?:this|it)(?:\s+(?:post|thread|tweet))?"
+# "Share this weekend" names a time, not the post.
+_NOT_A_TIME = r"(?!\s+(?:week|weekend|month|year|morning|evening)\b)"
 # Where an order ends its clause: trailing emoji or punctuation, then the sentence's end.
 _END = r"[^\w,:]*$"
 # What may follow "like this" or "repost it" in an order, unlike "Like it or not".
@@ -78,6 +83,14 @@ _PERSON = (
     r"(?:friends?|someone|co-?founders?|founders?|devs?|developers?|engineers?|colleagues?"
     r"|co-?workers?|teammates?|team|boss|manager|mates?|buddy|buddies|pals?|partner|designers?"
     r"|pms?|marketers?|people|person|bestie|bff|mom|dad)"
+)
+# What a reply or a comment is traded for, unlike "comment for the reader".
+_RESOURCE = (
+    r"(?:(?:the|my|a|an|this|our|your|free)\s+)?(?:[\w-]+\s+){0,2}?"
+    r"(?:links?|guides?|templates?|docs?|prompts?|playbooks?|checklists?|list|files?|pdfs?"
+    r"|access|code(?!\s+review)|cheat\s*sheets?|sheets?|swipe\s+file|course|e-?books?|deck"
+    r"|slides|scripts?|repo|invites?|discount|framework|spreadsheet|(?:tool)?kit|notion|copy"
+    r"|video|recording|breakdown|resources?|details|dm)\b"
 )
 _NEUTRAL = (
     r"(?:read|seen|answered|addressed|ignored|reviewed|considered|noticed|heard|replied|logged"
@@ -107,9 +120,11 @@ _ASKS = [
         "asks readers to share it, and X hides posts that ask for shares from people who don't "
         "follow you.",
         order=_ignoring_case(
+            rf"share\s+this(?:\s+(?:post|thread|tweet))?\b{_NOT_A_TIME}"
+            r"|share\s+it\s+with\s+(?:a|an|someone|somebody)\b"
             # "Share it with your team before the launch" is a step in the writer's how-to.
-            rf"share(?:\s+{_THIS}\b(?!\s+(?:week|weekend|month|year|morning|evening)\b)"
-            rf"|(?=\s+(?:with|if)\b)|{_END})(?![^,.]{{0,80}}\b(?:before|after|during|until)\b)"
+            rf"|share(?:\s+{_THIS}\b{_NOT_A_TIME}|(?=\s+(?:with|if)\b)|{_END})"
+            r"(?![^,.]{0,80}\b(?:before|after|during|until)\b)"
             rf"|(?:send|forward)\s+{_THIS}\s+(?:along\b|to\s+(?:the\s+)?[\w-]+\s+who\b"
             r"|to\s+(?:a|an|your|them|him|her|someone|somebody|anyone|everyone|every|those)\b"
             r"(?!\s+(?:users?|customers?|clients?)\b))"
@@ -124,7 +139,8 @@ _ASKS = [
         order=_ignoring_case(
             rf"tag\s+(?:someone|somebody|anyone|them(?={_END})"
             r"|(?:a|an|your|\d+)(?:\s+[\w'-]+){1,3}?\s+who\b"
-            rf"|(?:a|an|your|\d+)(?:\s+[\w'-]+){{0,2}}?\s+{_PERSON}\b)"
+            rf"|(?:a|an|your|\d+)(?:\s+[\w'-]+){{0,2}}?\s+{_PERSON}\b"
+            r"|the(?:\s+[\w'-]+){1,3}?\s+who\s+(?:needs?|would\s+love|should\s+see|must\s+see)\b)"
         ),
     ),
     _Ask(
@@ -149,6 +165,7 @@ _ASKS = [
             r"|(?:retweet|repost|rt)\s+(?:the|my|our)\s+(?:first|1st|top|pinned|original|last)\s+"
             r"(?:tweet|post|part)\b"
             rf"|(?:retweet|repost|rt)(?:\s+(?:if|so|to|for)\b|{_END})"
+            rf"|(?:retweet|repost|rt)\s+(?:the|my|this)\s+(?:thread|post|tweet)\b{_THEN}"
             # "Like if Stripe had built this" wonders, and an ask ends at its comma.
             rf"|like(?:\s+if\s+(?:you|this|it|u)\b[^,]{{0,120}}?)?{_END}"
             rf"|follow(?:\s+(?:me|us|@\w+)\b(?!\s+on\b)|\s+(?:for|so)\b|{_END})"
@@ -167,10 +184,10 @@ _ASKS = [
         # "Reply 'no' to recruiters" is a rule for the writer, not a trade.
         order=_ignoring_case(
             rf"(?:reply|comment|respond)\s+(?:with\s+)?(?:[{_QUOTE_OPEN}][^{_QUOTE_CLOSE}]{{1,30}}"
-            rf"[{_QUOTE_CLOSE}]|(?-i:[A-Z][A-Z0-9]+)\b(?=\s+(?:below|for|and|to|in|if)\b|{_END}))"
+            rf"[{_QUOTE_CLOSE}]|(?-i:[A-Z][A-Z0-9]+)\b(?=\s+(?:below|for|and|to|in|if)\b|{_END})"
+            rf"|(?-i:[A-Z])(?=\s+(?:below\b|for\s+{_RESOURCE})))"
             r"(?!\s+to\b(?!\s+(?:get|receive|grab|claim|unlock)\b))"
-            r"|(?:reply|comment)(?:\s+below)?\s+for\s+(?:the|my|a|an|this|our|your|free)\b"
-            r"(?!\s+(?:record|win|sake)\b)"
+            rf"|(?:reply|comment)(?:\s+below)?\s+for\s+{_RESOURCE}"
             rf"|(?:reply|comment)\s+below{_END}"
         ),
         anywhere=_ignoring_case(
@@ -256,7 +273,10 @@ def _asks_in(text: str) -> set[ReachWarningCode]:
     }
     sentences = [(sentence, stop) for sentence, stop in _sentences(text) if sentence]
     clauses = [_clauses(sentence) for sentence, _ in sentences]
-    listed = _listed(sentences, clauses)
+    listed, alone = _listed(sentences, clauses)
+    for words in alone:
+        for word in words:
+            found.update(ask.code for ask in _ASKS if ask.order and ask.order.match(word))
     previous, previous_stop = "", ""
     for index, (sentence, stop) in enumerate(sentences):
         if not (
@@ -286,18 +306,30 @@ def _clauses(sentence: str) -> list[tuple[int, int]]:
 
 def _listed(
     sentences: list[tuple[str, str]], clauses: list[list[tuple[int, int]]]
-) -> list[set[int]]:
-    """For each sentence, its clauses that are a step in a run of one-word steps."""
+) -> tuple[list[set[int]], list[list[str]]]:
+    """
+    For each sentence, its clauses that are a step in a run of one-word steps; and each run of
+    one-word asks, whose words such as "Like, share, subscribe" ask on their own.
+    """
     listed: list[set[int]] = [set() for _ in sentences]
+    alone: list[list[str]] = []
     run: list[tuple[int, int, str]] = []
 
     def close() -> None:
-        if len(run) >= 3 and not all(_ASK_WORD.fullmatch(word) for _, _, word in run):
+        asks = sum(1 for _, _, word in run if _ASK_WORD.fullmatch(word))
+        labeled = sum(1 for _, _, word in run if _LABELED_WORD.fullmatch(word))
+        if labeled >= 2 or (len(run) >= 2 and asks == len(run)):
+            alone.append([word for _, _, word in run])
+        elif len(run) >= 3:
             for index, clause, _ in run:
                 listed[index].add(clause)
         run.clear()
 
-    for index, (sentence, _) in enumerate(sentences):
+    for index, (sentence, stop) in enumerate(sentences):
+        # A question such as "Agree?" is no step, so it ends a run.
+        if "?" in stop:
+            close()
+            continue
         for clause, (begin, end) in enumerate(clauses[index]):
             word = sentence[begin:end].rstrip(",:").strip()
             if _WORD.fullmatch(word):
@@ -305,7 +337,7 @@ def _listed(
             else:
                 close()
     close()
-    return listed
+    return listed, alone
 
 
 def _clause_starts(
@@ -314,9 +346,12 @@ def _clause_starts(
     ordered = False
     for clause, (begin, end) in enumerate(clauses):
         start = _after_lead(sentence, begin)
-        chained = _CHAIN.match(sentence, start) is not None
-        goes_on = begin > 0 and _THEN_CLAUSE.match(sentence, begin) and not ordered
-        ordered = chained or _IF.match(sentence, start) is not None
+        chain = _CHAIN.match(sentence, start)
+        chained = chain is not None
+        goes_on = begin > 0 and _THEN_CLAUSE.match(sentence, begin) is not None and not ordered
+        ordered = (
+            chain is not None and _ON_THIS.match(sentence, chain.end(), end) is not None
+        ) or (_IF.match(sentence, start) is not None)
         if clause in listed or goes_on:
             continue
         yield start

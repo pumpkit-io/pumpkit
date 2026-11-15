@@ -153,6 +153,51 @@ FINDINGS = [
     ),
     pytest.param(["Found it useful? Share it."], [("share_ask", 1)], id="found-it-useful-share-it"),
     pytest.param(["Read this, then share it."], [("share_ask", 1)], id="read-then-share"),
+    pytest.param(
+        ["Tag the friend who needs this."], [("tag_ask", 1)], id="tag-the-friend-who-needs"
+    ),
+    pytest.param(
+        ["Tag the person who needs this."], [("tag_ask", 1)], id="tag-the-person-who-needs"
+    ),
+    pytest.param(
+        ["Tag the founder who needs to see this."], [("tag_ask", 1)], id="tag-who-needs-to-see"
+    ),
+    pytest.param(
+        ["Share this with a friend before they quit."], [("share_ask", 1)], id="share-before-they"
+    ),
+    pytest.param(
+        ["Share this with a friend before it's too late."],
+        [("share_ask", 1)],
+        id="share-before-too-late",
+    ),
+    pytest.param(["Share this before you forget."], [("share_ask", 1)], id="share-before-you"),
+    pytest.param(
+        ["Share this with a founder after you read it."], [("share_ask", 1)], id="share-after"
+    ),
+    pytest.param(["Comment X for the link."], [("reply_keyword_ask", 1)], id="one-letter-keyword"),
+    pytest.param(["Comment A for the guide."], [("reply_keyword_ask", 1)], id="keyword-a"),
+    pytest.param(
+        ["Agree? Like. Repost. Follow."], [("engagement_ask", 1)], id="question-then-asks"
+    ),
+    pytest.param(
+        ["Like. Share. Follow. Thanks!"],
+        [("share_ask", 1), ("engagement_ask", 1)],
+        id="asks-then-thanks",
+    ),
+    pytest.param(["Thanks! Like, repost, follow."], [("engagement_ask", 1)], id="thanks-then-asks"),
+    pytest.param(
+        ["Found this useful? Like. Share. Repeat."],
+        [("share_ask", 1), ("engagement_ask", 1)],
+        id="like-share-repeat",
+    ),
+    pytest.param(["Repost the thread."], [("engagement_ask", 1)], id="repost-the-thread"),
+    pytest.param(
+        ["Like, share, subscribe."],
+        [("share_ask", 1), ("engagement_ask", 1)],
+        id="like-share-subscribe-commas",
+    ),
+    pytest.param(["Repost, then follow."], [("engagement_ask", 1)], id="repost-then-follow"),
+    pytest.param(["Reply for a copy."], [("reply_keyword_ask", 1)], id="reply-for-a-copy"),
 ]
 
 # Texts that ask for nothing X labels, though they come close.
@@ -244,6 +289,16 @@ CLEAN = [
     pytest.param("Every reply gets a personal response from me.", id="a-personal-response"),
     pytest.param("Share it with your team before the launch.", id="share-before-the-launch"),
     pytest.param("Send it to your users first.", id="send-it-to-your-users"),
+    pytest.param(
+        "Comment for the next developer, not for yourself.", id="comment-for-the-next-developer"
+    ),
+    pytest.param("Comment for the why, not the what.", id="comment-for-the-why"),
+    pytest.param("Rule 3: comment for the reader, not the compiler.", id="comment-for-the-reader"),
+    pytest.param(
+        "Write tests. Comment for your teammates. Ship small PRs.", id="comment-for-teammates"
+    ),
+    pytest.param("Open a PR, then share it with your reviewer.", id="open-a-pr-then-share"),
+    pytest.param("Write. Share. Save. Repeat.", id="write-share-save-repeat"),
 ]
 
 
@@ -266,37 +321,28 @@ async def test_close_calls_stay_clean(client, subscribed, post_with, text):
 
 
 @pytest.mark.parametrize(
-    "text",
+    ("text", "codes"),
     [
-        "copy" + " " * 30_000 + "x",
-        "\n" * 30_000,
-        "Done," + " " * 30_000 + "x",
-        "please" + " " * 30_000 + "x",
-        "." * 30_000 + "x",
-        "like" + " & " * 20_000,
-        "like" + " + " * 20_000,
-        "rt" + " & " * 20_000,
-        "share it" + " & " * 20_000,
-    ],
-    ids=[
-        "after-copy",
-        "newlines",
-        "after-a-comma",
-        "after-please",
-        "dots-ending-no-sentence",
-        "ampersands-after-like",
-        "pluses-after-like",
-        "ampersands-after-rt",
-        "ampersands-after-share-it",
+        pytest.param("copy" + " " * 30_000 + "x", [], id="after-copy"),
+        pytest.param("\n" * 30_000, [], id="newlines"),
+        pytest.param("Done," + " " * 30_000 + "x", [], id="after-a-comma"),
+        pytest.param("please" + " " * 30_000 + "x", [], id="after-please"),
+        pytest.param("." * 30_000 + "x", [], id="dots-ending-no-sentence"),
+        pytest.param("like" + " & " * 20_000, ["engagement_ask"], id="ampersands-after-like"),
+        pytest.param("like" + " + " * 20_000, ["engagement_ask"], id="pluses-after-like"),
+        pytest.param("rt" + " & " * 20_000, ["engagement_ask"], id="ampersands-after-rt"),
+        pytest.param("share it" + " & " * 20_000, ["share_ask"], id="ampersands-after-share-it"),
     ],
 )
-async def test_a_long_run_of_stops_reads_fast(client, subscribed, post_with, text):
+async def test_long_runs_of_stops_and_joints_read_fast(client, subscribed, post_with, text, codes):
     # Four Parts so a quadratic search, seconds on each, overruns a bound slow CI still meets.
     post_id = await post_with(text, text, text, text)
 
     started = time.monotonic()
-    await _warnings(client, post_id)
+    warnings = await _warnings(client, post_id)
     assert time.monotonic() - started < 5
+
+    assert [w["code"] for w in warnings] == codes * 4
 
 
 async def test_a_message_names_the_part_and_a_shortener_says_what_to_link(
