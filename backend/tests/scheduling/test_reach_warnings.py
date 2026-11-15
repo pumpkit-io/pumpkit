@@ -198,6 +198,78 @@ FINDINGS = [
     ),
     pytest.param(["Repost, then follow."], [("engagement_ask", 1)], id="repost-then-follow"),
     pytest.param(["Reply for a copy."], [("reply_keyword_ask", 1)], id="reply-for-a-copy"),
+    pytest.param(
+        ["Comment below for the waitlist."],
+        [("reply_keyword_ask", 1)],
+        id="comment-below-for-the-waitlist",
+    ),
+    pytest.param(
+        ["Comment below for a sample."], [("reply_keyword_ask", 1)], id="comment-below-for-a-sample"
+    ),
+    pytest.param(
+        ["Comment for a free trial."], [("reply_keyword_ask", 1)], id="comment-for-a-free-trial"
+    ),
+    pytest.param(
+        ["Reply for a free audit."], [("reply_keyword_ask", 1)], id="reply-for-a-free-audit"
+    ),
+    pytest.param(["Comment for the beta."], [("reply_keyword_ask", 1)], id="comment-for-the-beta"),
+    pytest.param(["Reply for the recipe."], [("reply_keyword_ask", 1)], id="reply-for-the-recipe"),
+    pytest.param(
+        ["Comment for the recipe."], [("reply_keyword_ask", 1)], id="comment-for-the-recipe"
+    ),
+    pytest.param(
+        ["Comment for the full thread."],
+        [("reply_keyword_ask", 1)],
+        id="comment-for-the-full-thread",
+    ),
+    pytest.param(
+        ["Reply for the full write-up."],
+        [("reply_keyword_ask", 1)],
+        id="reply-for-the-full-write-up",
+    ),
+    pytest.param(
+        ["Reply for my newsletter."], [("reply_keyword_ask", 1)], id="reply-for-my-newsletter"
+    ),
+    pytest.param(["Comment for my notes."], [("reply_keyword_ask", 1)], id="comment-for-my-notes"),
+    pytest.param(
+        ["Comment for the system."], [("reply_keyword_ask", 1)], id="comment-for-the-system"
+    ),
+    pytest.param(
+        ["Reply for the workflow."], [("reply_keyword_ask", 1)], id="reply-for-the-workflow"
+    ),
+    pytest.param(
+        ["Comment for the case study."], [("reply_keyword_ask", 1)], id="comment-for-the-case-study"
+    ),
+    pytest.param(["Comment for the GPT."], [("reply_keyword_ask", 1)], id="comment-for-the-gpt"),
+    pytest.param(
+        ["Comment for the source."], [("reply_keyword_ask", 1)], id="comment-for-the-source"
+    ),
+    pytest.param(["Reply for the steps."], [("reply_keyword_ask", 1)], id="reply-for-the-steps"),
+    pytest.param(
+        ["Drop a comment, then share it with a friend."],
+        [("share_ask", 1)],
+        id="drop-a-comment-then-share-it-with-a-friend",
+    ),
+    pytest.param(
+        ["Read the guide, then share it with a friend."],
+        [("share_ask", 1)],
+        id="read-the-guide-then-share-it-with-a-friend",
+    ),
+    pytest.param(
+        ["Scroll up, then share this thread."],
+        [("share_ask", 1)],
+        id="scroll-up-then-share-this-thread",
+    ),
+    pytest.param(
+        ["Follow me, then share this thread."],
+        [("share_ask", 1), ("engagement_ask", 1)],
+        id="follow-me-then-share-this-thread",
+    ),
+    pytest.param(
+        ["Follow me, then share it with a friend."],
+        [("share_ask", 1), ("engagement_ask", 1)],
+        id="follow-me-then-share-it-with-a-friend",
+    ),
 ]
 
 # Texts that ask for nothing X labels, though they come close.
@@ -299,6 +371,12 @@ CLEAN = [
     ),
     pytest.param("Open a PR, then share it with your reviewer.", id="open-a-pr-then-share"),
     pytest.param("Write. Share. Save. Repeat.", id="write-share-save-repeat"),
+    pytest.param(
+        "Comment for the code reviewer, not yourself.",
+        id="comment-for-the-code-reviewer-not-yourself",
+    ),
+    pytest.param("Comment for the code review.", id="comment-for-the-code-review"),
+    pytest.param("Comment for the reader.", id="comment-for-the-reader"),
 ]
 
 

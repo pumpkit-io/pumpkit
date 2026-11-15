@@ -65,7 +65,7 @@ _ASK_WORD = re.compile(
 )
 _LABELED_WORD = re.compile(r"like|share|repost|retweet|rt|follow|subscribe", re.IGNORECASE)
 # "Record a Loom, then share it" goes on with the writer's own steps; only an order on this
-# post or an "if" before it makes the "then" clause an ask.
+# post or an "if" before it makes the "then" clause an ask, else only a share aimed at one.
 _THEN_CLAUSE = re.compile(r"\s*then\b", re.IGNORECASE)
 _ON_THIS = re.compile(r"\s+(?:this|it|the\s+(?:post|thread|tweet))\b|\W*$", re.IGNORECASE)
 _IF = re.compile(r"if\b", re.IGNORECASE)
@@ -79,6 +79,12 @@ _NOT_A_TIME = r"(?!\s+(?:week|weekend|month|year|morning|evening)\b)"
 _END = r"[^\w,:]*$"
 # What may follow "like this" or "repost it" in an order, unlike "Like it or not".
 _THEN = rf"(?={_END}|\s+(?:and|&|\+|if|so|to|for|too|now|please)\b)"
+# A share aimed at this post or at a person, which asks even after the writer's own steps.
+_SHARE_AIMED = (
+    rf"share\s+this(?:\s+(?:post|thread|tweet))?\b{_NOT_A_TIME}"
+    r"|share\s+it\s+with\s+(?:a|an|someone|somebody)\b"
+)
+_AIMED_SHARE = re.compile(_SHARE_AIMED, re.IGNORECASE)
 _PERSON = (
     r"(?:friends?|someone|co-?founders?|founders?|devs?|developers?|engineers?|colleagues?"
     r"|co-?workers?|teammates?|team|boss|manager|mates?|buddy|buddies|pals?|partner|designers?"
@@ -91,6 +97,12 @@ _RESOURCE = (
     r"|access|code(?!\s+review)|cheat\s*sheets?|sheets?|swipe\s+file|course|e-?books?|deck"
     r"|slides|scripts?|repo|invites?|discount|framework|spreadsheet|(?:tool)?kit|notion|copy"
     r"|video|recording|breakdown|resources?|details|dm)\b"
+)
+# Advice on code comments, as in "comment for the reader, not the compiler", trades nothing.
+_NOT_TRADED = (
+    r"(?!\s+(?:record|win|sake)\b|\s+(?:(?:next|future|code)\s+)?(?:why|what|how|readers?"
+    r"|compiler|reviewers?|review|developers?|devs?|teammates?|team|maintainers?)"
+    r"(?=[^\w,:]*$|\s*,|\s+not\b))"
 )
 _NEUTRAL = (
     r"(?:read|seen|answered|addressed|ignored|reviewed|considered|noticed|heard|replied|logged"
@@ -120,8 +132,7 @@ _ASKS = [
         "asks readers to share it, and X hides posts that ask for shares from people who don't "
         "follow you.",
         order=_ignoring_case(
-            rf"share\s+this(?:\s+(?:post|thread|tweet))?\b{_NOT_A_TIME}"
-            r"|share\s+it\s+with\s+(?:a|an|someone|somebody)\b"
+            rf"{_SHARE_AIMED}"
             # "Share it with your team before the launch" is a step in the writer's how-to.
             rf"|share(?:\s+{_THIS}\b{_NOT_A_TIME}|(?=\s+(?:with|if)\b)|{_END})"
             r"(?![^,.]{0,80}\b(?:before|after|during|until)\b)"
@@ -187,7 +198,9 @@ _ASKS = [
             rf"[{_QUOTE_CLOSE}]|(?-i:[A-Z][A-Z0-9]+)\b(?=\s+(?:below|for|and|to|in|if)\b|{_END})"
             rf"|(?-i:[A-Z])(?=\s+(?:below\b|for\s+{_RESOURCE})))"
             r"(?!\s+to\b(?!\s+(?:get|receive|grab|claim|unlock)\b))"
-            rf"|(?:reply|comment)(?:\s+below)?\s+for\s+{_RESOURCE}"
+            rf"|(?:reply|comment)\s+for\s+(?:{_RESOURCE}"
+            rf"|(?:the|my|a|an|this|our|your|free)\b{_NOT_TRADED})"
+            r"|(?:reply|comment)\s+below\s+for\b"
             rf"|(?:reply|comment)\s+below{_END}"
         ),
         anywhere=_ignoring_case(
@@ -282,7 +295,11 @@ def _asks_in(text: str) -> set[ReachWarningCode]:
         if not (
             _STEP.fullmatch(sentence) and _STEP.fullmatch(previous) and "?" not in previous_stop
         ):
-            for start in _clause_starts(sentence, clauses[index], listed[index]):
+            for start, aimed_only in _clause_starts(sentence, clauses[index], listed[index]):
+                if aimed_only:
+                    if _AIMED_SHARE.match(sentence, start):
+                        found.add("share_ask")
+                    continue
                 found.update(
                     ask.code for ask in _ASKS if ask.order and ask.order.match(sentence, start)
                 )
@@ -342,7 +359,8 @@ def _listed(
 
 def _clause_starts(
     sentence: str, clauses: list[tuple[int, int]], listed: set[int]
-) -> Iterator[int]:
+) -> Iterator[tuple[int, bool]]:
+    """Where each order may start, and whether only a share aimed at this post or a person counts."""
     ordered = False
     for clause, (begin, end) in enumerate(clauses):
         start = _after_lead(sentence, begin)
@@ -352,9 +370,11 @@ def _clause_starts(
         ordered = (
             chain is not None and _ON_THIS.match(sentence, chain.end(), end) is not None
         ) or (_IF.match(sentence, start) is not None)
-        if clause in listed or goes_on:
+        if clause in listed:
             continue
-        yield start
+        yield start, goes_on
+        if goes_on:
+            continue
         if chained:
             # A lead runs to the next word, so a joint inside one already read adds nothing.
             reached = start
@@ -362,7 +382,7 @@ def _clause_starts(
                 if joint.end() < reached:
                     continue
                 reached = _after_lead(sentence, joint.end())
-                yield reached
+                yield reached, False
 
 
 def _after_lead(sentence: str, position: int) -> int:
