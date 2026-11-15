@@ -302,8 +302,26 @@ async def test_the_revise_and_revision_humanizer_calls_learn_the_asks_x_labels_a
     assert "| Spam-labeled ask | Must fix |" in humanizer
     assert (
         "Remove an ask only if it is generic engagement bait or asks people to share, tag, copy "
-        "the link, or reply for a reward."
+        "the link, or reply for a reward, and my feedback didn't ask for it."
     ) in humanizer
+
+
+async def test_the_revision_humanizer_keeps_an_ask_x_labels_as_spam_the_feedback_asked_for(
+    client, post_id, fake_llm
+):
+    feedback = "add 'tag a founder who needs this' at the end"
+    fake_llm.replies = [{"post": "final 2"}]
+
+    await _feedback(client, post_id, feedback)
+
+    [humanizer] = _calls(fake_llm, HUMANIZED_POST)
+    text = _system_text(humanizer)
+    assert (
+        "| Delete the ask, unless my feedback asked for it. A DM keyword is fine "
+        "(\"DM me 'RAG' for the doc\"). |"
+    ) in text
+    assert "or reply for a reward, and my feedback didn't ask for it." in text
+    assert {"role": "user", "content": _latest_feedback(feedback)} in humanizer.messages
 
 
 async def test_the_revise_conversation_is_the_inputs_then_each_version_after_its_feedback(

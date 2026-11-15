@@ -632,7 +632,7 @@ async def test_a_share_post_names_who_it_is_for(client, ready, fake_llm):
     assert (
         '- Name who it is for, in the hook or the body ("If you run evals for a team of five…").'
     ) in guide
-    assert "Send this to a founder who..." not in guide
+    assert "Send this to a founder" not in guide
 
 
 async def test_a_follow_post_gives_what_comes_next_and_never_tells_readers_to_follow(
@@ -694,12 +694,13 @@ async def test_the_humanizer_removes_share_tag_copy_link_and_reply_for_reward_as
     assert (
         "- The closer and the CTA: keep the one specific ask the post makes, if it makes one. "
         "Remove an ask only if it is generic engagement bait or asks people to share, tag, copy "
-        "the link, or reply for a reward."
+        "the link, or reply for a reward, and my feedback didn't ask for it."
     ) in text
     assert (
         "| Spam-labeled ask | Must fix | Asks to share, tag, copy the link, like/repost, or reply "
         'for a reward. X labels these as spam. | "Send this to a founder who needs it" / '
-        "\"Reply 'RAG' and I'll DM you the doc\" | Delete the ask. A DM keyword is fine "
+        "\"Reply 'RAG' and I'll DM you the doc\" | Delete the ask, unless my feedback asked for "
+        "it. A DM keyword is fine "
         "(\"DM me 'RAG' for the doc\"). |"
     ) in text
 
