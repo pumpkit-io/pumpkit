@@ -23,6 +23,8 @@ DRAFT_POST_MAX_CHARS = 1000
 DRAFT_MAX_TOKENS = 4000
 # The panel stays locked while the draft is written, so the call gets this long once sent.
 DRAFT_CALL_SECONDS = 90.0
+# The X read's 30 seconds, the draft call's and a margin: a draft running longer was lost.
+DRAFT_STALE_AFTER = timedelta(seconds=30 + DRAFT_CALL_SECONDS + 60)
 
 
 @dataclass(frozen=True)

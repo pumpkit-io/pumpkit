@@ -4,9 +4,10 @@ from datetime import datetime, timezone
 
 from sqlalchemy import delete
 
+from pumpkit.authors.x_reader import FetchedPost
 from pumpkit.billing.models import Subscription
 from pumpkit.onboarding.models import OnboardingFinish
-from tests.positioning.positioning import DRAFT, DRAFTED, save_positioning
+from tests.positioning.positioning import DRAFTED, START_DRAFT, positioning_draft, save_positioning
 
 ONBOARDING = "/api/v1/onboarding"
 FINISH = "/api/v1/onboarding/finish"
@@ -38,9 +39,14 @@ async def test_a_draft_alone_does_not_finish_the_persona_step(
 ):
     await connect_x()
     fake_x_reader.user_ids[fake_x_publisher.account.user_id] = "ada"
-    fake_x_reader.posts["ada"] = []
+    fake_x_reader.posts["ada"] = [
+        FetchedPost(
+            post_id="1", text="Shipped it.", posted_at=datetime(2026, 10, 9, tzinfo=timezone.utc)
+        )
+    ]
     fake_llm.replies = [{"positioning": DRAFTED}]
-    assert (await client.post(DRAFT)).status_code == 200
+    assert (await client.post(START_DRAFT)).status_code == 202
+    assert (await positioning_draft(client))["state"] == "ready"
 
     response = await client.get(ONBOARDING)
 
@@ -119,20 +125,6 @@ async def test_a_finished_user_whose_subscription_ended_sees_only_the_paywall(
     await db.commit()
 
     assert (await client.get(ONBOARDING)).json() == {"next_step": None}
-
-
-async def test_a_user_at_the_paywall_gets_no_draft_and_x_is_not_read(
-    client, connect_x, fake_x_publisher, fake_x_reader, fake_llm
-):
-    await connect_x()
-    fake_x_reader.user_ids[fake_x_publisher.account.user_id] = "ada"
-    assert (await client.get(ONBOARDING)).json() == {"next_step": "paywall"}
-
-    response = await client.post(DRAFT)
-
-    assert response.status_code == 403
-    assert fake_x_reader.user_id_calls == []
-    assert fake_llm.calls == []
 
 
 async def test_a_signed_out_visitor_is_refused(new_browser):

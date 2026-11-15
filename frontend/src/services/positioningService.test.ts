@@ -5,40 +5,35 @@ import { positioningService } from './positioningService';
 describe('positioningService', () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it('reads the Positioning and whether a draft can be asked for', async () => {
+  it('reads the Positioning, with no draft once one is saved', async () => {
     const get = vi.spyOn(apiService, 'get').mockResolvedValue({
-      data: { text: 'I post about pricing.', saved_at: '2026-10-10T12:00:30Z', can_draft: false },
+      data: { text: 'I post about pricing.', saved_at: '2026-10-10T12:00:30Z', draft: null },
     } as never);
 
-    expect(await positioningService.get()).toEqual({
-      text: 'I post about pricing.',
-      canDraft: false,
-    });
+    expect(await positioningService.get()).toEqual({ text: 'I post about pricing.', draft: null });
     expect(get).toHaveBeenCalledWith('/positioning');
   });
 
-  it('asks for a draft and returns its text', async () => {
-    const post = vi.spyOn(apiService, 'post').mockResolvedValue({
-      data: { text: 'I post about pricing.', reason: null, can_draft: true },
+  it('reads the Positioning draft of a User with no Positioning', async () => {
+    vi.spyOn(apiService, 'get').mockResolvedValue({
+      data: {
+        text: null,
+        saved_at: null,
+        draft: { state: 'failed', text: null, reason: "We couldn't read your X profile." },
+      },
     } as never);
 
-    expect(await positioningService.draft()).toEqual({
-      text: 'I post about pricing.',
-      reason: null,
-      canDraft: true,
+    expect(await positioningService.get()).toEqual({
+      text: null,
+      draft: { state: 'failed', text: null, reason: "We couldn't read your X profile." },
     });
-    expect(post).toHaveBeenCalledWith('/positioning/draft');
   });
 
-  it('returns why no draft could be made', async () => {
-    vi.spyOn(apiService, 'post').mockResolvedValue({
-      data: { text: null, reason: "We couldn't read your X profile.", can_draft: false },
-    } as never);
+  it('starts a draft without waiting for it', async () => {
+    const post = vi.spyOn(apiService, 'post').mockResolvedValue({ data: '' } as never);
 
-    expect(await positioningService.draft()).toEqual({
-      text: null,
-      reason: "We couldn't read your X profile.",
-      canDraft: false,
-    });
+    await positioningService.startDraft();
+
+    expect(post).toHaveBeenCalledWith('/positioning/draft/start');
   });
 });

@@ -23,7 +23,7 @@ async def test_set_positioning_saves_what_the_web_app_then_reads(
     )
     assert (await authed_client.get(POSITIONING)).json() == {
         **result["structuredContent"],
-        "can_draft": True,
+        "draft": None,
     }
 
 

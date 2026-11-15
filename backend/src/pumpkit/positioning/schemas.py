@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -43,16 +43,16 @@ class PositioningResponse(BaseModel):
     saved_at: Optional[datetime]
 
 
+class PositioningDraftResponse(BaseModel):
+    """The User's Positioning draft: `text` once it is ready, `reason` in words once it failed."""
+
+    state: Literal["running", "ready", "failed"]
+    text: Optional[str]
+    reason: Optional[str]
+
+
 class PositioningPageResponse(PositioningResponse):
     """The User's Positioning as the web app's panel reads it."""
 
-    # False once the User has used up today's drafts.
-    can_draft: bool
-
-
-class PositioningDraftResponse(BaseModel):
-    """A draft of the User's Positioning, or `reason`: why none could be made, in words for them."""
-
-    text: Optional[str]
-    reason: Optional[str]
-    can_draft: bool
+    # Null once the User has a Positioning, and until a draft starts.
+    draft: Optional[PositioningDraftResponse]

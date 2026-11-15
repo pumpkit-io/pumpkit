@@ -32,6 +32,8 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
     textRefused,
     justSaved,
     drafting,
+    draftReason,
+    drafted,
   } = usePositioning({ draftOnOpen: step });
   const [continuing, setContinuing] = useState(false);
   const id = useId();
@@ -39,6 +41,7 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
   const adviceId = `${id}-advice`;
   const errorId = `${id}-error`;
   const readingId = `${id}-reading`;
+  const reasonId = `${id}-reason`;
   const busy = loading === 'loading' || drafting;
   const nearLimit = length >= POSITIONING_MAX_CHARS - COUNT_SHOWN_WITHIN;
   // maxLength counts UTF-16 units, so it grows by one for each character that takes two.
@@ -46,7 +49,15 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
   const Heading = step ? 'h1' : 'h2';
   // Continue goes on with unchanged text too: the step needs a Positioning, not a change.
   const canSubmit = step ? idle && hasText && !continuing : canSave;
-  const describedBy = [drafting && readingId, error && errorId, adviceId].filter(Boolean).join(' ');
+  const describedBy = [drafting && readingId, draftReason && reasonId, error && errorId, adviceId]
+    .filter(Boolean)
+    .join(' ');
+  // Announces the draft as it starts and lands; a failed one's reason shows here too.
+  const draftStatus = drafting
+    ? 'Drafting your positioning from your X profile…'
+    : drafted
+      ? 'Your draft is ready to edit.'
+      : '';
   const count = nearLimit && (
     <p className="font-mono text-xs tabular-nums text-muted-foreground">
       {length.toLocaleString('en-US')} / {POSITIONING_MAX_CHARS.toLocaleString('en-US')}
@@ -125,6 +136,15 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
                 </p>
               )}
             </div>
+            <p
+              id={reasonId}
+              role="status"
+              className={
+                draftReason && !drafting ? 'font-sans text-sm text-muted-foreground' : 'sr-only'
+              }
+            >
+              {draftReason && !drafting ? draftReason : draftStatus}
+            </p>
             {error && (
               <p id={errorId} role="alert" className="font-sans text-sm text-destructive">
                 {error}

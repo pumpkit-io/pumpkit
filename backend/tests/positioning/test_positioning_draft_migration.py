@@ -1,10 +1,13 @@
 """Migration 0059 adds what a Positioning draft reads and what limits it; its downgrade drops both."""
 
+from datetime import datetime, timezone
+
 import sqlalchemy as sa
 
 from alembic import command
+from pumpkit.authors.x_reader import FetchedPost
 from tests.migrations import migrate
-from tests.positioning.positioning import DRAFT, DRAFTED
+from tests.positioning.positioning import DRAFTED, START_DRAFT, positioning_draft
 
 
 async def _schema(db_engine) -> tuple[list[str], list[str]]:
@@ -18,7 +21,7 @@ async def _schema(db_engine) -> tuple[list[str], list[str]]:
 
 
 async def test_upgrade_adds_the_profile_columns_and_the_draft_requests_and_downgrade_drops_them(
-    db_engine, client, subscribed, fake_llm, fake_x_reader, connect_x
+    db_engine, client, subscribed, fake_llm, fake_x_reader, fake_x_publisher, connect_x
 ):
     await migrate(db_engine, lambda config: command.stamp(config, "head"))
 
@@ -29,7 +32,12 @@ async def test_upgrade_adds_the_profile_columns_and_the_draft_requests_and_downg
 
     await migrate(db_engine, lambda config: command.upgrade(config, "head"))
     await connect_x()
-    fake_x_reader.posts["ada"] = []
+    fake_x_reader.user_ids[fake_x_publisher.account.user_id] = "ada"
+    fake_x_reader.posts["ada"] = [
+        FetchedPost(
+            post_id="1", text="Shipped it.", posted_at=datetime(2026, 10, 9, tzinfo=timezone.utc)
+        )
+    ]
     fake_llm.replies = [{"positioning": DRAFTED}]
-    drafted = await client.post(DRAFT)
-    assert drafted.status_code == 200
+    assert (await client.post(START_DRAFT)).status_code == 202
+    assert (await positioning_draft(client))["text"] == DRAFTED

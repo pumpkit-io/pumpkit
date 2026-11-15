@@ -40,7 +40,7 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
 vi.mock('@/services/positioningService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/positioningService')>()),
   positioningService: {
-    get: vi.fn().mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true }),
+    get: vi.fn().mockResolvedValue({ text: 'I post about bootstrapping.', draft: null }),
     save: vi.fn(),
     draft: vi.fn(),
   },
@@ -285,7 +285,7 @@ describe('New post', () => {
     vi.mocked(briefService.plan).mockReset();
     vi.mocked(positioningService.get)
       .mockReset()
-      .mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true });
+      .mockResolvedValue({ text: 'I post about bootstrapping.', draft: null });
     vi.mocked(postService.get).mockReset().mockResolvedValue(postWith('the final text'));
     vi.mocked(postService.addVersion).mockReset();
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
@@ -369,7 +369,7 @@ describe('New post', () => {
 
     it('replaces the write button with "Set up your persona" while the User has no Positioning', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      vi.mocked(positioningService.get).mockResolvedValue({ text: null, canDraft: true });
+      vi.mocked(positioningService.get).mockResolvedValue({ text: null, draft: null });
       renderNewPost();
 
       const area = await writer();
@@ -1034,7 +1034,7 @@ describe('Recent briefs on New post', () => {
     vi.mocked(briefService.recent).mockReset().mockResolvedValue([]);
     vi.mocked(positioningService.get)
       .mockReset()
-      .mockResolvedValue({ text: 'I post about bootstrapping.', canDraft: true });
+      .mockResolvedValue({ text: 'I post about bootstrapping.', draft: null });
     vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(null);
   });
