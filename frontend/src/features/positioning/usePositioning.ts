@@ -8,10 +8,10 @@ import { positioningService, type PositioningDraft } from '@/services/positionin
 type Loading = 'loading' | 'failed' | 'loaded';
 
 /** How often the step reads a running draft. */
-export const DRAFT_POLL_MS = 2000;
+const DRAFT_POLL_MS = 2000;
 
 /** Reads of a running draft that may fail in a row before the step stops waiting for it. */
-export const DRAFT_READ_FAILURES_TOLERATED = 5;
+const DRAFT_READ_FAILURES_TOLERATED = 5;
 
 /** The backend's sentence for a draft it couldn't write, for a request that never got one. */
 const NOT_DRAFTED =

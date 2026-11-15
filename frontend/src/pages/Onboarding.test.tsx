@@ -51,10 +51,6 @@ import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { onboardingService } from '@/services/onboardingService';
-import {
-  DRAFT_POLL_MS,
-  DRAFT_READ_FAILURES_TOLERATED,
-} from '@/features/positioning/usePositioning';
 import { positioningService, type PositioningDraft } from '@/services/positioningService';
 import { xConnectionService } from '@/services/xConnectionService';
 import { SUBSCRIBED, apiError, currentPath, renderSignedIn } from './testing/signedInApp';
@@ -215,12 +211,12 @@ describe('Onboarding', () => {
         const textarea = await field();
         await waitFor(() => expect(positioningService.get).toHaveBeenCalledTimes(1));
 
-        await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        await act(() => vi.advanceTimersByTimeAsync(2000));
         expect(positioningService.get).toHaveBeenCalledTimes(2);
         expect(textarea).toBeDisabled();
 
         kept = READY;
-        await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        await act(() => vi.advanceTimersByTimeAsync(2000));
 
         await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
         expect(textarea).toBeEnabled();
@@ -236,7 +232,7 @@ describe('Onboarding', () => {
         await waitFor(() => expect(status).toHaveTextContent('Reading your X profile…'));
 
         kept = READY;
-        await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        await act(() => vi.advanceTimersByTimeAsync(2000));
 
         await waitFor(() => expect(status).toHaveTextContent('Your draft is ready to edit.'));
       });
@@ -308,9 +304,9 @@ describe('Onboarding', () => {
         renderOnboarding();
         const textarea = await field();
 
-        await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        await act(() => vi.advanceTimersByTimeAsync(2000));
         expect(textarea).toBeDisabled();
-        await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        await act(() => vi.advanceTimersByTimeAsync(2000));
 
         await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
       } finally {
@@ -327,11 +323,11 @@ describe('Onboarding', () => {
         renderOnboarding();
         const textarea = await field();
 
-        for (let read = 1; read < DRAFT_READ_FAILURES_TOLERATED; read++) {
-          await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        for (let read = 1; read < 5; read++) {
+          await act(() => vi.advanceTimersByTimeAsync(2000));
         }
         expect(textarea).toBeDisabled();
-        await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        await act(() => vi.advanceTimersByTimeAsync(2000));
 
         await waitFor(() => expect(textarea).toBeEnabled());
         expect((await step()).getByRole('status')).toHaveTextContent(NOT_DRAFTED);

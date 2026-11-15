@@ -375,6 +375,16 @@ async def test_an_unexpected_error_in_the_draft_still_ends_it_failed(
     assert await _start(client) == _failed(NO_MODEL)
 
 
+async def test_a_draft_cancelled_on_shutdown_ends_failed(client, on_x, background_tasks, fake_llm):
+    fake_llm.held["PositioningDraft"] = asyncio.Event()
+    fake_llm.replies = [{"positioning": DRAFTED}]
+
+    await client.post(START_DRAFT)
+    await background_tasks.cancel()
+
+    assert await positioning_draft(client) == _failed(NO_MODEL)
+
+
 async def test_a_blank_answer_from_the_model_fails_with_a_reason(client, on_x, fake_llm):
     fake_llm.replies = [{"positioning": " \n\x00 "}]
 

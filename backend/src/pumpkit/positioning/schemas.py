@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from pumpkit.core.text import drop_unstorable
 from pumpkit.positioning.models import DraftState
 
-# Per caller, for the route and the MCP tool that save a Positioning.
+# Per caller, for saving a Positioning (route and MCP tool) and starting its draft.
 WRITE_RATE = "20/minute"
 
 # A Positioning is a few sentences; this leaves room for a User who writes several paragraphs.

@@ -163,6 +163,13 @@ async def _run_draft(
     """The background task: X and the model with no session open, then the outcome in its own."""
     try:
         text, reason = await _draft(run, reader, llm)
+    except asyncio.CancelledError:
+        # Cancelled on shutdown: fail it now rather than leave it running until it goes stale.
+        try:
+            await _finish_draft(run, None, _NOT_DRAFTED, sessions, clock)
+        except Exception:
+            logger.exception("Couldn't record a cancelled positioning draft as failed")
+        raise
     except Exception:
         await _finish_draft(run, None, _NOT_DRAFTED, sessions, clock)
         raise

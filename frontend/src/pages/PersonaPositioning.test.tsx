@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -412,6 +412,41 @@ describe('Persona: the Positioning panel', () => {
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
     expect((await panel()).getByRole('button', { name: 'Save' })).toBeEnabled();
     expect(positioningService.save).not.toHaveBeenCalled();
+  });
+
+  it('locks the textarea while a kept draft runs, reads it every 2 seconds and fills it once ready', async () => {
+    vi.mocked(positioningService.get).mockResolvedValue({
+      text: null,
+      draft: { state: 'running', text: null, reason: null },
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderSignedIn('/persona');
+
+      const textarea = await field();
+      await waitFor(() =>
+        expect(textarea).toHaveAccessibleDescription(`Reading your X profile… ${ADVICE}`),
+      );
+      expect(textarea).toBeDisabled();
+      expect(textarea).toHaveValue('');
+      const reads = vi.mocked(positioningService.get).mock.calls.length;
+
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(positioningService.get).toHaveBeenCalledTimes(reads + 1);
+      expect(textarea).toBeDisabled();
+
+      vi.mocked(positioningService.get).mockResolvedValue({
+        text: null,
+        draft: { state: 'ready', text: SAVED, reason: null },
+      });
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+
+      await waitFor(() => expect(textarea).toHaveValue(SAVED));
+      expect(textarea).toBeEnabled();
+      expect(positioningService.startDraft).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('says in muted text why a draft failed, under an empty textarea, without an alert', async () => {
