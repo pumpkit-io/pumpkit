@@ -58,6 +58,7 @@ import { SUBSCRIBED, apiError, currentPath, renderSignedIn } from './testing/sig
 const DRAFTED = "I'm a solo founder building a pricing tool. I post about pricing for founders.";
 const EDITED = `${DRAFTED} I post to earn sign-ups.`;
 const NOT_READ = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
+const ADVICE = 'Pumpkit plans every post around this. Two or three sentences are enough.';
 
 function renderOnboarding(path = '/onboarding') {
   return renderSignedIn(path, { nextStep: 'persona' });
@@ -130,7 +131,9 @@ describe('Onboarding', () => {
       renderOnboarding();
 
       await step();
-      expect(screen.getByRole('heading', { level: 1, name: 'Who you are on X' })).toBeVisible();
+      const heading = screen.getByRole('heading', { level: 1, name: 'Who you are on X' });
+      expect(heading).toBeVisible();
+      expect(within(heading).getByRole('img', { name: 'X' })).toBeInTheDocument();
       const steps = screen.getByRole('navigation', { name: 'Steps' });
       expect(steps.querySelector('[aria-current="step"]')).toHaveTextContent('Persona');
       expect(screen.queryByRole('navigation', { name: 'Main' })).not.toBeInTheDocument();
@@ -150,8 +153,10 @@ describe('Onboarding', () => {
 
       const textarea = await field();
       await waitFor(() =>
-        expect(textarea).toHaveAttribute('placeholder', 'Reading your X profile…'),
+        expect(textarea).toHaveAccessibleDescription(`Reading your X profile… ${ADVICE}`),
       );
+      expect((await step()).getByText(/^Reading your/).querySelector('svg')).not.toBeNull();
+      expect(textarea).not.toHaveAttribute('placeholder', 'Reading your X profile…');
       expect(textarea).toBeDisabled();
       expect(textarea).toHaveValue('');
       expect(continueButton()).toBeDisabled();
@@ -170,12 +175,39 @@ describe('Onboarding', () => {
       expect(positioningService.save).not.toHaveBeenCalled();
     });
 
-    it('names the five things a Positioning covers under the textarea', async () => {
+    it('gives one line of advice under the heading, and no checklist', async () => {
       await drafted();
 
-      expect(await field()).toHaveAccessibleDescription(
-        'Cover: who you are · what you post about · who you write for · what you post for · what you can point to',
+      expect(await field()).toHaveAccessibleDescription(ADVICE);
+      expect((await step()).queryByText(/^Cover:/)).not.toBeInTheDocument();
+    });
+
+    it('offers no way to draft again and says nothing about the draft', async () => {
+      await drafted();
+      const region = await step();
+
+      expect(region.getAllByRole('button').map((button) => button.textContent)).toEqual([
+        'Continue',
+      ]);
+      expect(region.queryByText(/Drafted from your X profile/)).not.toBeInTheDocument();
+    });
+
+    it('puts a full-width Continue under the textarea, with the count between them near the limit', async () => {
+      vi.mocked(positioningService.draft).mockResolvedValue({
+        text: 'a'.repeat(3712),
+        reason: null,
+        canDraft: true,
+      });
+      renderOnboarding();
+
+      const textarea = await field();
+      await waitFor(() => expect(textarea).toBeEnabled());
+      const count = (await step()).getByText('3,712 / 4,000');
+      expect(textarea.compareDocumentPosition(count)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(count.compareDocumentPosition(continueButton())).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING,
       );
+      expect(continueButton()).toHaveClass('w-full');
     });
 
     it('opens an empty textarea with the note when no draft can be made, and Continue waits for text', async () => {
@@ -191,9 +223,7 @@ describe('Onboarding', () => {
       const textarea = await field();
       expect(textarea).toBeEnabled();
       expect(textarea).toHaveValue('');
-      expect(textarea).toHaveAccessibleDescription(
-        `${NOT_READ} Cover: who you are · what you post about · who you write for · what you post for · what you can point to`,
-      );
+      expect(textarea).toHaveAccessibleDescription(`${NOT_READ} ${ADVICE}`);
       expect(continueButton()).toBeDisabled();
 
       fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
@@ -212,6 +242,20 @@ describe('Onboarding', () => {
       expect((await step()).getByRole('alert')).toHaveTextContent(
         "We couldn't draft your positioning. Write it yourself, a few sentences is enough.",
       );
+    });
+
+    it('asks the User to write it themselves when the day’s drafts ran out before the draft', async () => {
+      vi.mocked(positioningService.draft).mockRejectedValue(
+        apiError(429, 'You can draft again tomorrow.'),
+      );
+      renderOnboarding();
+
+      const textarea = await field();
+      await waitFor(() => expect(textarea).toBeEnabled());
+      expect((await step()).getByRole('alert')).toHaveTextContent(
+        "We couldn't draft your positioning. Write it yourself, a few sentences is enough.",
+      );
+      expect((await step()).queryByText(/tomorrow/)).not.toBeInTheDocument();
     });
 
     it('shows the draft it made again when the step reopens, without drafting again', async () => {
@@ -237,14 +281,14 @@ describe('Onboarding', () => {
       expect(positioningService.draft).toHaveBeenCalledTimes(2);
     });
 
-    it('asks for no draft when the User has used up the day’s drafts, and says when they can again', async () => {
+    it('asks for no draft when the User has used up the day’s drafts', async () => {
       vi.mocked(positioningService.get).mockResolvedValue({ text: null, canDraft: false });
       renderOnboarding();
 
       const textarea = await field();
       await waitFor(() => expect(textarea).toBeEnabled());
       expect(textarea).toHaveValue('');
-      expect((await step()).getByText('You can draft again tomorrow.')).toBeInTheDocument();
+      expect((await step()).queryByText(/draft again/i)).not.toBeInTheDocument();
       expect(positioningService.draft).not.toHaveBeenCalled();
     });
 
@@ -274,9 +318,6 @@ describe('Onboarding', () => {
       expect(button).toBeDisabled();
       expect(await field()).toBeDisabled();
       expect(await field()).toHaveValue(DRAFTED);
-      expect(
-        (await step()).getByRole('button', { name: 'Draft again from my X profile' }),
-      ).toBeDisabled();
     });
 
     it('keeps the text and says why under the textarea when the save fails, and stays on the step', async () => {

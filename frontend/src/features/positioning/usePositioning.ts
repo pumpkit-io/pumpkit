@@ -19,8 +19,8 @@ function isBlank(text: string): boolean {
 }
 
 /**
- * The User's Positioning as they are editing it, loaded on mount, with save and draft. With
- * `draftOnOpen`, a User with no Positioning gets the kept draft, else a fresh one, as it loads.
+ * The User's Positioning as they are editing it, loaded on mount, with save. With `draftOnOpen`,
+ * a User with no Positioning gets the kept draft, else a fresh one, as it loads.
  */
 export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean } = {}) {
   const { refresh: refreshOnboarding } = useOnboarding();
@@ -32,45 +32,38 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
   /** The text as of the last edit, which a save in flight can't see in its closure. */
   const latestText = useRef('');
   const [saving, setSaving] = useState(false);
-  /** Why the last save or draft failed, until the next edit, save or draft. */
+  /** Why the last save or draft failed, until the next edit or save. */
   const [error, setError] = useState<string | null>(null);
   /** True when that save failed because the server refused the text itself. */
   const [textRefused, setTextRefused] = useState(false);
   /** True from a save until the next edit. */
   const [justSaved, setJustSaved] = useState(false);
-  /** False once the User has used up today's drafts. */
-  const [canDraft, setCanDraft] = useState(true);
   const [drafting, setDrafting] = useState(false);
-  /** True from a draft filling the textarea until the next edit, save or draft. */
-  const [justDrafted, setJustDrafted] = useState(false);
 
   const draft = useCallback(async () => {
     const before = latestText.current;
     setDrafting(true);
     setError(null);
     setTextRefused(false);
-    setJustDrafted(false);
     try {
       const drafted = await positioningService.draft();
-      setCanDraft(drafted.canDraft);
       if (drafted.text === null) {
         setError(drafted.reason ?? NOT_DRAFTED);
       } else if (latestText.current === before) {
         setText(drafted.text);
         latestText.current = drafted.text;
         setJustSaved(false);
-        setJustDrafted(true);
-        if (draftOnOpen) keepDraft(drafted.text);
+        keepDraft(drafted.text);
       }
     } catch (e) {
       if (isSubscriptionNeeded(e)) void refreshOnboarding();
-      // The only 429 this request gets is the daily limit, which the button's own line explains.
-      else if (errorStatus(e) === 429) setCanDraft(false);
+      // The daily limit's "draft again tomorrow" offers a redraft the step doesn't have.
+      else if (errorStatus(e) === 429) setError(NOT_DRAFTED);
       else setError(errorMessage(e, NOT_DRAFTED));
     } finally {
       setDrafting(false);
     }
-  }, [draftOnOpen, refreshOnboarding]);
+  }, [refreshOnboarding]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,14 +74,12 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
         setSaved(positioning.text ?? '');
         setText(positioning.text ?? '');
         latestText.current = positioning.text ?? '';
-        setCanDraft(positioning.canDraft);
         setLoading('loaded');
         if (!draftOnOpen || positioning.text !== null) return;
         const kept = keptDraft();
         if (kept !== null) {
           setText(kept);
           latestText.current = kept;
-          setJustDrafted(true);
         } else if (positioning.canDraft) {
           // Same tick as the load, so the textarea never renders editable before the draft starts.
           void draft();
@@ -111,7 +102,6 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
     setJustSaved(false);
     setError(null);
     setTextRefused(false);
-    setJustDrafted(false);
   }, []);
 
   /** Resolves true when the text in the textarea is what got saved. */
@@ -119,7 +109,6 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
     setSaving(true);
     setError(null);
     setTextRefused(false);
-    setJustDrafted(false);
     try {
       const positioning = await positioningService.save(text);
       setSaved(positioning.text);
@@ -178,10 +167,6 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
     error,
     textRefused,
     justSaved,
-    draft,
     drafting,
-    canDraft,
-    canRequestDraft: idle && canDraft,
-    justDrafted,
   };
 }

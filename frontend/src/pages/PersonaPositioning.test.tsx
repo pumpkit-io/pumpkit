@@ -71,10 +71,9 @@ import {
 
 const SAVED =
   "I'm a solo founder. I post about bootstrapping for people starting their first SaaS.";
-const DRAFTED = "I'm a solo founder building a pricing tool. I post about pricing for founders.";
 /** What a User who saved no Positioning and has drafts left reads. */
 const NONE = { text: null, canDraft: true };
-const DRAFT_AGAIN = 'Draft again from my X profile';
+const ADVICE = 'Pumpkit plans every post around this. Two or three sentences are enough.';
 
 /** The 422 FastAPI answers when `PositioningSaveRequest` refuses the text: `detail` is a list. */
 function textRefused() {
@@ -120,17 +119,30 @@ describe('Persona: the Positioning panel', () => {
     renderSignedIn('/persona');
 
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
-    const headings = screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(['Who you are on X']);
+    const headings = screen.getAllByRole('heading', { level: 2 });
+    expect(headings).toEqual([screen.getByRole('heading', { name: 'Who you are on X' })]);
     expect(screen.queryByRole('combobox', { name: 'Find an author' })).not.toBeInTheDocument();
     expect(inspirationAuthorService.list).not.toHaveBeenCalled();
   });
 
-  it('names the five things a Positioning covers under the textarea', async () => {
+  it('heads the panel "Who you are on" with the X logo, and gives one line of advice', async () => {
     renderSignedIn('/persona');
 
-    expect(await field()).toHaveAccessibleDescription(
-      'Cover: who you are · what you post about · who you write for · what you post for · what you can point to',
+    const heading = await screen.findByRole('heading', { level: 2, name: 'Who you are on X' });
+    expect(within(heading).getByRole('img', { name: 'X' })).toBeInTheDocument();
+    expect(heading).not.toHaveTextContent('X');
+    expect(await field()).toHaveAccessibleDescription(ADVICE);
+    expect((await panel()).queryByText(/^Cover:/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the placeholder that names what a Positioning says', async () => {
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    expect(textarea).toHaveAttribute(
+      'placeholder',
+      'I’m … I post about … I write for … I post to …',
     );
   });
 
@@ -259,12 +271,12 @@ describe('Persona: the Positioning panel', () => {
     {
       failure: apiError(429, 'Too many requests. Try again in a minute.'),
       message: 'Too many requests. Try again in a minute.',
-      described: /^Too many requests\. Try again in a minute\. Cover:/,
+      described: /^Too many requests\. Try again in a minute\. Pumpkit plans/,
     },
     {
       failure: Object.assign(new Error('Network Error'), { isAxiosError: true }),
       message: "Couldn't save your positioning. Try again.",
-      described: /^Couldn't save your positioning\. Try again\. Cover:/,
+      described: /^Couldn't save your positioning\. Try again\. Pumpkit plans/,
     },
   ])('says under the textarea why a save failed, keeping the text', async (failed) => {
     const { failure, message, described } = failed;
@@ -306,7 +318,7 @@ describe('Persona: the Positioning panel', () => {
 
     expect(region.queryByRole('alert')).not.toBeInTheDocument();
     expect(textarea).not.toHaveAttribute('aria-invalid');
-    expect(textarea).toHaveAccessibleDescription(/^Cover:/);
+    expect(textarea).toHaveAccessibleDescription(ADVICE);
   });
 
   it('says why a save was refused with a 403 that is not for want of a Subscription', async () => {
@@ -368,178 +380,35 @@ describe('Persona: the Positioning panel', () => {
     await waitFor(() => expect(currentPath()).toBe('/subscribe'));
   });
 
-  it('fills the textarea with a draft from the X profile and saves nothing', async () => {
+  it('offers no way to draft again from the X profile, and reads nothing from X', async () => {
     vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
-    vi.mocked(positioningService.draft).mockResolvedValue({
-      text: DRAFTED,
-      reason: null,
-      canDraft: true,
-    });
-    renderSignedIn('/persona');
-
-    const textarea = await field();
-    await waitFor(() => expect(textarea).toHaveValue(SAVED));
-    const region = await panel();
-    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
-
-    await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
-    expect(region.getByRole('status')).toHaveTextContent(
-      'Drafted from your X profile. Save to keep it.',
-    );
-    expect(positioningService.save).not.toHaveBeenCalled();
-    expect(region.getByRole('button', { name: 'Save' })).toBeEnabled();
-    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
-  });
-
-  it('drops the note about the draft once the User edits it', async () => {
-    vi.mocked(positioningService.draft).mockResolvedValue({
-      text: DRAFTED,
-      reason: null,
-      canDraft: true,
-    });
-    renderSignedIn('/persona');
-
-    const textarea = await field();
-    await waitFor(() => expect(textarea).toBeEnabled());
-    const region = await panel();
-    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
-    await region.findByText('Drafted from your X profile. Save to keep it.');
-
-    fireEvent.change(textarea, { target: { value: `${DRAFTED} I sell a course.` } });
-
-    expect(region.queryByText(/Drafted from your X profile/)).not.toBeInTheDocument();
-  });
-
-  it('shows "Reading your X profile…" and disables the panel while a draft is on its way', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
-    vi.mocked(positioningService.draft).mockReturnValue(new Promise(() => {}));
-    renderSignedIn('/persona');
-
-    const textarea = await field();
-    await waitFor(() => expect(textarea).toHaveValue(SAVED));
-    fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
-    const region = await panel();
-    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
-
-    await waitFor(() => expect(textarea).toBeDisabled());
-    expect(textarea).toHaveValue('');
-    expect(textarea).toHaveAttribute('placeholder', 'Reading your X profile…');
-    expect(region.getByRole('button', { name: 'Save' })).toBeDisabled();
-    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeDisabled();
-  });
-
-  it('keeps the text and says why when no draft could be made', async () => {
-    const reason = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
-    vi.mocked(positioningService.draft).mockResolvedValue({ text: null, reason, canDraft: true });
-    renderSignedIn('/persona');
-
-    const textarea = await field();
-    await waitFor(() => expect(textarea).toHaveValue(SAVED));
-    const region = await panel();
-    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
-
-    expect(await region.findByRole('alert')).toHaveTextContent(reason);
-    expect(textarea).toHaveAccessibleDescription(new RegExp(`^${reason}`));
-    expect(textarea).toHaveValue(SAVED);
-    expect(textarea).toBeEnabled();
-    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
-  });
-
-  it.each([
-    {
-      failure: apiError(500, 'Something went wrong. Please try again later.'),
-      message: 'Something went wrong. Please try again later.',
-    },
-    {
-      failure: Object.assign(new Error('Network Error'), { isAxiosError: true }),
-      message: "We couldn't draft your positioning. Write it yourself, a few sentences is enough.",
-    },
-  ])('keeps the text and says so when the draft request fails', async ({ failure, message }) => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
-    vi.mocked(positioningService.draft).mockRejectedValue(failure);
-    renderSignedIn('/persona');
-
-    const textarea = await field();
-    await waitFor(() => expect(textarea).toHaveValue(SAVED));
-    const region = await panel();
-    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
-
-    expect(await region.findByRole('alert')).toHaveTextContent(message);
-    expect(textarea).toHaveValue(SAVED);
-    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
-  });
-
-  it('disables the draft button with "You can draft again tomorrow." for a User at the limit', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: false });
     renderSignedIn('/persona');
 
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
-    const button = (await panel()).getByRole('button', { name: DRAFT_AGAIN });
+    const region = await panel();
 
-    expect(button).toBeDisabled();
-    expect(button).toHaveAccessibleDescription('You can draft again tomorrow.');
+    expect(region.getAllByRole('button').map((button) => button.textContent)).toEqual(['Save']);
+    expect(region.queryByText(/draft again/i)).not.toBeInTheDocument();
+    expect(region.queryByText(/Drafted from your X profile/)).not.toBeInTheDocument();
+    expect(positioningService.draft).not.toHaveBeenCalled();
   });
 
-  it('says nothing about tomorrow while the User has drafts left', async () => {
+  it('puts the count first, then "Saved" and Save, in the row under the textarea', async () => {
+    vi.mocked(positioningService.save).mockImplementation(async (text) => ({ text }));
     renderSignedIn('/persona');
 
     const textarea = await field();
     await waitFor(() => expect(textarea).toBeEnabled());
+    fireEvent.change(textarea, { target: { value: 'a'.repeat(3700) } });
     const region = await panel();
+    fireEvent.click(region.getByRole('button', { name: 'Save' }));
 
-    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeEnabled();
-    expect(region.queryByText('You can draft again tomorrow.')).not.toBeInTheDocument();
-  });
-
-  it('disables the draft button once the last draft of the day is used', async () => {
-    vi.mocked(positioningService.draft).mockResolvedValue({
-      text: DRAFTED,
-      reason: null,
-      canDraft: false,
-    });
-    renderSignedIn('/persona');
-
-    const textarea = await field();
-    await waitFor(() => expect(textarea).toBeEnabled());
-    const region = await panel();
-    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
-
-    await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
-    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeDisabled();
-    expect(region.getByText('You can draft again tomorrow.')).toBeInTheDocument();
-  });
-
-  it('disables the draft button when the server says the limit is reached', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
-    vi.mocked(positioningService.draft).mockRejectedValue(
-      apiError(429, 'You can draft again tomorrow.'),
-    );
-    renderSignedIn('/persona');
-
-    const textarea = await field();
-    await waitFor(() => expect(textarea).toHaveValue(SAVED));
-    const region = await panel();
-    fireEvent.click(region.getByRole('button', { name: DRAFT_AGAIN }));
-
-    expect(await region.findByText('You can draft again tomorrow.')).toBeInTheDocument();
-    expect(region.getByRole('button', { name: DRAFT_AGAIN })).toBeDisabled();
-    expect(textarea).toHaveValue(SAVED);
-  });
-
-  it('sends the User to the Paywall when a draft is refused for want of a Subscription', async () => {
-    vi.mocked(billingService.fetchBillingMe)
-      .mockResolvedValueOnce(SUBSCRIBED)
-      .mockResolvedValue(NOT_SUBSCRIBED);
-    vi.mocked(positioningService.draft).mockRejectedValue(
-      apiError(403, 'This needs a subscription. Subscribe to continue.'),
-    );
-    renderSignedIn('/persona');
-
-    const textarea = await field();
-    await waitFor(() => expect(textarea).toBeEnabled());
-    fireEvent.click((await panel()).getByRole('button', { name: DRAFT_AGAIN }));
-
-    await waitFor(() => expect(currentPath()).toBe('/subscribe'));
+    const saved = await region.findByText('Saved');
+    const count = region.getByText('3,700 / 4,000');
+    const save = region.getByRole('button', { name: 'Save' });
+    expect(textarea.compareDocumentPosition(count)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(count.compareDocumentPosition(saved)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(saved.compareDocumentPosition(save)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(save).not.toHaveClass('w-full');
   });
 });
