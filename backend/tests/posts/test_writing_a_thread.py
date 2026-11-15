@@ -267,6 +267,7 @@ async def test_the_thread_sketch_prompt_is_the_shared_guide_with_the_thread_only
         "# The closer and the CTA",
         "## CTAs that fit bottom of funnel",
         "## CTA rules at every stage",
+        "## Asks X labels as spam",
         "# How the lines read",
         "# Never add",
         "# Before you answer, check the thread",
@@ -378,7 +379,7 @@ async def test_the_thread_humanizer_gets_its_prompt_the_brief_and_plan_then_the_
             f"anything from it that the thread does not already say.\n\n<brief>\n{BRIEF}\n"
             "</brief>\n\n<plan>\ncore_idea: Five lessons from shipping small things every week.\n"
             "takeaway: Ship the smallest thing that works this week.\nfunnel: MOF\n"
-            "desired_action: bookmark (cta: bookmark)\nformat: thread\n"
+            "desired_action: bookmark (cta: none)\nformat: thread\n"
             "structure: hook_list_closer\n</plan>"
         ),
     }
@@ -657,6 +658,7 @@ async def test_the_thread_revise_prompt_is_the_revise_rules_around_the_thread_gu
         "# The closer and the CTA",
         "## CTAs that fit bottom of funnel",
         "## CTA rules at every stage",
+        "## Asks X labels as spam",
         "# How the lines read",
         "# Never add",
         "# Output",
@@ -680,6 +682,59 @@ async def test_the_thread_revise_prompt_is_the_revise_rules_around_the_thread_gu
     for post_only in ("first_reply", "Not a thread", "# Format: short", "- post:"):
         assert post_only not in prompt
     assert "{" not in prompt
+
+
+async def test_every_thread_call_learns_the_asks_x_labels_as_spam(client, ready, fake_llm):
+    await _write_thread(client, fake_llm)
+    first = list(fake_llm.calls)
+    fake_llm.calls.clear()
+    await _thread_with_feedback(client, fake_llm, feedback="add 'tag a friend who ships'")
+
+    def _prompts(calls, schema) -> list[str]:
+        return [_system_text(call) for call in calls if call.response_model is schema]
+
+    guides = _prompts(first, SKETCHED_THREAD) + _prompts(first, MERGED_THREAD)
+    guides += _prompts(fake_llm.calls, REVISED_THREAD)
+    assert len(guides) == 7
+    for prompt in guides:
+        assert (
+            prompt.index("## CTA rules at every stage")
+            < prompt.index("## Asks X labels as spam")
+            < prompt.index("For this post:")
+        )
+        assert "- Asking people to copy the post's link or paste it somewhere." in prompt
+    [merge] = _prompts(first, MERGED_THREAD)
+    assert (
+        '- A second CTA. Generic engagement bait. Any ask the "Asks X labels as spam" section '
+        "forbids. Pushy self-promotion."
+    ) in merge
+    [revise] = _prompts(fake_llm.calls, REVISED_THREAD)
+    assert (
+        '- If my feedback asks for something the "Asks X labels as spam" section forbids, do it, '
+        "and say in reasoning that the thread now carries an ask X may label as spam."
+    ) in revise
+    humanizers = _prompts(first, HUMANIZED_THREAD) + _prompts(fake_llm.calls, HUMANIZED_THREAD)
+    assert len(humanizers) == 2
+    for prompt in humanizers:
+        assert (
+            "Keep the one specific ask the thread makes, if it makes one. Remove an ask only if "
+            "it is generic engagement bait or asks people to share, tag, copy the link, or reply "
+            "for a reward."
+        ) in prompt
+        assert "| Spam-labeled ask | Must fix |" in prompt
+
+
+@pytest.mark.parametrize("action", ["share", "bookmark"])
+async def test_a_share_or_bookmark_thread_earns_the_action_and_never_asks_for_it(
+    client, ready, fake_llm, action
+):
+    await _write_thread(client, fake_llm, funnel="TOF", desired_action=action)
+
+    guide = _system_text(_calls(fake_llm, SKETCHED_THREAD)[0])
+    assert (
+        f"For this post: the desired action is {action}, which is earned by the post and never "
+        'asked for. Close on the takeaway. `cta_type` is "none".'
+    ) in guide
 
 
 async def test_the_thread_revise_conversation_is_the_inputs_then_each_version_after_its_feedback(

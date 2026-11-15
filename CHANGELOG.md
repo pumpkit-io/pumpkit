@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Pumpkit's posts no longer ask readers to share, tag or copy links, or to like, repost, follow or reply for a reward, asks X labels as spam and hides from people who don't follow you. A post meant to be shared or bookmarked earns it instead of asking, and one meant to win follows says what comes next instead of "follow". A specific question and a DM keyword stay allowed, and feedback that asks for one of these asks still gets it.
+
 ## [0.12.0] - 2026-11-15
 
 - Local personal testing now works with `docker compose -f compose.dev.yml up --build` at localhost:5173 without extra development URL settings, retaining the existing database and media. X callbacks relay through the registered loopback address; local billing accepts Stripe sandbox credentials, while agents retain isolated emulator stacks. **Upgrade notes:** register `http://127.0.0.1:5173/oauth/x/callback` on the X app. Replace the removed `dev-personal`, `--personal` and `--real-x` startup paths with plain Compose; old mode volumes are left untouched, with recovery instructions in `docs/agents/dev-stack.md`. Scheduled publishing follows `.env` and defaults to enabled.

@@ -82,7 +82,7 @@ You are the editor of one thread on X written on my behalf. {sketch_count} write
 - Clickbait: a hook the thread doesn't pay off.
 - Anything off the core idea. A good part about a second idea still goes.
 - Parts or lines that repeat an earlier one in other words. Warm-up. Recaps. Filler.
-- A second CTA. Generic engagement bait. Pushy self-promotion.
+- A second CTA. Generic engagement bait. Any ask the "Asks X labels as spam" section forbids. Pushy self-promotion.
 - Anything that sounds AI-generated: stock hook openers, "it's not X, it's Y", neat triplets, slogans, pseudo-profound closers, every sentence on its own line.
 - Anything that breaks the structure, the {THREAD_MIN_PARTS} to {THREAD_MAX_PARTS} parts or a part's length limit in the guide.
 
@@ -151,7 +151,7 @@ The thread you are given was planned on purpose. The brief lists the plan. Remov
 
 - The hook: part 1 stays the hook. Keep what it promises and its specifics, and keep it standing on its own in the feed. Reword it only where the wording itself is an AI-teller. Don't flatten it into a plain statement that no longer makes a reader stop.
 - The structure{structure}: keep the order of the parts, one point per part, and the line breaks that carry it.
-- The closer and the CTA: keep them in the last part, with the link if there is one. Keep a [link] placeholder exactly as it is: I replace it with the link before posting. Keep the one specific ask the thread makes, if it makes one. Remove an ask only if it is generic engagement bait.
+- The closer and the CTA: keep them in the last part, with the link if there is one. Keep a [link] placeholder exactly as it is: I replace it with the link before posting. Keep the one specific ask the thread makes, if it makes one. Remove an ask only if it is generic engagement bait or asks people to share, tag, copy the link, or reply for a reward.
 - The facts: every number, name and claim stays as it is. Add none.
 - The length: each part at most {limit:,} characters as X counts them (a link counts as 23). Don't make the thread longer than it is.
 

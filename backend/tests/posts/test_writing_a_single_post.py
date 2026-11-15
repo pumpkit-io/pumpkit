@@ -205,7 +205,7 @@ async def test_the_humanizer_gets_its_prompt_the_brief_and_plan_then_the_scrubbe
             f"from it that the post does not already say.\n\n<brief>\n{BRIEF}\n</brief>\n\n"
             "<plan>\ncore_idea: Shipping small things beats planning big ones.\n"
             "takeaway: Ship the smallest thing that works this week.\nfunnel: MOF\n"
-            "desired_action: bookmark (cta: bookmark)\nformat: short\nstructure: few_lines\n"
+            "desired_action: bookmark (cta: none)\nformat: short\nstructure: few_lines\n"
             "</plan>"
         ),
     }
@@ -543,8 +543,8 @@ async def test_the_guide_has_the_section_of_the_plans_structure_only(
             'For this post: the desired action is trust, which is earned by the post and never asked for. Close on the takeaway. `cta_type` is "none".',
         ),
         (
-            {"desired_action": "bookmark"},
-            'For this post: the desired action is bookmark, so the CTA is "bookmark", written the way the desired-action section says.',
+            {"desired_action": "follow"},
+            'For this post: the desired action is follow, so the CTA is "follow", written the way the desired-action section says.',
         ),
     ],
 )
@@ -568,3 +568,149 @@ async def test_never_add_allows_emoji_hashtags_and_bullets_the_raw_input_asks_fo
         "- No bullet characters, unless the raw input asks for it. Otherwise list items are "
         'plain lines, numbered "1." only when the order or the count matters.\n'
     ) in guide
+
+
+# Asks X labels as spam (ADR 0032)
+
+SPAM_ASKS = """\
+## Asks X labels as spam
+
+X's spam classifiers label posts that ask for engagement, and a labeled post is hidden from everyone who doesn't follow me. None of these go in the post, a first reply or any part, whatever the desired action:
+
+- Asking people to share, send or forward the post, or to show it to someone ("Send this to…", "Share this with…").
+- Asking people to tag someone ("Tag a founder who…").
+- Asking people to copy the post's link or paste it somewhere.
+- Asking for likes, reposts or follows outright ("like and repost", "RT if…", "follow for more", "turn on notifications").
+- Trading something for engagement: a reply or comment keyword ("Reply 'guide' and I'll send it"), a giveaway, "everyone who replies gets…". A DM keyword is fine: it asks for a message, not a public reply.
+- Telling people to reply or comment ("drop it below", "comment your answer"). A specific question is fine; an instruction to answer it is not."""
+
+
+async def test_every_sketch_and_the_merge_get_the_asks_x_labels_as_spam_in_the_closer_section(
+    client, ready, fake_llm
+):
+    await _write(client, fake_llm)
+
+    prompts = [_system_text(call) for call in _calls(fake_llm, SKETCHED_POST)]
+    prompts.append(_system_text(_calls(fake_llm, MERGED_SKETCH)[0]))
+    assert len(prompts) == 6
+    for prompt in prompts:
+        closer = prompt.index("# The closer and the CTA")
+        assert closer < prompt.index(SPAM_ASKS) < prompt.index("For this post:")
+
+
+@pytest.mark.parametrize(
+    ("choices", "rule"),
+    [
+        (
+            {"funnel": "TOF", "desired_action": "share"},
+            '- Never ask for the share. No "send this to", no "tag someone": X labels those '
+            "as spam. The post earns the share. Close on the takeaway.",
+        ),
+        (
+            {"desired_action": "bookmark"},
+            "- Don't ask for the save unless the raw input asks for it. Close on the takeaway and "
+            "let the usefulness do the work.",
+        ),
+    ],
+)
+async def test_a_share_or_bookmark_post_earns_the_action_and_never_asks_for_it(
+    client, ready, fake_llm, choices, rule
+):
+    guide = await _guide(client, fake_llm, **choices)
+
+    action = choices["desired_action"]
+    assert rule in guide
+    assert (
+        f"For this post: the desired action is {action}, which is earned by the post and never "
+        'asked for. Close on the takeaway. `cta_type` is "none".'
+    ) in guide
+
+
+async def test_a_share_post_names_who_it_is_for(client, ready, fake_llm):
+    guide = await _guide(client, fake_llm, funnel="TOF", desired_action="share")
+
+    assert (
+        '- Name who it is for, in the hook or the body ("If you run evals for a team of five…").'
+    ) in guide
+    assert "Send this to a founder who..." not in guide
+
+
+async def test_a_follow_post_gives_what_comes_next_and_never_tells_readers_to_follow(
+    client, ready, fake_llm
+):
+    guide = await _guide(client, fake_llm, desired_action="follow")
+
+    assert (
+        "- Never tell them to follow. Say what comes next and when; that is the reason to follow."
+    ) in guide
+    assert "Follow if you want day 2" not in guide
+
+
+async def test_top_of_funnel_ctas_list_no_share_and_avoid_share_tag_like_and_repost_asks(
+    client, ready, fake_llm
+):
+    guide = await _guide(client, fake_llm, funnel="TOF", desired_action="reply")
+
+    assert (
+        "## CTAs that fit top of funnel\n\n"
+        "- Best: no CTA at all (the post is the CTA); a specific question about the post's idea; "
+        "a follow only when there is a series to follow for, stated as a reason, not an order.\n"
+        "- Avoid: links, DMs, and any ask to share, tag, like or repost."
+    ) in guide
+
+
+async def test_the_cta_examples_drop_the_bookmark_ask_and_give_the_follow_reason_without_follow(
+    client, ready, fake_llm
+):
+    guide = await _guide(client, fake_llm)
+
+    assert (
+        "Weak CTA -> strong CTA (shape only, never copy the wording):\n\n"
+        '- "Follow for more" -> "I\'m documenting the whole build. Day 2 goes up tomorrow."\n'
+        '- "Thoughts?" -> "What\'s the one tool you\'d never drop from your stack?"\n'
+        '- "Link below" -> "Repo\'s in the first reply. It\'s free."'
+    ) in guide
+    assert "Bookmark this" not in guide
+    assert "Save this for" not in guide
+
+
+async def test_the_merge_removes_any_ask_x_labels_as_spam(client, ready, fake_llm):
+    await _write(client, fake_llm)
+
+    [merge] = _calls(fake_llm, MERGED_SKETCH)
+    assert (
+        '- A second CTA. Generic engagement bait. Any ask the "Asks X labels as spam" section '
+        "forbids. Pushy self-promotion."
+    ) in _system_text(merge)
+
+
+async def test_the_humanizer_removes_share_tag_copy_link_and_reply_for_reward_asks(
+    client, ready, fake_llm
+):
+    await _write(client, fake_llm)
+
+    [humanizer] = _calls(fake_llm, HUMANIZED_POST)
+    text = _system_text(humanizer)
+    assert (
+        "- The closer and the CTA: keep the one specific ask the post makes, if it makes one. "
+        "Remove an ask only if it is generic engagement bait or asks people to share, tag, copy "
+        "the link, or reply for a reward."
+    ) in text
+    assert (
+        "| Spam-labeled ask | Must fix | Asks to share, tag, copy the link, like/repost, or reply "
+        'for a reward. X labels these as spam. | "Send this to a founder who needs it" / '
+        "\"Reply 'RAG' and I'll DM you the doc\" | Delete the ask. A DM keyword is fine "
+        "(\"DM me 'RAG' for the doc\"). |"
+    ) in text
+
+
+@pytest.mark.parametrize("cta_type", ["share", "bookmark"])
+async def test_a_version_whose_cta_is_share_or_bookmark_still_validates(
+    client, db, ready, fake_llm, cta_type
+):
+    fake_llm.standing[MERGED_SKETCH] = merged(cta_type=cta_type)
+
+    response = await _write(client, fake_llm)
+
+    assert response.status_code == 201, response.text
+    assert (await _version(db)).cta_type == cta_type

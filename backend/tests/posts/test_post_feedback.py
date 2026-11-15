@@ -141,6 +141,7 @@ You revise one post on X written on my behalf, from my feedback.
 - Do what my latest feedback asks, and only that. Every line it doesn't ask about stays word for word, in its place. Return the whole post, not only the part that changed.
 - Keep the hook as it is unless my feedback asks to change it. One exception: when the change leaves the hook promising something the post no longer delivers, fix the hook so it stays honest, and change as little of it as you can.
 - The feedback is mine, so it wins. Where it goes against the choices or the guide below (another length, another CTA or none, another structure, a word or a line I want), do what it asks.
+- If my feedback asks for something the "Asks X labels as spam" section forbids, do it, and say in reasoning that the post now carries an ask X may label as spam.
 - Everything you write new follows the guide. For a new hook, choose the levers, then the hook types, then write it, as the hook section says. A new closer or CTA follows the closer and CTA section. New lines follow "How the lines read" and "Never add".
 - A fact, number, name or link I give in the feedback counts as if it were in the raw input. Invent no others.
 - My earlier feedback still holds. Don't undo what it asked for unless my latest feedback asks to.
@@ -169,7 +170,7 @@ BRIEF_AND_PLAN = (
     "from it that the post does not already say.\n\n<brief>\nship small things\n</brief>\n\n"
     "<plan>\ncore_idea: Shipping small things beats planning big ones.\n"
     "takeaway: Ship the smallest thing that works this week.\nfunnel: MOF\n"
-    "desired_action: bookmark (cta: bookmark)\nformat: short\nstructure: few_lines\n"
+    "desired_action: bookmark (cta: none)\nformat: short\nstructure: few_lines\n"
     "</plan>"
 )
 
@@ -285,6 +286,24 @@ async def test_the_revise_prompt_is_v5s_around_the_guide_of_the_posts_plan(
     guide = system[len(REVISE_PROMPT_HEAD) : -len(REVISE_PROMPT_TAIL)]
     assert "# Structure: a few lines" in guide
     assert "# Format: short post\n\n- At most 280 characters as X counts them" in guide
+
+
+async def test_the_revise_and_revision_humanizer_calls_learn_the_asks_x_labels_as_spam(
+    client, post_id, fake_llm
+):
+    fake_llm.replies = [{"post": "final 2"}]
+
+    await _feedback(client, post_id, "add 'tag a founder who needs this' at the end")
+
+    revise = _system_text(_calls(fake_llm, REVISED_POST)[0])
+    assert revise.index("## CTA rules at every stage") < revise.index("## Asks X labels as spam")
+    assert '- Asking people to tag someone ("Tag a founder who…").' in revise
+    humanizer = _system_text(_calls(fake_llm, HUMANIZED_POST)[0])
+    assert "| Spam-labeled ask | Must fix |" in humanizer
+    assert (
+        "Remove an ask only if it is generic engagement bait or asks people to share, tag, copy "
+        "the link, or reply for a reward."
+    ) in humanizer
 
 
 async def test_the_revise_conversation_is_the_inputs_then_each_version_after_its_feedback(

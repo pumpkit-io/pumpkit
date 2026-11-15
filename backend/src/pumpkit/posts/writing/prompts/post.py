@@ -157,7 +157,7 @@ You are the editor of one post on X written on my behalf. {sketch_count} writers
 - Clickbait: a hook the post doesn't pay off.
 - Anything off the core idea. A good line about a second idea still goes.
 - Lines that repeat an earlier line in other words. Warm-up. Recaps. Filler.
-- A second CTA. Generic engagement bait. Pushy self-promotion.
+- A second CTA. Generic engagement bait. Any ask the "Asks X labels as spam" section forbids. Pushy self-promotion.
 - Anything that sounds AI-generated: stock hook openers, "it's not X, it's Y", neat triplets, slogans, pseudo-profound closers, every sentence on its own line.
 - Anything that breaks the format, the structure or the length limit in the guide.
 
@@ -223,7 +223,7 @@ The post you are given was planned on purpose. The brief lists the plan. Removin
 
 - The hook: keep what it promises, its specifics and its place at the top. Reword it only where the wording itself is an AI-teller. Don't flatten it into a plain statement that no longer makes a reader stop.
 - The structure ({inputs.plan.structure}): keep the order of the parts and the line breaks that carry it. One thought per line in short paragraphs is intended here; merge lines only where every sentence sits alone between blank lines.
-- The closer and the CTA: keep the one specific ask the post makes, if it makes one. Remove an ask only if it is generic engagement bait.
+- The closer and the CTA: keep the one specific ask the post makes, if it makes one. Remove an ask only if it is generic engagement bait or asks people to share, tag, copy the link, or reply for a reward.
 - The first reply: keep a link or a [link] placeholder in it exactly as it is: I replace [link] with the link before posting.
 - The facts: every number, name and claim stays as it is. Add none.
 - The length: at most {limit:,} characters as X counts them (a link counts as 23). Don't make the post longer than it is.
