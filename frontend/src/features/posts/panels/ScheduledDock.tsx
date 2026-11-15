@@ -1,10 +1,12 @@
 import { Loader2 } from 'lucide-react';
 import { Notice } from '@/components/Notice';
 import { Button } from '@/components/ui/button';
+import type { ReachWarning } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { DOCK_CARD, Dock } from './Dock';
 import { formatWhen } from './panelFacts';
 import { DestinationName } from './panelParts';
+import { ReachWarnings } from './ReachWarnings';
 
 /**
  * A Scheduled Post takes no Feedback: its text is edited instead, until it is `posting`, which
@@ -14,16 +16,27 @@ export function ScheduledDock({
   scheduledPost,
   posting,
   notice,
+  warnings,
   onEdit,
 }: {
   scheduledPost: ScheduledPost;
   posting: boolean;
   /** Why the editor closed, under the card; the Post page announces it. */
   notice: string | null;
+  /** Its own text's Reach warnings. */
+  warnings: ReachWarning[];
   onEdit: () => void;
 }) {
   return (
-    <Dock name="Scheduled" notes={notice && <Notice message={notice} announced={false} />}>
+    <Dock
+      name="Scheduled"
+      notes={
+        <>
+          <ReachWarnings warnings={warnings} />
+          {notice && <Notice message={notice} announced={false} />}
+        </>
+      }
+    >
       <div className={DOCK_CARD}>
         <div className="flex min-h-10 items-center gap-3 px-4 py-3">
           {posting && (

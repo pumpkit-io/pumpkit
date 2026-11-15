@@ -7,6 +7,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 ## [Unreleased]
 
 - Pumpkit's posts no longer ask readers to share, tag or copy links, or to like, repost, follow or reply for a reward, asks X labels as spam and hides from people who don't follow you. A post meant to be shared or bookmarked earns it instead of asking, and one meant to win follows says what comes next instead of "follow". A specific question and a DM keyword stay allowed, and feedback that asks for one of these asks still gets it.
+- Reach warnings: a post's page now shows, under the post's card, what in its text may lead X to show it to fewer people: an ask to share, tag, copy the link, like, repost, follow or reply for a reward, two or more @mentions or hashtags in one part, or a link shortener, with the part it's in. One warning shows as one line and several fold into "2 reach warnings", which opens to list them. They show for a draft, a failed post and a scheduled post's own text, follow hand edits, feedback and restores, and never stop scheduling or Post now. `GET /api/v1/posts/{id}` and the `get_post` MCP tool return them as `reach_warnings`.
 
 ## [0.12.0] - 2026-11-15
 

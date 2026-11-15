@@ -21,6 +21,7 @@ from pumpkit.posts.writing.constants import FEEDBACK_MAX_CHARS
 from pumpkit.posts.writing_state import WritingState
 from pumpkit.scheduling.models import ScheduledPostState
 from pumpkit.scheduling.post_status import PostStatus
+from pumpkit.scheduling.reach_warnings import ReachWarningCode
 
 # Bounds the work of counting (about 2s at worst), with room for long URLs in a 25,000 post.
 SCHEDULED_POST_TEXT_MAX_CHARS = 30_000
@@ -110,6 +111,17 @@ class ScheduledPostResponse(BaseModel):
     posting: bool
 
 
+class ReachWarningResponse(BaseModel):
+    """Something that may lead X to show a post to fewer people; it never stops scheduling."""
+
+    # Stable for AI apps.
+    code: ReachWarningCode
+    # The Part it was found in, from 1.
+    part: Optional[int]
+    # One sentence for the User, saying what was found and what X does.
+    message: str
+
+
 class PostDetailResponse(BaseModel):
     """One Post with its Text, its Versions in order, and the status its Scheduled post gives it."""
 
@@ -132,6 +144,8 @@ class PostDetailResponse(BaseModel):
     status: Optional[PostStatus]
     # None while the Post is a Draft.
     scheduled_post: Optional[ScheduledPostResponse]
+    # For the Scheduled post's own text unless it Failed, else for the Text; worked out on each read.
+    reach_warnings: list[ReachWarningResponse]
 
 
 class BriefPostDetailResponse(BriefPostResponse):

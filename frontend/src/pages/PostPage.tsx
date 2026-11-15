@@ -21,6 +21,7 @@ import { recordDraftOpened } from '@/features/posts/list/recentDrafts';
 import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
 import { OriginLine } from '@/features/posts/panels/OriginLine';
 import { PublishedDock } from '@/features/posts/panels/PublishedDock';
+import { useReachWarnings } from '@/features/posts/useReachWarnings';
 import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
 import { TextHeader } from '@/features/posts/panels/TextHeader';
 import { UndoRedo } from '@/features/posts/panels/UndoRedo';
@@ -218,6 +219,11 @@ function LoadedPost({
     onReconnectNeeded,
   );
   useXConnectionNotice();
+  const reachWarnings = useReachWarnings(
+    loaded.id,
+    loaded.reachWarnings,
+    warningsSource(loaded.scheduledPost, text),
+  );
 
   // The request to edit is read once: a reload or a step back shows the Post, not the editor.
   useEffect(() => {
@@ -329,6 +335,7 @@ function LoadedPost({
     dock = (
       <FeedbackDock
         name="Draft"
+        warnings={reachWarnings}
         format={textVersion.format}
         feedback={feedback}
         restoreError={text.restoreError}
@@ -349,6 +356,7 @@ function LoadedPost({
     dock = (
       <FailedDock
         scheduledPost={scheduledPost}
+        warnings={reachWarnings}
         textVersion={textVersion}
         feedback={feedback}
         restoreError={text.restoreError}
@@ -370,6 +378,7 @@ function LoadedPost({
     dock = (
       <ScheduledDock
         scheduledPost={scheduledPost}
+        warnings={reachWarnings}
         posting={posting}
         notice={editClosed}
         onEdit={() => setEditing(true)}
@@ -415,6 +424,17 @@ function LoadedPost({
       {announcements}
     </>
   );
+}
+
+/**
+ * What the server works the Post's Reach warnings out from, as a key: a waiting or Published
+ * Scheduled post's own text, else the Text once saved; null while an edit or a write is out.
+ */
+function warningsSource(scheduledPost: ScheduledPost | null, text: TextSnapshot): string | null {
+  if (scheduledPost && scheduledPost.state !== 'failed')
+    return JSON.stringify([scheduledPost.parts.map((p) => p.text), scheduledPost.firstReply]);
+  if (text.save.kind !== 'saved' || text.writing || text.restoring || !text.text) return null;
+  return JSON.stringify([text.text.parts.map((p) => p.text), text.text.firstReply]);
 }
 
 /** One Post at /posts/:id, read from the server, so a reload shows the same Post. */

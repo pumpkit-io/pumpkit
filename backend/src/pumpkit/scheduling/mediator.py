@@ -52,7 +52,7 @@ from pumpkit.posts.schemas import MEDIA_RATE, IdeaResponse, MediaResponse, TextR
 from pumpkit.posts.writing.post_writing import revise_version
 from pumpkit.posts.writing.versions import WrittenVersion
 from pumpkit.posts.writing_state import is_writing, writing_state
-from pumpkit.scheduling import communities, rules, service, top_up_charges
+from pumpkit.scheduling import communities, reach_warnings, rules, service, top_up_charges
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
@@ -89,6 +89,7 @@ from pumpkit.scheduling.schemas import (
     PostDetailResponse,
     PostListItemResponse,
     PostsPageResponse,
+    ReachWarningResponse,
     ScheduledPostPartResponse,
     ScheduledPostResponse,
     ScheduledPostSummaryResponse,
@@ -764,7 +765,17 @@ async def get_post(
         failed_feedback=version_writing.failed_feedback_response(post, now=now),
         status=post_status(scheduled_post.state if scheduled_post else None) if written else None,
         scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
+        reach_warnings=_reach_warnings(post, scheduled_post),
     )
+
+
+def _reach_warnings(
+    post: Post, scheduled_post: Optional[ScheduledPost]
+) -> list[ReachWarningResponse]:
+    return [
+        ReachWarningResponse(code=w.code, part=w.part, message=w.message)
+        for w in reach_warnings.post_warnings(post, scheduled_post)
+    ]
 
 
 def _scheduled_post_summary(

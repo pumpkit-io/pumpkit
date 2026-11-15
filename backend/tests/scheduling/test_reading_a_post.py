@@ -80,6 +80,7 @@ async def test_a_draft_reads_with_its_brief_text_versions_and_no_scheduled_post(
         "failed_feedback": None,
         "status": "draft",
         "scheduled_post": None,
+        "reach_warnings": [],
     }
 
 
@@ -235,6 +236,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
         "failed_feedback": None,
         "status": "failed",
         "scheduled_post": failed,
+        "reach_warnings": [],
     }
 
 

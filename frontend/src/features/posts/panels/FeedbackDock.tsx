@@ -6,9 +6,15 @@ import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
 import { useUsage } from '@/features/billing/useUsage';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import type { AllowanceUsedUp } from '@/services/apiErrors';
-import { FEEDBACK_MAX_CHARS, type FailedFeedback, type Format } from '@/services/postService';
+import {
+  FEEDBACK_MAX_CHARS,
+  type FailedFeedback,
+  type Format,
+  type ReachWarning,
+} from '@/services/postService';
 import { Composer } from '../Composer';
 import { Dock } from './Dock';
+import { ReachWarnings } from './ReachWarnings';
 
 /** What the Feedback bar needs from `usePost`, for the Draft and Failed panels. */
 export interface FeedbackSending {
@@ -33,6 +39,7 @@ export function FeedbackDock({
   format: textFormat,
   feedback: sending,
   restoreError,
+  warnings,
 }: {
   name: string;
   /** Under the composer, such as why a Failed Post didn't go out. */
@@ -42,6 +49,7 @@ export function FeedbackDock({
   feedback: FeedbackSending;
   /** Why the last restore from History didn't happen. */
   restoreError?: string | null;
+  warnings: ReachWarning[];
 }) {
   const phone = useMediaQuery(PHONE);
   const [feedback, setFeedback] = useState('');
@@ -83,22 +91,22 @@ export function FeedbackDock({
     <Dock
       name={name}
       notes={
-        (reason || error || notice || allowanceUsedUp || restoreError || low) && (
-          <div className="space-y-2">
-            {low}
-            {reason}
-            {restoreError && <ErrorBanner message={restoreError} />}
-            {error && (
-              <ErrorBanner
-                message={error}
-                onRetry={typed ? () => void send() : undefined}
-                onDismiss={failed ? dismiss : undefined}
-              />
-            )}
-            {notice && <Notice message={notice} />}
-            {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
-          </div>
-        )
+        // Hidden while every note renders nothing, so it adds no gap under the composer.
+        <div className="space-y-2 empty:hidden">
+          {low}
+          {reason}
+          <ReachWarnings warnings={warnings} />
+          {restoreError && <ErrorBanner message={restoreError} />}
+          {error && (
+            <ErrorBanner
+              message={error}
+              onRetry={typed ? () => void send() : undefined}
+              onDismiss={failed ? dismiss : undefined}
+            />
+          )}
+          {notice && <Notice message={notice} />}
+          {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
+        </div>
       }
     >
       <Composer

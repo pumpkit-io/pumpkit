@@ -1,6 +1,6 @@
 import { Notice } from '@/components/Notice';
 import { destinationDraftOf } from '@/features/scheduledPosts/communities';
-import type { Version } from '@/services/postService';
+import type { ReachWarning, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { PostToButton } from '../postTo/PostToButton';
 import { useRetryFailed } from '../postTo/senders';
@@ -15,12 +15,15 @@ export function FailedDock({
   feedback,
   restoreError,
   notice,
+  warnings,
 }: {
   scheduledPost: ScheduledPost;
   /** The Text, as the Version it came from. */
   textVersion: Version;
   feedback: FeedbackSending;
   restoreError?: string | null;
+  /** The Text's Reach warnings, which a retry would carry. */
+  warnings: ReachWarning[];
   /** Why the editor closed, under the reason; the Post page announces it. */
   notice: string | null;
 }) {
@@ -43,6 +46,7 @@ export function FailedDock({
       format={textVersion.format}
       feedback={feedback}
       restoreError={restoreError}
+      warnings={warnings}
     />
   );
 }
