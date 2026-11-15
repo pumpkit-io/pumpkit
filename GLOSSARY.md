@@ -130,6 +130,10 @@ _Avoid_: credits, credit pack, add-on, extra usage
 A User's own account of who they are on X, what they post about, who they write for, what they post for and what they can point readers to, as one free text. Pumpkit drafts it from their X profile and recent posts, and the User edits it.
 _Avoid_: bio, profile, niche, brand
 
+**Positioning draft**:
+The text Pumpkit writes for a User's Positioning from their X profile and recent posts, once, starting when they sign in without one. It is not their Positioning until they save it.
+_Avoid_: suggestion, generated positioning, Draft (a Draft is a Post)
+
 **Persona**:
 What Pumpkit writes a User's Posts around: their Positioning, which they edit on the Persona page. A User with no Positioning has an empty Persona and cannot plan a Brief.
 _Avoid_: voice, style, profile
