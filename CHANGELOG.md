@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-15
+
 - Local personal testing now works with `docker compose -f compose.dev.yml up --build` at localhost:5173 without extra development URL settings, retaining the existing database and media. X callbacks relay through the registered loopback address; local billing accepts Stripe sandbox credentials, while agents retain isolated emulator stacks. **Upgrade notes:** register `http://127.0.0.1:5173/oauth/x/callback` on the X app. Replace the removed `dev-personal`, `--personal` and `--real-x` startup paths with plain Compose; old mode volumes are left untouched, with recovery instructions in `docs/agents/dev-stack.md`. Scheduled publishing follows `.env` and defaults to enabled.
 
 - AI apps now write posts in two steps, as New post does. The `plan_posts` MCP tool plans a brief and answers with the separate ideas it holds, each with its plan, and one post covering the whole brief, and writes nothing, even for a brief with one idea. The app shows the user the ideas and asks which to write, and `write_posts` starts writing the ones picked, or the one post covering everything, and answers with the posts' ids, which `get_post` reads until they are written. `write_posts` refuses what New post refuses: both kinds, even across two calls, an idea already written, and too few generations or attempts left for all of them. Planning uses no generation and counts toward the 20 plan calls an hour the user has in the web app. The `start_post` MCP tool is removed: an app that calls it gets an unknown-tool error. Pumpkit's instructions to AI apps now describe the positioning and the two steps.
