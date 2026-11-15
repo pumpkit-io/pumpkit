@@ -968,3 +968,60 @@ async def test_thread_feedback_over_mcp_is_written_from_the_thread_prompts(
     assert result["isError"] is False, result
     assert [call.response_model for call in fake_llm.calls] == [REVISED_THREAD, HUMANIZED_THREAD]
     assert _system_text(fake_llm.calls[0]).startswith("# Role\n\nYou revise one thread on X")
+
+
+# Calm hooks, plain link pointers and no added mentions (ADR 0032)
+
+
+async def test_a_threads_hooks_name_their_topic_and_stay_calm(client, ready, fake_llm):
+    await _write_thread(client, fake_llm)
+
+    for guide in _guides(fake_llm):
+        assert (
+            '- curiosity_gap: "My RAG evals looked perfect for a month. The test set was in the '
+            'index."'
+        ) in guide
+        assert (
+            '- contrarian: "Posting every day made my account worse. I post three times a week '
+            'now."'
+        ) in guide
+        assert "99% of founders" not in guide
+        assert "F*ck" not in guide
+        assert (
+            "- A curiosity gap names its topic and opens one specific question. A gap with no "
+            'topic ("this changes everything") is clickbait, and readers mark it "not '
+            'interested".'
+        ) in guide
+
+
+@pytest.mark.parametrize(
+    ("desired_action", "funnel"), [("click", "MOF"), ("sign-up", "BOF"), ("buy", "BOF")]
+)
+async def test_the_pointer_to_a_threads_link_is_one_plain_line(
+    client, ready, fake_llm, desired_action, funnel
+):
+    await _write_thread(client, fake_llm, desired_action=desired_action, funnel=funnel)
+
+    for guide in _guides(fake_llm):
+        assert (
+            '- The pointer to the link in the last part is one plain line ("Everything above is '
+            'in the repo"). No urgency or hype to click ("you NEED to see this", "before it\'s '
+            'gone").'
+        ) in guide
+
+
+async def test_a_thread_adds_no_mention_the_raw_input_does_not_name(client, ready, fake_llm):
+    await _write_thread(client, fake_llm)
+    fake_llm.calls.clear()
+    await _thread_with_feedback(client, fake_llm)
+
+    guides = [_system_text(c) for c in _calls(fake_llm, REVISED_THREAD)]
+    assert len(guides) == 1
+    fake_llm.calls.clear()
+    await _write_thread(client, fake_llm)
+    guides += _guides(fake_llm)
+    for guide in guides:
+        assert (
+            "- No @mentions, unless the raw input names the account and the post is about it. "
+            "Never more than one."
+        ) in guide[guide.index("# Never add") :]

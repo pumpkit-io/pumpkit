@@ -85,9 +85,9 @@ Combine two or three of these into one or two sentences. The examples show the s
 
 - bold_claim: "Copywriting is the most underrated skill on X."
 - callout: "If you're a founder with under 1K followers, read this."
-- curiosity_gap: "I just realized something 99% of founders miss."
+- curiosity_gap: "My RAG evals looked perfect for a month. The test set was in the index."
 - clear_outcome: "How to write posts like the top 1%."
-- contrarian: "F*ck posting volume. You NEED to post less."
+- contrarian: "Posting every day made my account worse. I post three times a week now."
 - story: "It took me 8 years to realize this..."
 - number_list: "7 copywriting rules I wish I knew 6 years ago."
 - proof: "This post got 2M views. I analyzed why (takeaways)."
@@ -99,6 +99,7 @@ Combine two or three of these into one or two sentences. The examples show the s
 - Make it about the reader.
 - Keep it short. Cut every word that isn't doing work.
 - Create tension: a question, a surprise, a contradiction, a need for the value. Open a loop the reader needs closed.
+- A curiosity gap names its topic and opens one specific question. A gap with no topic ("this changes everything") is clickbait, and readers mark it "not interested".
 - If the best line of the post is at the bottom, move it to the top.
 - Be creative. A reader skips a hook they've seen countless times. Stock openers ("Unpopular opinion:", "Hot take:", "Most people don't realize this:", "Here's the thing:") read as boring and as AI.
 
@@ -157,6 +158,7 @@ NEVER_ADD = """\
 - No headings or titles. No bold, italic or markdown.
 - No bullet characters, unless the raw input asks for it. Otherwise list items are plain lines, numbered "1." only when the order or the count matters.
 - No em dashes. No "it's not X, it's Y". No "No X. No Y. Just Z."
+- No @mentions, unless the raw input names the account and the post is about it. Never more than one.
 - Plain text only: it goes straight into the X composer."""
 
 # What X's spam classifiers label, so the post isn't hidden from non-followers (ADR 0032).
@@ -300,7 +302,8 @@ I want the reader to click through to something.
 
 - Say exactly what they get on the other side and why it's worth the click.
 - The post still gives real value on its own.
-{click_link}""",
+{click_link}
+{pointer}""",
     },
     "DM": {
         "levers": "payoff + proof + loss_aversion",
@@ -318,7 +321,8 @@ I want the reader to DM me.
 I want the reader to sign up.
 
 - Say what they sign up for, who it's for and what they get, in specifics from the raw input.
-{link}""",
+{link}
+{pointer}""",
     },
     "buy": {
         "levers": "payoff + proof + loss_aversion",
@@ -328,7 +332,8 @@ I want the reader to buy.
 
 - Say what it is, who it's for, what it changes for them, and the price if the raw input gives it.
 - Proof before the ask.
-{link}""",
+{link}
+{pointer}""",
     },
 }
 
@@ -342,6 +347,7 @@ class LinkPlacement:
     link_place: str
     click_link: str
     link: str
+    pointer: str
 
 
 # A single post's link goes in its first reply (ADR 0027).
@@ -351,6 +357,7 @@ POST_LINKS = LinkPlacement(
     link_place="the first reply",
     click_link="- A native link (a thread, an X Article, my profile, my pinned post) can sit in the post. An external link goes in `first_reply`, and the post's closer says it is there.",
     link="- The link goes in `first_reply`. The post's closer says it is there.",
+    pointer='- The pointer to the link, in the post and in `first_reply`, is one plain line ("Repo\'s in the first reply"). No urgency or hype to click ("you NEED to see this", "before it\'s gone").',
 )
 
 # A Thread has no first reply: its link goes in its last Part.
@@ -360,6 +367,7 @@ THREAD_LINKS = LinkPlacement(
     link_place="the last part",
     click_link="- A native link (another thread, an X Article, my profile, my pinned post) can sit in any part. An external link goes in the last part, and the closer says what it leads to.",
     link="- The link goes in the last part, and the closer says what it leads to.",
+    pointer='- The pointer to the link in the last part is one plain line ("Everything above is in the repo"). No urgency or hype to click ("you NEED to see this", "before it\'s gone").',
 )
 
 
