@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '../fixtures';
 import { runSeedScript } from '../backend';
+import { subscribe } from '../paywall';
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
@@ -7,21 +8,6 @@ const DRAFTED =
   "I'm a solo founder building a pricing tool. I post about pricing for people starting their first SaaS.";
 const ADDED = ' I post to earn sign-ups.';
 const NOT_READ = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
-
-const MONTHLY = /^(Start trial|Subscribe): .*month/i;
-
-/** Subscribes through the Stripe Emulator's Checkout, which ends on Onboarding. */
-async function subscribe(page: Page) {
-  // The Paywall's Plans are rate limited per client, so reload until they list.
-  await expect(async () => {
-    await page.goto('/subscribe');
-    await expect(page.getByRole('button', { name: MONTHLY })).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 70_000 });
-  for (const box of await page.getByRole('checkbox').all()) await box.check();
-  await page.getByRole('button', { name: MONTHLY }).click();
-  await page.getByRole('button', { name: 'Pay' }).click();
-  await expect(page).toHaveURL(/\/onboarding$/);
-}
 
 // This User has no Positioning and has not finished Onboarding.
 test.describe('a seeded User', () => {
@@ -52,11 +38,8 @@ test.describe('a seeded User', () => {
   test('the Persona step drafts the positioning, and Continue saves the edit and opens New post for good', async ({
     page,
   }) => {
-    // The stack's model is real and costs money, so the draft the server keeps is answered here.
+    // The fixture stops the draft starting, so the draft the server keeps is answered here.
     let ready = false;
-    await page.route('**/api/v1/positioning/draft/start', (route) =>
-      route.fulfill({ status: 202, body: '' }),
-    );
     await page.route('**/api/v1/positioning', (route) => {
       if (route.request().method() !== 'GET') return route.fallback();
       const draft = ready
@@ -91,27 +74,31 @@ test.describe('a seeded User', () => {
     await expect(page).toHaveURL(/\/new$/);
   });
 
-  test('the Persona step opens empty with the reason when no draft can be made', async ({
-    page,
-  }) => {
-    // Without an X connection the backend reads nothing and asks no model.
-    await page.goto('/onboarding');
+  test.describe('without an X connection', () => {
+    // The backend reads nothing and asks no model, so the draft really starts.
+    test.use({ realDraftStart: true });
 
-    const step = page.getByRole('region', { name: 'Who you are on X' });
-    const field = step.getByRole('textbox', { name: 'Who you are on X' });
-    await expect(step.getByText(NOT_READ)).toBeVisible();
-    await expect(field).toBeEnabled();
-    await expect(field).toHaveValue('');
-    const continueButton = step.getByRole('button', { name: 'Continue' });
-    await expect(continueButton).toBeDisabled();
+    test('the Persona step opens empty with the reason when no draft can be made', async ({
+      page,
+    }) => {
+      await page.goto('/onboarding');
 
-    await page.reload();
-    await expect(page).toHaveURL(/\/onboarding$/);
-    await field.fill('I post about pricing for first-time founders.');
-    await continueButton.click();
+      const step = page.getByRole('region', { name: 'Who you are on X' });
+      const field = step.getByRole('textbox', { name: 'Who you are on X' });
+      await expect(step.getByText(NOT_READ)).toBeVisible();
+      await expect(field).toBeEnabled();
+      await expect(field).toHaveValue('');
+      const continueButton = step.getByRole('button', { name: 'Continue' });
+      await expect(continueButton).toBeDisabled();
 
-    await expect(page).toHaveURL(/\/new$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'New post' })).toBeVisible();
+      await page.reload();
+      await expect(page).toHaveURL(/\/onboarding$/);
+      await field.fill('I post about pricing for first-time founders.');
+      await continueButton.click();
+
+      await expect(page).toHaveURL(/\/new$/);
+      await expect(page.getByRole('heading', { level: 1, name: 'New post' })).toBeVisible();
+    });
   });
 });
 
@@ -121,7 +108,7 @@ test.describe('signing in with X', () => {
     page,
   }) => {
     runSeedScript('leaver.py');
-    // The stack's model is real and costs money, so the draft the server keeps is answered here.
+    // The draft starts are counted here, and the draft the server keeps is answered.
     let starts = 0;
     let ready = false;
     await page.route('**/api/v1/positioning/draft/start', (route) => {

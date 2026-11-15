@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures';
 import { createXCallbackRelay } from '../../frontend/localXCallbackRelay';
 
 test.describe('localhost X callback transport', () => {

@@ -2,6 +2,8 @@
 
 Run the normal default-off suite with `E2E_BASE_URL=<Dev URL> npm test` from this directory. Use `scripts/dev-stack` from the repository root to manage its stack.
 
+Specs import `test` and `expect` from `fixtures.ts`, not `@playwright/test`. Its fixture answers every `POST /api/v1/positioning/draft/start` itself, because each sign-in starts a Positioning draft and the stack's twitterapi.io and model are real and paid. A spec that needs the backend's own start sets `test.use({ realDraftStart: true })`; one that counts the starts routes the request on its page, which wins over the fixture.
+
 `make e2e-managed-payments`, from the repository root, restarts the stack with `STRIPE_MANAGED_PAYMENTS=true` and reruns `tests/stripe-emulator.spec.ts` with `E2E_STRIPE_MANAGED_PAYMENTS=1`, which makes the spec expect every Checkout in Managed Payments mode. CI runs it after `make e2e`.
 
 ## Coupon journeys

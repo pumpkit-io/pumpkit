@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../fixtures';
 import { runSeedScript } from '../backend';
+import { deliveries, openPaywall, subscribe } from '../paywall';
 
 // Leaver signs in through the X Emulator, so every run starts from a fresh account.
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -34,52 +35,11 @@ async function revokes(page: Page, emulator: string): Promise<number> {
   return events.filter((e) => e.kind === 'revoke' && e.userId === LEAVER_X_ID).length;
 }
 
-const MONTHLY = /^(Start trial|Subscribe): .*month/i;
-
-async function openPaywall(page: Page) {
-  // The Paywall's Plans are rate limited per client, so reload until they list.
-  await expect(async () => {
-    await page.goto('/subscribe');
-    await expect(page.getByRole('button', { name: MONTHLY })).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 70_000 });
-}
-
-interface Delivery {
-  event: string;
-  object: string;
-  customer: string | null;
-}
-
-async function deliveries(page: Page, stripe: string): Promise<Delivery[]> {
-  return (await page.request.get(`${stripe}/_pumpkit/webhook-deliveries`)).json();
-}
-
-/** Subscribes through the Stripe Emulator's Checkout; answers with its origin and the customer. */
-async function subscribe(page: Page): Promise<{ stripe: string; customer: string }> {
-  await openPaywall(page);
-  for (const box of await page.getByRole('checkbox').all()) await box.check();
-  await page.getByRole('button', { name: MONTHLY }).click();
-  const pay = page.getByRole('button', { name: 'Pay' });
-  await expect(pay).toBeVisible();
-  const checkout = new URL(page.url());
-  const sessionId = checkout.pathname.split('/').pop() ?? '';
-  await pay.click();
-  await expect(page).toHaveURL(/\/onboarding$/);
-  const customer = (await deliveries(page, checkout.origin)).find(
-    (d) => d.object === sessionId,
-  )?.customer;
-  if (!customer) throw new Error('The Emulator delivered no event for the Checkout');
-  return { stripe: checkout.origin, customer };
-}
-
 test('a User deletes their account with a running subscription, which ends, and signing in again starts a fresh one', async ({
   page,
 }) => {
   runSeedScript('leaver.py');
-  // The stack's model is real and costs money, so the draft the server keeps is answered here.
-  await page.route('**/api/v1/positioning/draft/start', (route) =>
-    route.fulfill({ status: 202, body: '' }),
-  );
+  // The fixture stops the draft starting, so the draft the server keeps is answered here.
   await page.route('**/api/v1/positioning', (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     const draft = { state: 'ready', text: 'I post about leaving.', reason: null };

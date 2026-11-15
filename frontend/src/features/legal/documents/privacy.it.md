@@ -40,7 +40,7 @@ La foto segue X quando Pumpkit recupera nuovamente il profilo per l'accesso o l'
 
 ### Positioning e la sua bozza {#data-positioning}
 
-- **Quali dati:** il tuo Positioning, le poche frasi che salvi su chi sei su X, e la sua bozza. Quando accedi con X e non hai un Positioning, Pumpkit legge il tuo profilo X (handle, bio, località e sito web) e i tuoi 20 post più recenti tramite twitterapi.io e li invia a OpenRouter per scrivere la bozza del tuo Positioning. Questo avviene all'accesso, prima che tu ti abboni. Pumpkit conserva la bozza, non salvata, e il momento di ogni richiesta di bozza, che limita le bozze a 5 al giorno. Non conserva i post che ha letto.
+- **Quali dati:** il tuo Positioning, le poche frasi che salvi su chi sei su X, e la sua bozza. Quando accedi con X e non hai un Positioning, Pumpkit prende l'handle, la bio, la località e il sito web che X gli fornisce al tuo accesso, legge fino a 20 dei tuoi post più recenti tramite twitterapi.io e li invia a OpenRouter per scrivere la bozza del tuo Positioning. Questo avviene all'accesso, prima che tu ti abboni. Pumpkit conserva la bozza, non salvata, e l'ora di ogni richiesta di bozza, che usa per limitare le bozze a 5 al giorno. Non conserva i post che ha letto.
 - **Perché:** per pianificare ogni Post intorno al tuo Positioning e avere una bozza pronta quando arrivi al passaggio Persona.
 - **Base giuridica:** esecuzione del contratto, comprese le misure che adotti prima di abbonarti (art. 6, par. 1, lett. b) GDPR).
 
@@ -148,7 +148,7 @@ Il Gestore non usa i tuoi Brief, Feedback o Versioni per addestrare modelli di i
 
 - **Contenuti dell'account** (il tuo profilo, l'identità X stabile, il Positioning, i Brief, i Feedback, le Versioni, gli Inspiration author, gli Scheduled post e le credenziali di pubblicazione): fino all'eliminazione del tuo account.
 - **Media:** ogni file viene eliminato dal server non appena il post X che lo contiene è pubblicato; l'anteprima e il testo alternativo restano con il Post fino all'eliminazione del tuo account. I Media che né il testo di un Post né uno Scheduled post contengono più, come quelli che rimuovi da entrambi, vengono eliminati insieme all'anteprima entro due ore. I Media che rimuovi da uno Scheduled post mentre il testo del Post li contiene ancora vengono eliminati quando quella parte è pubblicata su X, oppure quando li rimuovi anche dal testo.
-- **Bozza del Positioning:** finché non salvi un Positioning o il tuo account viene eliminato. Ogni richiesta di bozza resta finché non ha più di un giorno e ne fai un'altra, o finché il tuo account viene eliminato.
+- **Bozza del Positioning:** finché non salvi un Positioning o il tuo account viene eliminato. L'ora di ogni richiesta di bozza resta finché non ha più di un giorno e chiedi un'altra bozza, o finché il tuo account viene eliminato.
 - **Link di caricamento:** un giorno dopo la scadenza, che arriva 15 minuti dopo che un'app di intelligenza artificiale li ha chiesti.
 - **Registrazioni delle Sessioni:** 90 giorni dalla scadenza. Eventuali dati conservati da precedenti accessi con Magic link seguono lo stesso termine di 90 giorni. I tentativi di autorizzazione X scadono dopo 10 minuti e sono monouso; i dati dei tentativi scaduti vengono rimossi quando inizia un altro accesso.
 - **Connected app:** finché non scolleghi l'app o il tuo account non viene eliminato. I dati di un'app scollegata e i suoi token vengono eliminati 90 giorni dopo che l'hai scollegata, e un token scaduto entro 90 giorni dalla scadenza.

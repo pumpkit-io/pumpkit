@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures';
 import { runSeedScript } from '../backend';
 
 test('Settings shows the seeded X identity without replacement controls', async ({ page }) => {

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../fixtures';
 import { runSeedScript } from '../backend';
 
 const E2E_ACCOUNT = 'E2E User (e2e@e2e-user.dev)';
