@@ -65,7 +65,8 @@ _ASK_WORD = re.compile(
 )
 _LABELED_WORD = re.compile(r"like|share|repost|retweet|rt|follow|subscribe", re.IGNORECASE)
 # "Record a Loom, then share it" goes on with the writer's own steps; only an order on this
-# post or an "if" before it makes the "then" clause an ask, else only a share aimed at one.
+# post or an "if" before it makes the "then" clause an ask, else only a share aimed at this
+# post or at someone.
 _THEN_CLAUSE = re.compile(r"\s*then\b", re.IGNORECASE)
 _ON_THIS = re.compile(r"\s+(?:this|it|the\s+(?:post|thread|tweet))\b|\W*$", re.IGNORECASE)
 _IF = re.compile(r"if\b", re.IGNORECASE)
@@ -79,12 +80,18 @@ _NOT_A_TIME = r"(?!\s+(?:week|weekend|month|year|morning|evening)\b)"
 _END = r"[^\w,:]*$"
 # What may follow "like this" or "repost it" in an order, unlike "Like it or not".
 _THEN = rf"(?={_END}|\s+(?:and|&|\+|if|so|to|for|too|now|please)\b)"
-# A share aimed at this post or at a person, which asks even after the writer's own steps.
-_SHARE_AIMED = (
+# A share aimed at this post or at a person, which asks even before "before" or "after".
+_AIMED_SHARE_PATTERN = (
     rf"share\s+this(?:\s+(?:post|thread|tweet))?\b{_NOT_A_TIME}"
     r"|share\s+it\s+with\s+(?:a|an|someone|somebody)\b"
 )
-_AIMED_SHARE = re.compile(_SHARE_AIMED, re.IGNORECASE)
+# After the writer's own steps, "then share this file" is one more step: only a share naming
+# the post, ending its clause or going to someone asks.
+_AIMED_SHARE = re.compile(
+    r"share\s+(?:this\s+(?:post|thread|tweet)\b|this(?=[^\w,:]*(?:$|[,:]))"
+    r"|(?:this|it)\s+with\s+(?:a|an|someone|somebody)\b)",
+    re.IGNORECASE,
+)
 _PERSON = (
     r"(?:friends?|someone|co-?founders?|founders?|devs?|developers?|engineers?|colleagues?"
     r"|co-?workers?|teammates?|team|boss|manager|mates?|buddy|buddies|pals?|partner|designers?"
@@ -98,7 +105,7 @@ _RESOURCE = (
     r"|slides|scripts?|repo|invites?|discount|framework|spreadsheet|(?:tool)?kit|notion|copy"
     r"|video|recording|breakdown|resources?|details|dm)\b"
 )
-# Advice on code comments, as in "comment for the reader, not the compiler", trades nothing.
+# Advice such as "comment for the reader" and idioms such as "reply for the record" trade nothing.
 _NOT_TRADED = (
     r"(?!\s+(?:record|win|sake)\b|\s+(?:(?:next|future|code)\s+)?(?:why|what|how|readers?"
     r"|compiler|reviewers?|review|developers?|devs?|teammates?|team|maintainers?)"
@@ -126,22 +133,24 @@ class _Ask:
     anywhere: Optional[re.Pattern[str]] = None
 
 
-_ASKS = [
-    _Ask(
-        "share_ask",
-        "asks readers to share it, and X hides posts that ask for shares from people who don't "
-        "follow you.",
-        order=_ignoring_case(
-            rf"{_SHARE_AIMED}"
-            # "Share it with your team before the launch" is a step in the writer's how-to.
-            rf"|share(?:\s+{_THIS}\b{_NOT_A_TIME}|(?=\s+(?:with|if)\b)|{_END})"
-            r"(?![^,.]{0,80}\b(?:before|after|during|until)\b)"
-            rf"|(?:send|forward)\s+{_THIS}\s+(?:along\b|to\s+(?:the\s+)?[\w-]+\s+who\b"
-            r"|to\s+(?:a|an|your|them|him|her|someone|somebody|anyone|everyone|every|those)\b"
-            r"(?!\s+(?:users?|customers?|clients?)\b))"
-            rf"|pass\s+{_THIS}\s+(?:on|along)\b"
-        ),
+_SHARE_ASK = _Ask(
+    "share_ask",
+    "asks readers to share it, and X hides posts that ask for shares from people who don't "
+    "follow you.",
+    order=_ignoring_case(
+        _AIMED_SHARE_PATTERN
+        # "Share it with your team before the launch" is a step in the writer's how-to.
+        + rf"|share(?:\s+{_THIS}\b{_NOT_A_TIME}|(?=\s+(?:with|if)\b)|{_END})"
+        r"(?![^,.]{0,80}\b(?:before|after|during|until)\b)"
+        rf"|(?:send|forward)\s+{_THIS}\s+(?:along\b|to\s+(?:the\s+)?[\w-]+\s+who\b"
+        r"|to\s+(?:a|an|your|them|him|her|someone|somebody|anyone|everyone|every|those)\b"
+        r"(?!\s+(?:users?|customers?|clients?)\b))"
+        rf"|pass\s+{_THIS}\s+(?:on|along)\b"
     ),
+)
+
+_ASKS = [
+    _SHARE_ASK,
     _Ask(
         "tag_ask",
         "asks readers to tag someone, and X hides posts that ask for tags from people who "
@@ -298,7 +307,7 @@ def _asks_in(text: str) -> set[ReachWarningCode]:
             for start, aimed_only in _clause_starts(sentence, clauses[index], listed[index]):
                 if aimed_only:
                     if _AIMED_SHARE.match(sentence, start):
-                        found.add("share_ask")
+                        found.add(_SHARE_ASK.code)
                     continue
                 found.update(
                     ask.code for ask in _ASKS if ask.order and ask.order.match(sentence, start)

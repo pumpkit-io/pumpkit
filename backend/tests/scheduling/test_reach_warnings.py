@@ -370,6 +370,11 @@ CLEAN = [
         "Write tests. Comment for your teammates. Ship small PRs.", id="comment-for-teammates"
     ),
     pytest.param("Open a PR, then share it with your reviewer.", id="open-a-pr-then-share"),
+    pytest.param(
+        "Export the report, then share this link with your team.", id="then-share-this-link"
+    ),
+    pytest.param("Ship it, then share this file with your boss.", id="then-share-this-file"),
+    pytest.param("Build it, then share this with your manager.", id="then-share-this-with-your"),
     pytest.param("Write. Share. Save. Repeat.", id="write-share-save-repeat"),
     pytest.param(
         "Comment for the code reviewer, not yourself.",
