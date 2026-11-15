@@ -715,3 +715,52 @@ async def test_a_version_whose_cta_is_share_or_bookmark_still_validates(
 
     assert response.status_code == 201, response.text
     assert (await _version(db)).cta_type == cta_type
+
+
+# Calm hooks, plain link pointers and no added mentions (ADR 0032)
+
+HOOK_EXAMPLES = (
+    '- curiosity_gap: "My RAG evals looked perfect for a month. The test set was in the index."',
+    '- contrarian: "Posting every day made my account worse. I post three times a week now."',
+)
+CURIOSITY_GAP_RULE = (
+    "- A curiosity gap names its topic and opens one specific question. A gap with no topic "
+    '("this changes everything") is clickbait, and readers mark it "not interested".'
+)
+MENTIONS_RULE = (
+    "- No @mentions, unless the raw input names the account and the post is about it. "
+    "Never more than one."
+)
+
+
+async def test_the_hook_examples_name_their_topic_and_stay_calm(client, ready, fake_llm):
+    guide = await _guide(client, fake_llm)
+
+    for example in HOOK_EXAMPLES:
+        assert example in guide
+    assert "99% of founders" not in guide
+    assert "F*ck" not in guide
+    craft = guide[guide.index("## How to craft it") : guide.index("## The hook must be honest")]
+    assert CURIOSITY_GAP_RULE in craft
+
+
+@pytest.mark.parametrize(
+    ("desired_action", "funnel"), [("click", "MOF"), ("sign-up", "BOF"), ("buy", "BOF")]
+)
+async def test_the_pointer_to_the_first_reply_link_is_one_plain_line(
+    client, ready, fake_llm, desired_action, funnel
+):
+    guide = await _guide(client, fake_llm, desired_action=desired_action, funnel=funnel)
+
+    assert (
+        "- The pointer to the link, in the post and in `first_reply`, is one plain line "
+        '("Repo\'s in the first reply"). No urgency or hype to click ("you NEED to see this", '
+        '"before it\'s gone").'
+    ) in guide
+
+
+async def test_never_add_forbids_mentions_the_raw_input_does_not_name(client, ready, fake_llm):
+    guide = await _guide(client, fake_llm)
+
+    never_add = guide[guide.index("# Never add") :]
+    assert MENTIONS_RULE in never_add
