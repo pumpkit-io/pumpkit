@@ -26,6 +26,7 @@ it('offers only X, named for screen readers, without an authorization note', () 
   show();
   const button = screen.getByRole('button', { name: 'Continue with X' });
   expect(button).toHaveTextContent(/^Continue with$/);
+  expect(button.querySelector('svg')).toBeInTheDocument();
   expect(screen.queryByText(/authorizes/)).not.toBeInTheDocument();
   expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   expect(screen.queryByText(/Continue with Google/)).not.toBeInTheDocument();
@@ -35,9 +36,11 @@ it('opens X once and disables repeated activation', async () => {
   vi.mocked(xSignInService.start).mockResolvedValue('https://x.com/authorize');
   show();
   fireEvent.click(screen.getByRole('button', { name: 'Continue with X' }));
-  const opening = screen.getByRole('button', { name: 'Opening X…' });
+  const opening = screen.getByRole('button', { name: 'Continue with X' });
   expect(opening).toBeDisabled();
+  expect(opening).toHaveAttribute('aria-busy', 'true');
   expect(opening).toHaveTextContent(/^Opening\s*…$/);
+  expect(opening.querySelector('svg')).toBeInTheDocument();
   expect(redirectTo).not.toHaveBeenCalled();
   await vi.waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://x.com/authorize'));
   expect(xSignInService.start).toHaveBeenCalledTimes(1);

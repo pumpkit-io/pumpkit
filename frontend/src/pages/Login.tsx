@@ -86,21 +86,14 @@ export function Login() {
                   className={cn(CTA_CLASSES, 'h-11 w-full gap-[0.4em]')}
                   disabled={loading}
                   aria-busy={loading}
-                  aria-label={loading ? 'Opening X…' : 'Continue with X'}
+                  aria-label="Continue with X"
                   onClick={() => void continueWithX()}
                 >
-                  {loading ? (
-                    <>
-                      Opening{' '}
-                      <span className="inline-flex items-center">
-                        <XLogo decorative />…
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      Continue with <XLogo decorative />
-                    </>
-                  )}
+                  {loading ? 'Opening' : 'Continue with'}
+                  <span className="inline-flex items-center">
+                    <XLogo decorative />
+                    {loading && '…'}
+                  </span>
                 </Button>
               </div>
             </div>

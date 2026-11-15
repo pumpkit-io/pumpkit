@@ -6,7 +6,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
-- The login card's button shows the X logo, "Continue with" and "Opening" while X's authorization page loads, and screen readers still hear "Continue with X". The note on what signing in with X authorizes is gone from the login card, since X's own consent screen says it. Coming back from X shows "Signing you in with" and the logo.
+- The login button and the sign-in screen show the X logo, and the login card no longer has the publishing note.
 
 ## [0.12.0] - 2026-11-15
 

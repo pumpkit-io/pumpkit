@@ -38,7 +38,7 @@ Always use X's photo and remove Pumpkit photo editing, uploading, removal and so
 
 Retain the current UI direction rather than introducing a new visual identity. Reuse existing light and dark theme tokens, the mascot and motion preferences, Inter body text, Bricolage Grotesque display text where already used, spacing and components. The existing brand references are Pumpkin `#D96B45`, Charcoal `#20201E`, Ivory `#F7F5EF` and Olive `#66734E`; use the existing semantic tokens for actual surfaces, text and controls.
 
-Login keeps the existing two-column desktop layout with the mascot aside; narrow screens keep the single content column. Content remains left aligned inside the centered login card. Replace the Google button, divider and email form with one full-width Continue with X button and a plain sentence explaining that continuing also authorizes publishing. Keep the existing legal links and footer.
+Login keeps the existing two-column desktop layout with the mascot aside; narrow screens keep the single content column. Content remains left aligned inside the centered login card. Replace the Google button, divider and email form with one full-width Continue with X button. Spec #523 later dropped the sentence explaining that continuing also authorizes publishing: X's own consent screen states what signing in authorizes, so the card holds only the button. Keep the existing legal links and footer.
 
 ```text
 Desktop login
@@ -61,7 +61,7 @@ While opening X, disable the login button and show Opening X…. The callback sh
 
 The existing reconnect banner explains that scheduled posts cannot go out and offers Reconnect X. Show progress while opening X and an actionable error if it fails. Reject a mismatched account without changing identity or saved publishing credentials. Profile loading retains a status message; an unavailable X photo uses the existing initials fallback, without an upload or removal action.
 
-Review against the brief: the plan removes unnecessary sign-in and connection choices, makes the publishing permission explicit, and preserves Pumpkit's existing identity. It sets no new design direction and needs no new fonts, palette or decorative elements.
+Review against the brief: the plan removes unnecessary sign-in and connection choices, leaves the publishing permission to X's consent screen, and preserves Pumpkit's existing identity. It sets no new design direction and needs no new fonts, palette or decorative elements.
 
 ## Eligibility retention
 

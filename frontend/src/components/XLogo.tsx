@@ -13,7 +13,7 @@ export function XLogo({ className, label = 'X', decorative = false }: XLogoProps
     <svg
       viewBox="0 0 1200 1227"
       fill="currentColor"
-      className={cn('inline-block h-[0.85em] w-auto shrink-0 align-[-0.05em]', className)}
+      className={cn('inline-block h-[0.85em] w-[0.83em] shrink-0 align-[-0.05em]', className)}
       {...(decorative ? { 'aria-hidden': true } : { role: 'img', 'aria-label': label })}
       focusable="false"
     >
