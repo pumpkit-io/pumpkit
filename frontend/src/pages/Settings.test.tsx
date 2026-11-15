@@ -1048,21 +1048,8 @@ describe('Settings', () => {
       ]);
     });
 
-    it('says a running subscription ends now, with no refund', async () => {
-      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
-      const dialog = await openDeletion();
-
-      expect(await dialog.findByText('ends your subscription now, with no refund')).toBeVisible();
-      await waitFor(() =>
-        expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-          'ends your subscription now, with no refund',
-          'disconnects X and every connected AI app',
-        ]),
-      );
-    });
-
-    it.each(['past_due', 'unpaid'] as const)(
-      'warns that deleting ends a %s subscription, since a running one is cancelled at once',
+    it.each(['trialing', 'active', 'past_due', 'unpaid', 'paused'] as const)(
+      'warns that deleting ends a %s subscription',
       async (status) => {
         vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
           ...SUBSCRIBED,

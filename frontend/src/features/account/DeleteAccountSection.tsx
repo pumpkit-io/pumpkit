@@ -25,8 +25,7 @@ function normalizeHandle(handle: string): string {
   return handle.trim().replace(/^@/, '').toLowerCase();
 }
 
-/** The Running statuses, each of which deleting the account cancels at once. */
-const ENDED_BY_DELETION: ReadonlySet<SubscriptionStatus> = new Set([
+const RUNNING_STATUSES: ReadonlySet<SubscriptionStatus> = new Set([
   'trialing',
   'active',
   'past_due',
@@ -41,7 +40,7 @@ const ENDED_BY_DELETION: ReadonlySet<SubscriptionStatus> = new Set([
 function useLosses(usage: Usage | null): string[] {
   const me = useBilling().data?.me;
   const status = me?.subscription?.status;
-  const ending = status !== undefined && ENDED_BY_DELETION.has(status);
+  const ending = status !== undefined && RUNNING_STATUSES.has(status);
   // Only a Subscribed User's usage lists their Top-ups.
   const holdsTopUps =
     Boolean(me?.subscribed) && (usage === null || (usage.allowance?.topUps.length ?? 0) > 0);
