@@ -231,8 +231,9 @@ async def test_close_calls_stay_clean(client, subscribed, post_with, text):
         "\n" * 30_000,
         "Done," + " " * 30_000 + "x",
         "please" + " " * 30_000 + "x",
+        "." * 30_000 + "x",
     ],
-    ids=["after-copy", "newlines", "after-a-comma", "after-please"],
+    ids=["after-copy", "newlines", "after-a-comma", "after-please", "dots-ending-no-sentence"],
 )
 async def test_a_long_run_of_whitespace_reads_fast(client, subscribed, post_with, text):
     # Four Parts so a quadratic search, seconds on each, overruns a bound slow CI still meets.

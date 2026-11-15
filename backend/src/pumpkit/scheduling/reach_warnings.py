@@ -40,7 +40,8 @@ def _subject(number: int, count: int, *, first_reply: bool) -> str:
 
 # An ask is an order, so its verb starts a clause: "We now share it" and "I write and share it"
 # state, they don't ask. A Part is split into sentences, each into clauses at "," and ":".
-_SENTENCE_END = re.compile(r"[.!?\u2026]+(?=[\s\"'\u201d\u2019)]|$)|[;\n]")
+# A run of stops is taken whole from its start, so a long one not ending a sentence reads once.
+_SENTENCE_END = re.compile(r"(?<![.!?\u2026])[.!?\u2026]++(?=[\s\"'\u201d\u2019)]|$)|[;\n]")
 _CLAUSE_BREAK = re.compile(r"[,:]")
 # Emoji, arrows and bullets before an order, and the words that soften it.
 _LEAD = re.compile(
