@@ -316,8 +316,9 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     in `scheduled_post` with its own copy of the text, which the user may have edited since, and
     `posting`, true while it is being published or due. A draft has no scheduled post, so its text
     can be scheduled. `reach_warnings` lists what may lead X to show the post to fewer people, in
-    the scheduled post's own text when it has one, else in the text: each with a `code`, the
-    `part` it is in, counted from 1, and a `message` to tell the user. They never stop scheduling.
+    the scheduled post's own text while it waits or once published, else in the text: each with a
+    `code`, the `part` it is in, counted from 1, and a `message` to tell the user. They never stop
+    scheduling.
     """
     return await mediator.get_post(db=call.db, user=call.user, post_id=post_id, now=call.now)
 

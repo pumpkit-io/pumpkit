@@ -6,9 +6,15 @@ import { LowUsageWarning } from '@/features/billing/LowUsageWarning';
 import { useUsage } from '@/features/billing/useUsage';
 import { PHONE, useMediaQuery } from '@/lib/useMediaQuery';
 import type { AllowanceUsedUp } from '@/services/apiErrors';
-import { FEEDBACK_MAX_CHARS, type FailedFeedback, type Format } from '@/services/postService';
+import {
+  FEEDBACK_MAX_CHARS,
+  type FailedFeedback,
+  type Format,
+  type ReachWarning,
+} from '@/services/postService';
 import { Composer } from '../Composer';
 import { Dock } from './Dock';
+import { ReachWarnings } from './ReachWarnings';
 
 /** What the Feedback bar needs from `usePost`, for the Draft and Failed panels. */
 export interface FeedbackSending {
@@ -44,7 +50,7 @@ export function FeedbackDock({
   /** Why the last restore from History didn't happen. */
   restoreError?: string | null;
   /** The Reach warnings, which render nothing when there are none. */
-  warnings?: ReactNode;
+  warnings?: ReachWarning[];
 }) {
   const phone = useMediaQuery(PHONE);
   const [feedback, setFeedback] = useState('');
@@ -78,6 +84,7 @@ export function FeedbackDock({
     onDismiss();
   };
 
+  const warningsNote = warnings && warnings.length > 0 && <ReachWarnings warnings={warnings} />;
   const low = !allowanceUsedUp && (
     <LowUsageWarning allowance={usage?.allowance} count="generations" />
   );
@@ -86,11 +93,11 @@ export function FeedbackDock({
     <Dock
       name={name}
       notes={
-        (reason || error || notice || allowanceUsedUp || restoreError || low || warnings) && (
+        (reason || error || notice || allowanceUsedUp || restoreError || low || warningsNote) && (
           <div className="space-y-2">
             {low}
             {reason}
-            {warnings}
+            {warningsNote}
             {restoreError && <ErrorBanner message={restoreError} />}
             {error && (
               <ErrorBanner

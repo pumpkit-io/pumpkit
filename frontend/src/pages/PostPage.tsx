@@ -21,7 +21,6 @@ import { recordDraftOpened } from '@/features/posts/list/recentDrafts';
 import { HistoryButton } from '@/features/posts/panels/HistoryPanel';
 import { OriginLine } from '@/features/posts/panels/OriginLine';
 import { PublishedDock } from '@/features/posts/panels/PublishedDock';
-import { ReachWarnings } from '@/features/posts/panels/ReachWarnings';
 import { useReachWarnings } from '@/features/posts/useReachWarnings';
 import { ScheduledDock } from '@/features/posts/panels/ScheduledDock';
 import { TextHeader } from '@/features/posts/panels/TextHeader';
@@ -330,15 +329,13 @@ function LoadedPost({
     </HoverLabels>
   );
 
-  // None leaves the dock's notes empty, with no gap kept for them.
-  const warningsNote = reachWarnings.length > 0 ? <ReachWarnings warnings={reachWarnings} /> : null;
   let dock: ReactNode = null;
   let postTo: ReactNode = null;
   if (post.status === 'draft') {
     dock = (
       <FeedbackDock
         name="Draft"
-        warnings={warningsNote}
+        warnings={reachWarnings}
         format={textVersion.format}
         feedback={feedback}
         restoreError={text.restoreError}
@@ -359,7 +356,7 @@ function LoadedPost({
     dock = (
       <FailedDock
         scheduledPost={scheduledPost}
-        warnings={warningsNote}
+        warnings={reachWarnings}
         textVersion={textVersion}
         feedback={feedback}
         restoreError={text.restoreError}
@@ -381,7 +378,7 @@ function LoadedPost({
     dock = (
       <ScheduledDock
         scheduledPost={scheduledPost}
-        warnings={warningsNote}
+        warnings={reachWarnings}
         posting={posting}
         notice={editClosed}
         onEdit={() => setEditing(true)}

@@ -1,11 +1,12 @@
-import type { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Notice } from '@/components/Notice';
 import { Button } from '@/components/ui/button';
+import type { ReachWarning } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { DOCK_CARD, Dock } from './Dock';
 import { formatWhen } from './panelFacts';
 import { DestinationName } from './panelParts';
+import { ReachWarnings } from './ReachWarnings';
 
 /**
  * A Scheduled Post takes no Feedback: its text is edited instead, until it is `posting`, which
@@ -23,7 +24,7 @@ export function ScheduledDock({
   /** Why the editor closed, under the card; the Post page announces it. */
   notice: string | null;
   /** Its own text's Reach warnings, which render nothing when there are none. */
-  warnings?: ReactNode;
+  warnings?: ReachWarning[];
   onEdit: () => void;
 }) {
   return (
@@ -31,7 +32,7 @@ export function ScheduledDock({
       name="Scheduled"
       notes={
         <>
-          {warnings}
+          {warnings && <ReachWarnings warnings={warnings} />}
           {notice && <Notice message={notice} announced={false} />}
         </>
       }

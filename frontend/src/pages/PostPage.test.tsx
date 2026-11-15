@@ -5023,10 +5023,47 @@ describe('Post page', () => {
         });
 
         expect(await panel('Draft').findByText(HASHTAGS.message)).toBeInTheDocument();
-        expect(postService.reachWarnings).toHaveBeenCalledWith('post_01');
       } finally {
         vi.useRealTimers();
       }
+    });
+
+    it('reads them again once Feedback writes the next Version', async () => {
+      vi.mocked(postService.addVersion).mockResolvedValue(
+        version(2, ['the second final #a #b'], { feedback: 'add hashtags' }),
+      );
+      vi.mocked(postService.reachWarnings).mockReset().mockResolvedValue([HASHTAGS]);
+      renderPost({ ...postWith('Share this with a founder.'), reachWarnings: [SHARE] });
+      await textCard();
+      expect(panel('Draft').getByText(SHARE.message)).toBeInTheDocument();
+
+      fireEvent.change(panel('Draft').getByRole('textbox', { name: 'Feedback' }), {
+        target: { value: 'add hashtags' },
+      });
+      const send = panel('Draft').getByRole('button', { name: 'Send feedback' });
+      await waitFor(() => expect(send).toBeEnabled());
+      fireEvent.click(send);
+
+      expect(await panel('Draft').findByText(HASHTAGS.message)).toBeInTheDocument();
+      expect(panel('Draft').queryByText(SHARE.message)).not.toBeInTheDocument();
+    });
+
+    it('reads them again once a Version is restored', async () => {
+      const versions = [
+        version(1, ['Share this with a founder.']),
+        version(2, ['the second text'], { feedback: 'no ask' }),
+      ];
+      vi.mocked(postService.restoreVersion).mockResolvedValue(textOf(versions[0]!));
+      vi.mocked(postService.reachWarnings).mockReset().mockResolvedValue([SHARE]);
+      renderPost(draft(versions));
+      await textCard();
+      expect(screen.queryByRole('group', { name: 'Reach warnings' })).not.toBeInTheDocument();
+
+      fireEvent.click(card().getByRole('button', { name: 'History' }));
+      const history = within(await screen.findByRole('dialog', { name: 'History' }));
+      fireEvent.click(history.getByRole('button', { name: /^Version 1/ }));
+
+      expect(await panel('Draft').findByText(SHARE.message)).toBeInTheDocument();
     });
   });
 

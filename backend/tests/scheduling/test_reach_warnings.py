@@ -3,6 +3,8 @@ Reach warnings (ADR 0032) on a Post read through `GET /posts/{id}` and the `get_
 in the Text, or in its Scheduled post's own text, may lead X to show it to fewer people.
 """
 
+import time
+
 import pytest
 
 from pumpkit.x_connection.x_publisher import XPostRejectedError
@@ -68,6 +70,18 @@ FINDINGS = [
         [("share_ask", 1), ("tag_ask", 1)],
         id="two-findings-in-one-part",
     ),
+    pytest.param(
+        ["Everyone who replies by Friday wins a seat."], [("giveaway", 1)], id="reward-after-a-gap"
+    ),
+    pytest.param(["Repost this."], [("engagement_ask", 1)], id="repost-this"),
+    pytest.param(["Follow me."], [("engagement_ask", 1)], id="follow-me"),
+    pytest.param(["Like this."], [("engagement_ask", 1)], id="like-this"),
+    pytest.param(["Please share."], [("share_ask", 1)], id="please-share"),
+    pytest.param(
+        ["Share with a friend who needs it."], [("share_ask", 1)], id="share-with-a-friend"
+    ),
+    pytest.param(["If it helped, share it."], [("share_ask", 1)], id="share-it-after-a-clause"),
+    pytest.param(["Done.\n\nTag your cofounder."], [("tag_ask", 1)], id="tag-on-a-new-line"),
 ]
 
 # Texts that ask for nothing X labels, though they come close.
@@ -86,6 +100,24 @@ CLEAN = [
     pytest.param("I like this post format more than threads.", id="i-like-this-post"),
     pytest.param("The price tag a year ago was double.", id="price-tag"),
     pytest.param("A habit.ly/x is not a shortener.", id="not-a-shortener"),
+    pytest.param("Excited to share this with you all: we shipped v2.", id="excited-to-share"),
+    pytest.param("Can't wait to share it next week.", id="cant-wait-to-share"),
+    pytest.param("Let me share this story.", id="let-me-share"),
+    pytest.param("We’re excited to share it.", id="were-excited-to-share"),
+    pytest.param("He'll share it tomorrow.", id="he-will-share"),
+    pytest.param("Just send it. Ship and learn.", id="just-send-it"),
+    pytest.param("Share this weekend with someone you love.", id="share-this-weekend"),
+    pytest.param("That was a dead giveaway.", id="dead-giveaway"),
+    pytest.param("I read every reply I get, even the mean ones.", id="every-reply-i-get"),
+    pytest.param("Feeds full of accounts you like or follow.", id="you-like-or-follow"),
+    pytest.param("It's like if you took Notion and made it fast.", id="like-if-you-took"),
+    pytest.param("You'll like this post if you hate meetings.", id="youll-like-this"),
+    pytest.param("Then, tag the release and push.", id="tag-the-release"),
+    pytest.param("Now tag the commit with v1.2.", id="tag-the-commit"),
+    pytest.param('Her comment "you\'ll never make it" stuck with me.', id="a-quoted-comment"),
+    pytest.param(
+        "Copy the link from your dashboard and paste it in the config.", id="copy-another-link"
+    ),
 ]
 
 
@@ -105,6 +137,24 @@ async def test_close_calls_stay_clean(client, subscribed, post_with, text):
     post_id = await post_with(text)
 
     assert await _warnings(client, post_id) == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "copy" + " " * 30_000 + "x",
+        "\n" * 30_000,
+        "Done," + " " * 30_000 + "x",
+        "please" + " " * 30_000 + "x",
+    ],
+    ids=["after-copy", "newlines", "after-a-comma", "after-please"],
+)
+async def test_a_long_run_of_whitespace_reads_fast(client, subscribed, post_with, text):
+    post_id = await post_with(text)
+
+    started = time.monotonic()
+    assert await _warnings(client, post_id) == []
+    assert time.monotonic() - started < 1
 
 
 async def test_a_message_names_the_part_and_a_shortener_says_what_to_link(

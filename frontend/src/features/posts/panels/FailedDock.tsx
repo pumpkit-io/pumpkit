@@ -1,7 +1,6 @@
-import type { ReactNode } from 'react';
 import { Notice } from '@/components/Notice';
 import { destinationDraftOf } from '@/features/scheduledPosts/communities';
-import type { Version } from '@/services/postService';
+import type { ReachWarning, Version } from '@/services/postService';
 import type { ScheduledPost } from '@/services/scheduledPostService';
 import { PostToButton } from '../postTo/PostToButton';
 import { useRetryFailed } from '../postTo/senders';
@@ -24,7 +23,7 @@ export function FailedDock({
   feedback: FeedbackSending;
   restoreError?: string | null;
   /** The Text's Reach warnings, which a retry would carry. */
-  warnings?: ReactNode;
+  warnings?: ReachWarning[];
   /** Why the editor closed, under the reason; the Post page announces it. */
   notice: string | null;
 }) {
