@@ -15,7 +15,7 @@ from pumpkit.billing.models import Subscription
 from pumpkit.core.background import get_background_tasks
 from pumpkit.core.db.session import get_session_maker
 from pumpkit.core.storage import get_file_storage
-from pumpkit.posts.models import Media
+from pumpkit.posts.models import AccountFileDeletion, Media
 from pumpkit.scheduling.models import PUBLISHING, ScheduledPost
 from pumpkit.x_connection.models import XConnection
 from tests.billing.test_billing import CHECKOUT, CHECKOUT_MONTHLY
@@ -124,6 +124,16 @@ async def test_deleting_removes_the_media_files(authed_client, db, user, file_st
     assert (await delete_me(authed_client)).status_code == 204
 
     assert await file_storage.list_files("media") == []
+
+
+async def test_deleting_leaves_another_accounts_queued_files(authed_client, db, user, file_storage):
+    await file_storage.put("media/grace/photo", BytesIO(b"photo"))
+    db.add(AccountFileDeletion(key="media/grace/photo"))
+    await db.commit()
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert [f.key for f in await file_storage.list_files("media")] == ["media/grace/photo"]
 
 
 async def test_a_post_going_out_on_x_refuses_deletion(authed_client, db, user, post_with):

@@ -61,12 +61,13 @@ vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
   track: vi.fn(),
+  trackBeforeLeaving: vi.fn(),
 }));
 
 import App from '@/App';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
-import { track } from '@/lib/analytics';
+import { track, trackBeforeLeaving } from '@/lib/analytics';
 import { storageKey } from '@/lib/storage';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import type { Instance } from '@/lib/instance';
@@ -1117,7 +1118,7 @@ describe('Settings', () => {
         expect(hardRedirect).toHaveBeenCalledWith('/login?notice=account_deleted'),
       );
       expect(userService.deleteAccount).toHaveBeenCalledWith('ada');
-      expect(track).toHaveBeenCalledWith('account_deleted');
+      expect(trackBeforeLeaving).toHaveBeenCalledWith('account_deleted');
     });
   });
 

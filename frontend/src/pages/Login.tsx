@@ -40,18 +40,17 @@ export function Login() {
   const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [accountDeleted, setAccountDeleted] = useState(false);
   const { operator, app_name } = useInstance();
   const hasTerms = operator !== null;
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const code = params.get('error');
-    const deleted = params.get('notice') === ACCOUNT_DELETED_NOTICE;
-    if (!isSignInErrorCode(code) && !deleted) return;
     if (isSignInErrorCode(code)) setError(SIGN_IN_ERROR_MESSAGES[code]);
-    if (deleted) setNotice('Your account is deleted.');
-    // Drop the code from the URL so a reload doesn't show the message again.
+    else if (params.get('notice') === ACCOUNT_DELETED_NOTICE) setAccountDeleted(true);
+    else return;
+    // Drop the query from the URL so a reload doesn't show the message again.
     window.history.replaceState({}, document.title, location.pathname);
   }, [location.search, location.pathname]);
 
@@ -82,12 +81,12 @@ export function Login() {
               </p>
 
               <div className="mt-8 grid gap-6">
-                {notice && !error && (
+                {accountDeleted && !error && (
                   <p
                     role="status"
                     className="rounded-lg border border-border bg-muted p-3 text-sm font-medium text-foreground"
                   >
-                    {notice}
+                    Your account is deleted.
                   </p>
                 )}
                 {error && (

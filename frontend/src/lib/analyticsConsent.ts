@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import posthog, { type PostHogConfig } from 'posthog-js';
+import posthog, { type CaptureOptions, type PostHogConfig } from 'posthog-js';
 import type { AnalyticsSettings } from './instance';
 import { storage, storageKey } from './storage';
 
@@ -186,9 +186,13 @@ export function capturePageview(path: string): void {
   posthog.capture('$pageview', { $current_url: window.location.origin + path });
 }
 
-export function captureEvent(event: string, properties?: Record<string, unknown>): void {
+export function captureEvent(
+  event: string,
+  properties?: Record<string, unknown>,
+  options?: CaptureOptions,
+): void {
   if (!capturing()) return;
-  posthog.capture(event, properties);
+  posthog.capture(event, properties, options);
 }
 
 /** Kept until PostHog starts, so properties registered before consent still reach it. */

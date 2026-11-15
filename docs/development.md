@@ -21,6 +21,8 @@ backend/src/pumpkit/
   main.py          the FastAPI app: mounts every active area's router and the MCP endpoint, and registers the error handlers
   mcp_server.py    the MCP server: every active area's tools behind OAuth access tokens (ADR 0020), the access gate and per-User limits
   models.py        imports every area's models, so Alembic and the tests see the whole schema
+  account_deletion.py         deleting an account, which reaches across every area: the User's own deletion and the Operator's command
+  account_deletion_router.py  DELETE /users/me, a User deleting their own account from Settings (ADR 0031)
   core/            plumbing every area shares: config, logging, db/ (base, session, URLs), errors, security, rate limiting, analytics, time, ids, MCP tools, the LLM port and OpenAI-compatible client, the classifier port (Jev), the photo-fetching port
   auth/            Users, Sessions and refresh tokens; retained inactive Google/Magic link implementations and mail templates/
   billing/         Plans and Subscriptions; the billing gateway (Stripe) and the Stripe webhook
@@ -63,7 +65,7 @@ Every other page renders inside `pages/AppLayout.tsx` (the providers, the sideba
 - `/posts/scheduled`, `/posts/drafts`, `/posts/published` and `/posts/failed` (`pages/Posts.tsx`): one tab per status, built from `features/posts/list/`. `/posts` opens the Scheduled tab.
 - `/posts/:id` (`pages/PostPage.tsx`): on a Post from a Brief with several Posts, "Posts from your brief" with previous and next (`features/posts/BriefNav.tsx`), then the Text card (`features/posts/TextCard.tsx`) and, pinned below it, one dock per status from `features/posts/panels/`; the "Post to…" dialog is `features/posts/postTo/` and the inline edit of a Scheduled post is `features/posts/edit/`.
 - `/persona` (`pages/Persona.tsx`): the Positioning panel (`features/positioning/`), a textarea saved through `GET` and `PUT /api/v1/positioning` and filled, unsaved, by `POST /api/v1/positioning/draft`. It is the whole page: the Inspiration authors panel in `features/inspirationAuthors/` renders nowhere (ADR 0024). Planning a Brief reads the Positioning (see [Write a Post](#write-a-post)).
-- `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile) and `features/connectedApps/` (Connect AI apps). `features/xConnection/` supplies the shared connection provider and recovery banner, not a separate account card.
+- `/settings` (`pages/Settings.tsx`): one card each from `features/billing/` (Plan), `features/account/` (Profile) and `features/connectedApps/` (Connect AI apps), then the "Delete account" section, `features/account/DeleteAccountSection.tsx`, which calls `DELETE /api/v1/users/me`. `features/xConnection/` supplies the shared connection provider and recovery banner, not a separate account card.
 
 `features/scheduledPosts/` keeps what those pages share about Scheduled posts: Destinations and Communities, the X length counter, live Parts and local time.
 

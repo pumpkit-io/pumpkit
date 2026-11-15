@@ -37,6 +37,10 @@ BILLING_OPERATION_PENDING = "billing_operation_pending"
 UNPAID_INVOICE = "unpaid_invoice"
 SUBSCRIPTION_RUNNING = "subscription_running"
 
+_RESOLVE_OBLIGATIONS = (
+    "Resolve outstanding subscription and payment obligations before deleting this account."
+)
+
 # The command prints each refusal's own words; a User deleting from Settings reads these.
 _USER_MESSAGES = {
     PUBLISHING_IN_PROGRESS: "A post is going out on X right now. Try again in a minute.",
@@ -58,6 +62,13 @@ class ResetReport:
     file_keys: frozenset[str]
 
 
+@dataclass(frozen=True)
+class _Deletion:
+    report: Optional[ResetReport]
+    file_keys: frozenset[str]
+    x_refresh_token: Optional[str]
+
+
 async def delete_account(
     db: AsyncSession,
     gateway: BillingGateway,
@@ -66,6 +77,20 @@ async def delete_account(
     reset_benefits: bool = False,
     dry_run: bool = False,
 ) -> Optional[ResetReport]:
+    deletion = await _delete(
+        db, gateway, user_id=user_id, reset_benefits=reset_benefits, dry_run=dry_run
+    )
+    return deletion.report if deletion is not None else None
+
+
+async def _delete(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user_id: str,
+    reset_benefits: bool,
+    dry_run: bool,
+) -> Optional[_Deletion]:
     user = await users.get_user_by_id(db, user_id)
     if user is None:
         if reset_benefits:
@@ -93,15 +118,9 @@ async def delete_account(
                 code=BILLING_OPERATION_PENDING,
             )
         if any(state.status not in {"canceled", "incomplete_expired"} for state in states):
-            raise ConflictError(
-                "Resolve outstanding subscription and payment obligations before deleting this account.",
-                code=SUBSCRIPTION_RUNNING,
-            )
+            raise ConflictError(_RESOLVE_OBLIGATIONS, code=SUBSCRIPTION_RUNNING)
         if await gateway.has_unsettled_invoices(customer_id=user.stripe_customer_id):
-            raise ConflictError(
-                "Resolve outstanding subscription and payment obligations before deleting this account.",
-                code=UNPAID_INVOICE,
-            )
+            raise ConflictError(_RESOLVE_OBLIGATIONS, code=UNPAID_INVOICE)
         await billing.sync_customer(
             db, gateway, user_id=user.id, customer_id=user.stripe_customer_id
         )
@@ -123,7 +142,7 @@ async def delete_account(
     )
     if dry_run:
         await db.rollback()
-        return report
+        return _Deletion(report, file_keys, None)
     coupon_ids = list(
         await db.scalars(
             select(FreeAccess.coupon_id)
@@ -134,6 +153,9 @@ async def delete_account(
     )
     for coupon_id in coupon_ids:
         await coupon_redemption.lock_coupon(db, coupon_id)
+    # Locked, so a concurrent refresh can't rotate the token this deletion revokes after commit.
+    connection = await x_connection.lock_connection(db, user_id=user.id)
+    x_refresh_token = x_connection.refresh_token(connection) if connection is not None else None
     await post_deletion.queue_files(db, user_id=user.id)
     if benefit_reset is None:
         await billing.preserve_trial_eligibility(db, user_id=user.id)
@@ -141,7 +163,7 @@ async def delete_account(
     if benefit_reset is not None:
         await prelaunch_reset.apply(db, benefit_reset)
     await db.commit()
-    return report
+    return _Deletion(report, file_keys, x_refresh_token)
 
 
 async def delete_own_account(
@@ -161,22 +183,24 @@ async def delete_own_account(
     """
     if not _confirms(user, handle):
         raise RefusedError("Type your @handle to confirm.", code="handle_mismatch")
-    # The cascade removes the X connection, so its token is read first.
-    connection = await x_connection.get_connection(db, user_id=user.id)
-    refresh_token = x_connection.refresh_token(connection) if connection is not None else None
     try:
-        await delete_account(db, gateway, user_id=user.id)
+        deletion = await _delete(db, gateway, user_id=user.id, reset_benefits=False, dry_run=False)
     except ConflictError as error:
         if error.code not in _USER_MESSAGES:
             raise
         raise ConflictError(_USER_MESSAGES[error.code], code=error.code) from error
-    if refresh_token:
+    if deletion is None:
+        return
+    if deletion.x_refresh_token:
         try:
-            await publisher.revoke(token=refresh_token, token_type_hint="refresh_token")
+            await publisher.revoke(token=deletion.x_refresh_token, token_type_hint="refresh_token")
         except XPublisherError as error:
             # The tokens are gone from Pumpkit either way, so the deletion stands.
             logger.warning("Revoking a deleted account's X token failed: %s", error)
-    await tasks.start(f"delete the files of deleted account {user.id}", _sweep(sessions, storage))
+    await tasks.start(
+        f"delete the files of deleted account {user.id}",
+        _sweep(sessions, storage, deletion.file_keys),
+    )
 
 
 def _confirms(user: User, handle: str) -> bool:
@@ -184,10 +208,12 @@ def _confirms(user: User, handle: str) -> bool:
     return user.x_handle is not None and typed == user.x_handle.casefold()
 
 
-async def _sweep(sessions: async_sessionmaker[AsyncSession], storage: FileStorage) -> None:
-    # A failed sweep leaves the files queued for the next one, or for `--retry-files`.
+async def _sweep(
+    sessions: async_sessionmaker[AsyncSession], storage: FileStorage, file_keys: frozenset[str]
+) -> None:
+    # A failed sweep leaves the files queued for `--retry-files`.
     async with sessions() as db:
-        await delete_files(db, storage)
+        await delete_files(db, storage, only_keys=file_keys)
 
 
 async def delete_files(

@@ -21,7 +21,7 @@ vi.mock('posthog-js', () => {
 import posthog from 'posthog-js';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { PostHogPageviewTracker } from '@/lib/PostHogPageviewTracker';
-import { track } from '@/lib/analytics';
+import { track, trackBeforeLeaving } from '@/lib/analytics';
 import { startAnalytics, identifyUser } from '@/lib/analyticsConsent';
 import { DEFAULT_INSTANCE, type AnalyticsSettings } from '@/lib/instance';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
@@ -149,7 +149,16 @@ describe('Accepting analytics', () => {
     renderPage();
     choose('Accept');
     track('login_google_clicked');
-    expect(posthog.capture).toHaveBeenCalledWith('login_google_clicked', undefined);
+    expect(posthog.capture).toHaveBeenCalledWith('login_google_clicked', undefined, undefined);
+  });
+
+  it('sends an event before leaving at once instead of batching it', () => {
+    renderPage();
+    choose('Accept');
+    trackBeforeLeaving('account_deleted');
+    expect(posthog.capture).toHaveBeenCalledWith('account_deleted', undefined, {
+      send_instantly: true,
+    });
   });
 
   it('starts PostHog at app start on the next visit and keeps the banner hidden', () => {
@@ -211,7 +220,7 @@ describe('Cookie settings', () => {
     expect(posthog.init).toHaveBeenCalledTimes(1);
     expect(posthog.opt_in_capturing).toHaveBeenCalledTimes(2);
     track('login_google_clicked');
-    expect(posthog.capture).toHaveBeenCalledWith('login_google_clicked', undefined);
+    expect(posthog.capture).toHaveBeenCalledWith('login_google_clicked', undefined, undefined);
   });
 });
 

@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { usePostCounts } from '@/features/posts/usePostCounts';
-import { track } from '@/lib/analytics';
+import { trackBeforeLeaving } from '@/lib/analytics';
 import { session } from '@/lib/session';
 import { useProfile } from '@/pages/layout/ProfileContext';
 import { errorMessage } from '@/services/apiErrors';
@@ -84,7 +84,7 @@ function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
       setBusy(false);
       return;
     }
-    track('account_deleted');
+    trackBeforeLeaving('account_deleted');
     await session.end('account_deleted');
   };
 
