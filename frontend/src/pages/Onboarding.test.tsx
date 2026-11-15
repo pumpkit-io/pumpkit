@@ -51,7 +51,10 @@ import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { onboardingService } from '@/services/onboardingService';
-import { DRAFT_POLL_MS } from '@/features/positioning/usePositioning';
+import {
+  DRAFT_POLL_MS,
+  DRAFT_READ_FAILURES_TOLERATED,
+} from '@/features/positioning/usePositioning';
 import { positioningService, type PositioningDraft } from '@/services/positioningService';
 import { xConnectionService } from '@/services/xConnectionService';
 import { SUBSCRIBED, apiError, currentPath, renderSignedIn } from './testing/signedInApp';
@@ -196,7 +199,9 @@ describe('Onboarding', () => {
         await waitFor(() =>
           expect(textarea).toHaveAccessibleDescription(`Reading your X profile… ${ADVICE}`),
         );
-        expect((await step()).getByText(/^Reading your/).querySelector('svg')).not.toBeNull();
+        // The words over the textarea, which describe it first, show X's logo.
+        const [overlayId] = (textarea.getAttribute('aria-describedby') ?? '').split(' ');
+        expect(document.getElementById(overlayId)?.querySelector('svg')).not.toBeNull();
         expect(textarea).not.toHaveAttribute('placeholder', 'Reading your X profile…');
         expect(textarea).toBeDisabled();
         expect(textarea).toHaveValue('');
@@ -228,9 +233,7 @@ describe('Onboarding', () => {
         await field();
 
         const status = (await step()).getByRole('status');
-        await waitFor(() =>
-          expect(status).toHaveTextContent('Drafting your positioning from your X profile…'),
-        );
+        await waitFor(() => expect(status).toHaveTextContent('Reading your X profile…'));
 
         kept = READY;
         await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
@@ -295,8 +298,27 @@ describe('Onboarding', () => {
       },
     );
 
-    it('opens an empty textarea with the reason when reading the running draft fails', async () => {
-      kept = RUNNING;
+    it('keeps waiting through a failed read of the running draft, and fills it once ready', async () => {
+      vi.mocked(positioningService.get)
+        .mockResolvedValueOnce({ text: null, draft: RUNNING })
+        .mockRejectedValueOnce(apiError(502, 'Bad gateway.'))
+        .mockResolvedValue({ text: null, draft: READY });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        renderOnboarding();
+        const textarea = await field();
+
+        await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        expect(textarea).toBeDisabled();
+        await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+
+        await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('opens an empty textarea with the reason when reading the running draft keeps failing', async () => {
       vi.mocked(positioningService.get)
         .mockResolvedValueOnce({ text: null, draft: RUNNING })
         .mockRejectedValue(apiError(502, 'Bad gateway.'));
@@ -305,6 +327,10 @@ describe('Onboarding', () => {
         renderOnboarding();
         const textarea = await field();
 
+        for (let read = 1; read < DRAFT_READ_FAILURES_TOLERATED; read++) {
+          await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
+        }
+        expect(textarea).toBeDisabled();
         await act(() => vi.advanceTimersByTimeAsync(DRAFT_POLL_MS));
 
         await waitFor(() => expect(textarea).toBeEnabled());

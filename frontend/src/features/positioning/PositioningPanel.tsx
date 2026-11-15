@@ -54,7 +54,7 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
     .join(' ');
   // Announces the draft as it starts and lands; a failed one's reason shows here too.
   const draftStatus = drafting
-    ? 'Drafting your positioning from your X profile…'
+    ? 'Reading your X profile…'
     : drafted
       ? 'Your draft is ready to edit.'
       : '';

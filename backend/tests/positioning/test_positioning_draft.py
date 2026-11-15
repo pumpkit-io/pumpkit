@@ -16,6 +16,7 @@ from pumpkit.core.llm import FakeLLM, LLMError, get_llm
 from pumpkit.core.llm_client import LLMNotConfiguredError
 from pumpkit.main import app
 from pumpkit.positioning import mediator
+from pumpkit.positioning.draft import PositioningDraft
 from pumpkit.positioning.draft_prompt import DRAFT_PROMPT
 from tests.positioning.positioning import (
     DRAFTED,
@@ -185,7 +186,7 @@ async def test_a_draft_running_longer_than_its_calls_can_take_counts_as_failed(
 ):
     fake_llm.held["PositioningDraft"] = asyncio.Event()
     await client.post(START_DRAFT)
-    fixed_clock.advance(timedelta(minutes=2, seconds=59))
+    fixed_clock.advance(timedelta(minutes=3, seconds=59))
     assert (await positioning_draft(client))["state"] == "running"
 
     fixed_clock.advance(timedelta(seconds=1))
@@ -199,7 +200,7 @@ async def test_a_stale_draft_is_started_again_and_the_stuck_one_records_nothing(
     stuck = FakeLLM(replies=[{"positioning": "The stuck draft."}], latency=0.1)
     app.dependency_overrides[get_llm] = lambda: stuck
     await client.post(START_DRAFT)
-    fixed_clock.advance(timedelta(minutes=3))
+    fixed_clock.advance(timedelta(minutes=4))
     app.dependency_overrides[get_llm] = lambda: FakeLLM(replies=[{"positioning": DRAFTED}])
 
     await client.post(START_DRAFT)
@@ -432,6 +433,28 @@ async def test_a_model_call_that_runs_too_long_fails_with_a_reason(client, on_x,
     assert await _start(client) == _failed(NO_MODEL)
 
 
+async def test_a_draft_that_waits_too_long_for_a_model_slot_fails_with_a_reason(
+    client, on_x, background_tasks, fake_llm, monkeypatch
+):
+    monkeypatch.setattr(settings, "LLM_CALLS_IN_FLIGHT", 1)
+    monkeypatch.setattr(mediator, "DRAFT_SLOT_WAIT_SECONDS", 0.01)
+    monkeypatch.setattr(mediator, "DRAFT_CALL_SECONDS", 0.01)
+    busy = FakeLLM(standing={"PositioningDraft": {"positioning": "Another call."}}, latency=3600)
+    holding = asyncio.create_task(
+        busy.structured(model="m", messages=[], response_model=PositioningDraft)
+    )
+    await asyncio.sleep(0)
+    fake_llm.replies = [{"positioning": DRAFTED}]
+
+    try:
+        await client.post(START_DRAFT)
+        await background_tasks.wait()
+    finally:
+        holding.cancel()
+
+    assert await positioning_draft(client) == _failed(NO_MODEL)
+
+
 async def test_a_draft_is_not_a_generation(client, on_x, fake_llm, monkeypatch):
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 500)
     before = (await client.get(USAGE)).json()
@@ -452,7 +475,8 @@ async def test_a_user_gets_5_draft_requests_a_day(
     fake_x_reader.fail = False
     fake_llm.replies = [{"positioning": DRAFTED}]
 
-    assert await _start(client) == _failed(NO_X_READ)
+    # The sixth start says why it ran nothing, not why the last draft failed.
+    assert await _start(client) == _failed(NO_MODEL)
     assert len(fake_x_reader.user_id_calls) == 5
     assert fake_llm.calls == []
 

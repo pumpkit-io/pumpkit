@@ -10,6 +10,9 @@ type Loading = 'loading' | 'failed' | 'loaded';
 /** How often the step reads a running draft. */
 export const DRAFT_POLL_MS = 2000;
 
+/** Reads of a running draft that may fail in a row before the step stops waiting for it. */
+export const DRAFT_READ_FAILURES_TOLERATED = 5;
+
 /** The backend's sentence for a draft it couldn't write, for a request that never got one. */
 const NOT_DRAFTED =
   "We couldn't draft your positioning. Write it yourself, a few sentences is enough.";
@@ -56,6 +59,21 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
       latestText.current = next;
     };
 
+    /** Reads the positioning, letting a few reads in a row fail: the draft runs on regardless. */
+    const read = async () => {
+      for (let failures = 1; ; failures++) {
+        try {
+          return await positioningService.get();
+        } catch (e) {
+          if (cancelled || isSubscriptionNeeded(e) || failures >= DRAFT_READ_FAILURES_TOLERATED) {
+            throw e;
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, DRAFT_POLL_MS));
+        if (cancelled) throw new Error('cancelled');
+      }
+    };
+
     /** Follows the draft until it is ready or failed, starting one at most once. */
     const follow = async (first: PositioningDraft | null, mayStart: boolean) => {
       let draft = first;
@@ -77,15 +95,15 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
             break;
           }
           if (cancelled) return;
-          const read = await positioningService.get();
+          const positioning = await read();
           if (cancelled) return;
           // Saved meanwhile, in another tab or on another device.
-          if (read.text !== null) {
-            setSaved(read.text);
-            fill(read.text);
+          if (positioning.text !== null) {
+            setSaved(positioning.text);
+            fill(positioning.text);
             break;
           }
-          draft = read.draft;
+          draft = positioning.draft;
         }
       } catch (e) {
         if (cancelled) return;

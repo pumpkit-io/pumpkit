@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import Literal, Optional
+from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from pumpkit.core.text import drop_unstorable
+from pumpkit.positioning.models import DraftState
 
 # Per caller, for the route and the MCP tool that save a Positioning.
 WRITE_RATE = "20/minute"
@@ -46,7 +47,7 @@ class PositioningResponse(BaseModel):
 class PositioningDraftResponse(BaseModel):
     """The User's Positioning draft: `text` once it is ready, `reason` in words once it failed."""
 
-    state: Literal["running", "ready", "failed"]
+    state: DraftState
     text: Optional[str]
     reason: Optional[str]
 

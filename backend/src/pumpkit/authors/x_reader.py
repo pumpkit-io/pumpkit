@@ -26,7 +26,7 @@ TWITTERAPI_IO_LAST_TWEETS_URL = "https://api.twitterapi.io/twitter/user/last_twe
 TWITTERAPI_IO_USER_INFO_URL = "https://api.twitterapi.io/twitter/user/info"
 # twitterapi.io docs say this is slow.
 TWITTERAPI_IO_COMMUNITY_INFO_URL = "https://api.twitterapi.io/twitter/community/info"
-_TIMEOUT_SECONDS = 30.0
+TWITTERAPI_IO_TIMEOUT_SECONDS = 30.0
 
 # X's own timestamp format, e.g. "Wed Jul 22 17:44:05 +0000 2026".
 _CREATED_AT_FORMAT = "%a %b %d %H:%M:%S %z %Y"
@@ -166,7 +166,7 @@ async def _get(url: str, params: dict[str, str]) -> httpx.Response:
     if not settings.TWITTERAPI_IO_API_KEY:
         raise XReaderNotConfiguredError()
     try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT_SECONDS) as client:
+        async with httpx.AsyncClient(timeout=TWITTERAPI_IO_TIMEOUT_SECONDS) as client:
             return await client.get(
                 url, headers={"x-api-key": settings.TWITTERAPI_IO_API_KEY}, params=params
             )

@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Optional
@@ -18,6 +19,7 @@ from pumpkit.positioning import service
 from pumpkit.positioning.draft import (
     DRAFT_CALL_SECONDS,
     DRAFT_MAX_TOKENS,
+    DRAFT_SLOT_WAIT_SECONDS,
     DRAFT_WINDOW,
     DRAFTS_PER_DAY,
     PositioningDraft,
@@ -53,6 +55,8 @@ async def get_positioning(db: AsyncSession, user: User) -> PositioningResponse:
 async def save_positioning(
     db: AsyncSession, user: User, text: str, now: datetime
 ) -> PositioningResponse:
+    # The lock `start_draft` holds, so a save never lands between its check and its draft.
+    await users.lock_user_id(db, user_id=user.id)
     positioning = await service.save_positioning(db, user_id=user.id, text=text, now=now)
     await db.commit()
     return _response(positioning)
@@ -115,11 +119,11 @@ async def start_draft(
     counted_since = now - DRAFT_WINDOW
     # Checked before X is read: without both providers a request would be paid for and wasted.
     if connection is None or not reader.is_configured():
-        await _leave_failed(db, draft, user_id=user.id, reason=_X_NOT_READ, now=now)
+        await _leave_failed(db, user_id=user.id, reason=_X_NOT_READ, now=now)
         return
     used = await service.draft_requests_since(db, user_id=user.id, since=counted_since)
     if not llm.is_configured() or len(used) >= DRAFTS_PER_DAY:
-        await _leave_failed(db, draft, user_id=user.id, reason=_NOT_DRAFTED, now=now)
+        await _leave_failed(db, user_id=user.id, reason=_NOT_DRAFTED, now=now)
         return
     await service.log_draft_request(db, user_id=user.id, now=now, counted_since=counted_since)
     await service.start_draft(db, user_id=user.id, now=now)
@@ -134,22 +138,15 @@ async def start_draft(
         ),
         started_at=now,
     )
+    # Before the task starts, so its own session finds the running draft and the lock is freed.
     await db.commit()
     await tasks.start(_task_name(user.id), _run_draft(run, reader, llm, sessions, clock))
 
 
-async def _leave_failed(
-    db: AsyncSession,
-    draft: Optional[PositioningDraftRecord],
-    *,
-    user_id: str,
-    reason: str,
-    now: datetime,
-) -> None:
-    """Give a User with no draft one that failed for `reason`; a failed or lost one keeps its own."""
-    if draft is None:
-        await service.fail_draft(db, user_id=user_id, reason=reason, now=now)
-        await db.commit()
+async def _leave_failed(db: AsyncSession, *, user_id: str, reason: str, now: datetime) -> None:
+    """Leave the User a draft that failed for `reason`, in place of an older failure's."""
+    await service.fail_draft(db, user_id=user_id, reason=reason, now=now)
+    await db.commit()
 
 
 def _task_name(user_id: str) -> str:
@@ -211,13 +208,18 @@ async def _draft(run: _DraftRun, reader: XReader, llm: LLM) -> tuple[Optional[st
     if profile.is_blank() and not posts:
         return None, _NOTHING_TO_DRAFT_FROM
     try:
-        result = await llm.structured(
-            model=settings.LLM_POSITIONING_MODEL,
-            messages=draft_messages(profile, posts),
-            response_model=PositioningDraft,
-            max_tokens=DRAFT_MAX_TOKENS,
-            timeout_seconds=DRAFT_CALL_SECONDS,
-        )
+        # The call's own timeout starts once it holds a slot, so this also bounds the wait for one.
+        async with asyncio.timeout(DRAFT_SLOT_WAIT_SECONDS + DRAFT_CALL_SECONDS):
+            result = await llm.structured(
+                model=settings.LLM_POSITIONING_MODEL,
+                messages=draft_messages(profile, posts),
+                response_model=PositioningDraft,
+                max_tokens=DRAFT_MAX_TOKENS,
+                timeout_seconds=DRAFT_CALL_SECONDS,
+            )
+    except TimeoutError:
+        logger.warning("Drafting a positioning failed: no model slot came free in time to answer")
+        return None, _NOT_DRAFTED
     except (LLMError, LLMNotConfiguredError) as error:
         logger.warning("Drafting a positioning failed: %s", error or type(error).__name__)
         return None, _NOT_DRAFTED
