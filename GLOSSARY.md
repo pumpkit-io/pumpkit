@@ -248,6 +248,10 @@ _Avoid_: posted, sent, live
 A Scheduled post Pumpkit gave up publishing, with a reason the User can read. The User may edit and reschedule it, also with its Post's Text as edited or rewritten since. One with several Parts may fail after X has accepted some of them; those Parts can no longer change, and rescheduling publishes only the rest.
 _Avoid_: errored, rejected, dead
 
+**Reach warning**:
+A notice that something in a Post's Text, or in when it is scheduled, may lead X to show it to fewer people, such as asking readers to share it, a link shortener, or another of the User's Scheduled posts less than two hours away. It warns and never stops the User from scheduling or posting.
+_Avoid_: distribution warning, spam warning, lint
+
 ### Legal
 
 **Operator**:
