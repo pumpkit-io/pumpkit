@@ -8,6 +8,7 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 - The login button and the sign-in screen show the X logo, and the login card no longer has the publishing note.
 - A user can delete their account from Settings: they confirm in the new "Delete account" section by typing their @handle. The account and everything in it is deleted at once, Pumpkit's access to their X account is revoked, other browsers are signed out and connected AI apps lose access. Posts already on X stay on X. Deletion is refused while a post is going out on X, a billing change is being processed, an invoice is unpaid or a subscription is still running. `DELETE /api/v1/users/me` is new; no MCP tool deletes an account, and `python -m pumpkit.account_deletion` still works for a user who writes to support.
+- The Persona step and the Persona page show only the positioning, the advice "Two or three sentences are enough." and the button that saves it, under the heading "Who you are on" with the X logo. The checklist under the text and "Draft again from my X profile" are gone; the step still drafts the positioning from the user's X profile when it opens.
 
 ## [0.12.0] - 2026-11-15
 

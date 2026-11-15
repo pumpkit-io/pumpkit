@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { XLogo } from '@/components/XLogo';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -30,18 +31,14 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
     error,
     textRefused,
     justSaved,
-    draft,
     drafting,
-    canDraft,
-    canRequestDraft,
-    justDrafted,
   } = usePositioning({ draftOnOpen: step });
   const [continuing, setContinuing] = useState(false);
   const id = useId();
   const headingId = `${id}-heading`;
-  const helperId = `${id}-helper`;
+  const adviceId = `${id}-advice`;
   const errorId = `${id}-error`;
-  const limitId = `${id}-limit`;
+  const readingId = `${id}-reading`;
   const busy = loading === 'loading' || drafting;
   const nearLimit = length >= POSITIONING_MAX_CHARS - COUNT_SHOWN_WITHIN;
   // maxLength counts UTF-16 units, so it grows by one for each character that takes two.
@@ -49,6 +46,12 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
   const Heading = step ? 'h1' : 'h2';
   // Continue goes on with unchanged text too: the step needs a Positioning, not a change.
   const canSubmit = step ? idle && hasText && !continuing : canSave;
+  const describedBy = [drafting && readingId, error && errorId, adviceId].filter(Boolean).join(' ');
+  const count = nearLimit && (
+    <p className="font-mono text-xs tabular-nums text-muted-foreground">
+      {length.toLocaleString('en-US')} / {POSITIONING_MAX_CHARS.toLocaleString('en-US')}
+    </p>
+  );
 
   const saveAndContinue = async (continueOn: () => Promise<string | null>) => {
     setContinuing(true);
@@ -73,10 +76,10 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
             step ? 'text-2xl leading-tight' : 'text-xl',
           )}
         >
-          Who you are on X
+          Who you are on <XLogo />
         </Heading>
-        <p className="font-sans text-sm text-muted-foreground">
-          Pumpkit plans every post around this.
+        <p id={adviceId} className="font-sans text-sm text-muted-foreground">
+          Pumpkit plans every post around this. Two or three sentences are enough.
         </p>
       </div>
 
@@ -93,71 +96,60 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
           }}
         >
           <div className="space-y-2">
-            <Textarea
-              aria-labelledby={headingId}
-              aria-describedby={error ? `${errorId} ${helperId}` : helperId}
-              aria-invalid={textRefused ? true : undefined}
-              value={busy ? '' : text}
-              onChange={(event) => edit(event.target.value)}
-              placeholder={
-                loading === 'loading'
-                  ? 'Loading your positioning…'
-                  : drafting
-                    ? 'Reading your X profile…'
-                    : 'I’m … I post about … I write for … I post to …'
-              }
-              disabled={busy || continuing}
-              maxLength={maxUnits}
-              rows={7}
-              className="min-h-40 resize-y font-sans text-base/6 text-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring sm:text-sm/6"
-            />
+            <div className="relative">
+              <Textarea
+                aria-labelledby={headingId}
+                aria-describedby={describedBy}
+                aria-invalid={textRefused ? true : undefined}
+                value={busy ? '' : text}
+                onChange={(event) => edit(event.target.value)}
+                placeholder={
+                  loading === 'loading'
+                    ? 'Loading your positioning…'
+                    : drafting
+                      ? undefined
+                      : 'I’m … I post about … I write for … I post to …'
+                }
+                disabled={busy || continuing}
+                maxLength={maxUnits}
+                rows={7}
+                className="min-h-40 resize-y font-sans text-base/6 text-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring sm:text-sm/6"
+              />
+              {drafting && (
+                <p
+                  id={readingId}
+                  className="pointer-events-none absolute inset-0 flex items-center justify-center gap-[0.3em] px-4 text-center font-sans text-sm text-muted-foreground motion-safe:animate-pulse"
+                >
+                  Reading your <XLogo decorative />
+                  <span className="sr-only">X</span> profile…
+                </p>
+              )}
+            </div>
             {error && (
               <p id={errorId} role="alert" className="font-sans text-sm text-destructive">
                 {error}
               </p>
             )}
-            <p id={helperId} className="font-sans text-sm text-muted-foreground">
-              Cover: who you are · what you post about · who you write for · what you post for ·
-              what you can point to
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
-            <div className="mr-auto flex flex-wrap items-center gap-x-3 gap-y-1">
-              <Button
-                type="button"
-                variant="outline"
-                className="h-11 sm:h-10"
-                disabled={!canRequestDraft || continuing}
-                aria-describedby={canDraft ? undefined : limitId}
-                onClick={() => void draft()}
-              >
-                Draft again from my X profile
+          {step ? (
+            <div className="space-y-3">
+              {count && <div className="flex justify-end">{count}</div>}
+              <Button type="submit" className="h-11 w-full" disabled={!canSubmit}>
+                {continuing ? 'Continuing…' : 'Continue'}
               </Button>
-              {!canDraft && (
-                <p id={limitId} className="font-sans text-sm text-muted-foreground">
-                  You can draft again tomorrow.
-                </p>
-              )}
             </div>
-            {nearLimit && (
-              <p className="font-mono text-xs tabular-nums text-muted-foreground">
-                {length.toLocaleString('en-US')} / {POSITIONING_MAX_CHARS.toLocaleString('en-US')}
+          ) : (
+            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2">
+              <div className="mr-auto">{count}</div>
+              <p role="status" className="font-sans text-sm text-muted-foreground">
+                {justSaved ? 'Saved' : ''}
               </p>
-            )}
-            <p role="status" className="font-sans text-sm text-muted-foreground">
-              {justSaved && !step
-                ? 'Saved'
-                : justDrafted
-                  ? step
-                    ? 'Drafted from your X profile.'
-                    : 'Drafted from your X profile. Save to keep it.'
-                  : ''}
-            </p>
-            <Button type="submit" className="h-11 sm:h-10" disabled={!canSubmit}>
-              {step ? (continuing ? 'Continuing…' : 'Continue') : saving ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
+              <Button type="submit" className="h-11 sm:h-10" disabled={!canSubmit}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
+          )}
         </form>
       )}
     </section>

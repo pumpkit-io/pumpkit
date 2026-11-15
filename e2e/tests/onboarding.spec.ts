@@ -26,6 +26,10 @@ test('Onboarding starts directly at Persona without a separate X task', async ({
   await page.goto('/new');
   await expect(page).toHaveURL(/\/onboarding$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Who you are on X' })).toBeVisible();
+  await expect(
+    page.getByText(/^Pumpkit plans every post around this\. Two or three/),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: /draft again/i })).toHaveCount(0);
   await expect(page.getByRole('navigation', { name: 'Steps' })).not.toContainText('Connect X');
 });
 
@@ -45,7 +49,7 @@ test('the Persona step drafts the positioning, and Continue saves the edit and o
   const step = page.getByRole('region', { name: 'Who you are on X' });
   const field = step.getByRole('textbox', { name: 'Who you are on X' });
   const continueButton = step.getByRole('button', { name: 'Continue' });
-  await expect(field).toHaveAttribute('placeholder', 'Reading your X profile…');
+  await expect(step.getByText(/^Reading your/)).toBeVisible();
   await expect(field).toBeDisabled();
   await expect(continueButton).toBeDisabled();
 
