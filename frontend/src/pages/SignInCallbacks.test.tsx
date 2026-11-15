@@ -49,6 +49,9 @@ vi.mock('@/services/onboardingService', () => ({
 vi.mock('@/services/billingService', () => ({
   billingService: { fetchBillingMe: vi.fn(), fetchPlans: vi.fn() },
 }));
+vi.mock('@/services/positioningService', () => ({
+  positioningService: { startDraft: vi.fn().mockResolvedValue(undefined) },
+}));
 
 import { session } from '@/lib/session';
 import { authService } from '@/services/authService';

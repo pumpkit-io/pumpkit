@@ -5,7 +5,14 @@ from dataclasses import replace
 from test_complete import begin, complete
 
 from pumpkit.x_connection.x_publisher import X_SIGN_IN_SCOPES
-from tests.positioning.positioning import DRAFTED, START_DRAFT
+from tests.positioning.positioning import (
+    DRAFTED,
+    POSITIONING,
+    START_DRAFT,
+    TEXT,
+    positioning_draft,
+    save_positioning,
+)
 
 
 async def _draft_reads(browser, signed_in, fake_llm) -> str:
@@ -18,6 +25,13 @@ async def _draft_reads(browser, signed_in, fake_llm) -> str:
     )
     assert started.status_code == 202, started.text
     return fake_llm.calls[0].messages[1]["content"]
+
+
+def _signed_in_as(browser, signed_in):
+    """`browser`, signing its requests with the access token `signed_in` issued."""
+    assert signed_in.status_code == 200, signed_in.text
+    browser.headers["Authorization"] = f"Bearer {signed_in.json()['access_token']}"
+    return browser
 
 
 async def test_sign_in_keeps_the_bio_location_and_website_for_the_draft(
@@ -64,3 +78,23 @@ async def test_a_later_sign_in_replaces_what_the_profile_said(
     assert await _draft_reads(new_browser(), signed_in, fake_llm) == (
         "<profile>\nHandle: @ada\nBio: Founder of Tally.\n</profile>"
     )
+
+
+async def test_signing_in_again_with_a_saved_positioning_starts_no_draft(
+    sign_in_browser, new_browser, sells_no_plans, fake_x_publisher, fake_x_reader, fake_llm
+):
+    fake_x_publisher.exchange_scope = X_SIGN_IN_SCOPES
+    fake_x_reader.user_ids[fake_x_publisher.account.user_id] = "ada"
+    first = await complete(sign_in_browser, await begin(sign_in_browser))
+    await save_positioning(_signed_in_as(new_browser(), first))
+
+    again = _signed_in_as(
+        new_browser(), await complete(sign_in_browser, await begin(sign_in_browser))
+    )
+    started = await again.post(START_DRAFT)
+
+    assert started.status_code == 202, started.text
+    assert fake_x_reader.user_id_calls == []
+    assert fake_llm.calls == []
+    assert await positioning_draft(again) is None
+    assert (await again.get(POSITIONING)).json()["text"] == TEXT

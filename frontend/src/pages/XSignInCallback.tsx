@@ -4,6 +4,7 @@ import { session, signInPath, SIGN_IN_ERROR, isSignInErrorCode } from '@/lib/ses
 import { XLogo } from '@/components/XLogo';
 import { returnTo } from '@/lib/returnTo';
 import { errorMessage } from '@/services/apiErrors';
+import { positioningService } from '@/services/positioningService';
 import { xSignInService } from '@/services/xSignInService';
 
 export function XSignInCallback() {
@@ -25,6 +26,8 @@ export function XSignInCallback() {
       .complete({ state, code: params.get('code'), error: params.get('error') })
       .then(({ accessToken, expiresAt }) => {
         const result = session.startFromCredentials(accessToken, expiresAt);
+        // Drafting early means it is usually ready by the Persona step, which starts it itself if this is lost (ADR 0030).
+        if (result.ok) void positioningService.startDraft().catch(() => undefined);
         navigate(result.ok ? (returnTo.take() ?? '/new') : signInPath(SIGN_IN_ERROR.signInFailed), {
           replace: true,
         });

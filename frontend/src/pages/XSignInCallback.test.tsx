@@ -4,10 +4,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { session } from '@/lib/session';
 import { returnTo } from '@/lib/returnTo';
+import { positioningService } from '@/services/positioningService';
 import { xSignInService } from '@/services/xSignInService';
 import { XSignInCallback } from './XSignInCallback';
 
 vi.mock('@/services/xSignInService', () => ({ xSignInService: { complete: vi.fn() } }));
+vi.mock('@/services/positioningService', () => ({ positioningService: { startDraft: vi.fn() } }));
 
 function Destination() {
   const location = useLocation();
@@ -35,6 +37,7 @@ function callback(search = '?code=valid&state=browser-state') {
 beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
+  vi.mocked(positioningService.startDraft).mockResolvedValue(undefined);
 });
 afterEach(() => {
   cleanup();
@@ -56,6 +59,47 @@ it('announces sign-in progress and starts the existing session once before repla
     error: null,
   });
   expect(session.get()).toEqual({ accessToken: 'issued-access', expiresAt });
+});
+
+it('starts the positioning draft once the session starts, signed in as the new user', async () => {
+  const expiresAt = new Date(Date.now() + 3600_000).toISOString();
+  vi.mocked(xSignInService.complete).mockResolvedValue({ accessToken: 'issued-access', expiresAt });
+  let sessionAtStart: unknown;
+  vi.mocked(positioningService.startDraft).mockImplementation(() => {
+    sessionAtStart = session.get();
+    return Promise.resolve();
+  });
+
+  callback();
+
+  expect(await screen.findByText('/new via REPLACE')).toBeInTheDocument();
+  expect(positioningService.startDraft).toHaveBeenCalledTimes(1);
+  expect(sessionAtStart).toEqual({ accessToken: 'issued-access', expiresAt });
+});
+
+it('goes on signing in without waiting for a draft start that never answers', async () => {
+  vi.mocked(xSignInService.complete).mockResolvedValue({
+    accessToken: 'issued-access',
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+  });
+  vi.mocked(positioningService.startDraft).mockReturnValue(new Promise(() => {}));
+
+  callback();
+
+  expect(await screen.findByText('/new via REPLACE')).toBeInTheDocument();
+});
+
+it('goes on signing in when the draft start fails', async () => {
+  vi.mocked(xSignInService.complete).mockResolvedValue({
+    accessToken: 'issued-access',
+    expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+  });
+  vi.mocked(positioningService.startDraft).mockRejectedValue(new Error('Network unavailable'));
+
+  callback();
+
+  expect(await screen.findByText('/new via REPLACE')).toBeInTheDocument();
+  expect(session.get()).not.toBeNull();
 });
 
 it('resumes the validated saved destination after starting the session', async () => {
@@ -144,6 +188,7 @@ it('rejects malformed session credentials and preserves the pending consent requ
   callback();
   expect(await screen.findByText('/login?error=sign_in_failed via REPLACE')).toBeInTheDocument();
   expect(session.get()).toBeNull();
+  expect(positioningService.startDraft).not.toHaveBeenCalled();
   expect(returnTo.take()).toBe('/oauth/consent?request=pending-app');
 });
 
@@ -153,6 +198,7 @@ it('returns to sign-in after a network failure without storing a session', async
   callback();
   expect(await screen.findByText('/login?error=x_provider_failed via REPLACE')).toBeInTheDocument();
   expect(session.get()).toBeNull();
+  expect(positioningService.startDraft).not.toHaveBeenCalled();
   expect(returnTo.take()).toBe('/oauth/consent?request=pending-app');
 });
 

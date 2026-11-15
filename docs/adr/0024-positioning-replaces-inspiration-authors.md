@@ -7,7 +7,7 @@ This amends ADR 0018 and ADR 0019, extends ADR 0008's area order, and takes ADR 
 ## Positioning
 
 - A User has at most one Positioning. It is one free text, with no guided fields.
-- Pumpkit drafts it and the User edits it. The draft reads the bio, location and website X gives at sign-in at no cost, and the User's newest posts, about 20, through the X reader in one paid call (ADR 0005). It reads the posts by the User's X ID, not their handle, which they may have changed since they signed in (ADR 0023). It runs when Onboarding's Persona step first opens, so the Operator pays twitterapi.io only for a User who is past the Paywall.
+- Pumpkit drafts it and the User edits it. The draft reads the bio, location and website X gives at sign-in at no cost, and the User's newest posts, about 20, through the X reader in one paid call (ADR 0005). It reads the posts by the User's X ID, not their handle, which they may have changed since they signed in (ADR 0023). It runs when Onboarding's Persona step first opens, so the Operator pays twitterapi.io only for a User who is past the Paywall. ADR 0030 moves it to sign-in, before the Paywall, and removes the redraft.
 - The draft states only what the profile and posts show, leaves out what they don't, and copies no post's wording. It is one model call on its own setting, `LLM_POSITIONING_MODEL`.
 - The X connection keeps the bio, location and website from every read of the X account, not only sign-in's, so a reconnect or a publish refreshes them instead of erasing them.
 - A failed X read or model call gives no draft and no error page: the request answers with the reason in words for the User, who starts from an empty Positioning or keeps the text they had.
