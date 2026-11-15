@@ -134,9 +134,8 @@ CTA_RULES = """\
 
 Weak CTA -> strong CTA (shape only, never copy the wording):
 
-- "Follow for more" -> "I'm documenting the whole build. Follow if you want day 2."
+- "Follow for more" -> "I'm documenting the whole build. Day 2 goes up tomorrow."
 - "Thoughts?" -> "What's the one tool you'd never drop from your stack?"
-- "Bookmark this" -> "Save this for the next time your RAG eval looks too good to be true."
 - "Link below" -> "{link_example}\""""
 
 RHYTHM = """\
@@ -159,6 +158,19 @@ NEVER_ADD = """\
 - No bullet characters, unless the raw input asks for it. Otherwise list items are plain lines, numbered "1." only when the order or the count matters.
 - No em dashes. No "it's not X, it's Y". No "No X. No Y. Just Z."
 - Plain text only: it goes straight into the X composer."""
+
+# What X's spam classifiers label, so the post isn't hidden from non-followers (ADR 0032).
+SPAM_ASKS = """\
+## Asks X labels as spam
+
+X's spam classifiers label posts that ask for engagement, and a labeled post is hidden from everyone who doesn't follow me. None of these go in the post, a first reply or any part, whatever the desired action:
+
+- Asking people to share, send or forward the post, or to show it to someone ("Send this to…", "Share this with…").
+- Asking people to tag someone ("Tag a founder who…").
+- Asking people to copy the post's link or paste it somewhere.
+- Asking for likes, reposts or follows outright ("like and repost", "RT if…", "follow for more", "turn on notifications").
+- Trading something for engagement: a reply or comment keyword ("Reply 'guide' and I'll send it"), a giveaway, "everyone who replies gets…". A DM keyword is fine: it asks for a message, not a public reply.
+- Telling people to reply or comment ("drop it below", "comment your answer"). A specific question is fine; an instruction to answer it is not."""
 
 FUNNEL: dict[PromptFunnel, str] = {
     "TOF": """\
@@ -193,12 +205,12 @@ FUNNEL_CTA: dict[PromptFunnel, str] = {
     "TOF": """\
 ## CTAs that fit top of funnel
 
-- Best: no CTA at all (the post is the CTA); a reply to a specific question; a share ("Send this to a founder who..."); a follow only when there is a series to follow for.
-- Avoid: links, DMs, "like and repost".""",
+- Best: no CTA at all (the post is the CTA); a specific question about the post's idea; a follow only when there is a series to follow for, stated as a reason, not an order.
+- Avoid: links, DMs, and any ask to share, tag, like or repost.""",
     "MOF": """\
 ## CTAs that fit middle of funnel
 
-- Best: a bookmark on a utility post ("Save this for your next..."); a reply with their own experience; a follow for the series; a native click (a thread, an X Article, my pinned post).
+- Best: a utility post worth bookmarking, with no ask for the save; a reply with their own experience; a follow for the series; a native click (a thread, an X Article, my pinned post).
 - Avoid: external links, selling.""",
     "BOF": """\
 ## CTAs that fit bottom of funnel
@@ -232,13 +244,13 @@ I want the reader to reply.
     },
     "bookmark": {
         "levers": "curiosity_gap + payoff + proof",
-        "cta": "bookmark",
+        "cta": "none",
         "text": """\
 I want the reader to bookmark the post.
 
 - Make it worth coming back to: something they will use later (steps, a rule, a checklist, numbers), not something to nod at.
 - Make the useful part easy to find again when they reopen it.
-- Close by naming the exact future moment they'll need it ("Save this for the next time you..."). If that line would feel forced, close on the takeaway and let the usefulness do the work.""",
+- Don't ask for the save unless the raw input asks for it. Close on the takeaway and let the usefulness do the work.""",
     },
     "repost": {
         "levers": "surprise + identity",
@@ -252,13 +264,13 @@ I want the reader to repost it.
     },
     "share": {
         "levers": "identity + payoff",
-        "cta": "share",
+        "cta": "none",
         "text": """\
 I want the reader to send the post to someone.
 
 - Write it so a specific person comes to mind: the reader should think "X needs to see this".
-- Name who it is for.
-- The closer can point at that person ("Send this to a founder who..."). Skip it if it would feel forced.""",
+- Name who it is for, in the hook or the body ("If you run evals for a team of five…").
+- Never ask for the share. No "send this to", no "tag someone": X labels those as spam. The post earns the share. Close on the takeaway.""",
     },
     "follow": {
         "levers": "proof + vulnerability (+ curiosity_gap)",
@@ -268,7 +280,7 @@ I want the reader to follow me.
 
 - Show who I am and what I'm doing, from the positioning and the raw input: the post is a sample of what following me gets them.
 - Give the reason to follow: what I keep posting about, or what comes next. Tease it only if the raw input or positioning supports it.
-- Never write "follow for more". Give the reason and let them decide.""",
+- Never tell them to follow. Say what comes next and when; that is the reason to follow.""",
     },
     "trust": {
         "levers": "proof + vulnerability (+ curiosity_gap)",
@@ -513,7 +525,9 @@ def closer_section(plan: Plan, links: LinkPlacement) -> str:
         )
     funnel_cta = placed(FUNNEL_CTA[PROMPT_FUNNELS[plan.funnel]], links)
     cta_rules = placed(CTA_RULES, links)
-    return "\n\n".join(["# The closer and the CTA", CLOSER_RULES, funnel_cta, cta_rules, chosen])
+    return "\n\n".join(
+        ["# The closer and the CTA", CLOSER_RULES, funnel_cta, cta_rules, SPAM_ASKS, chosen]
+    )
 
 
 def writing_guide(plan: Plan, char_limit: int) -> str:

@@ -87,6 +87,15 @@ def _system_text(call: LLMCall) -> str:
     return block["text"]
 
 
+def _guides(fake_llm) -> list[str]:
+    """The guide each of the five sketches and the merge wrote the Thread by."""
+    guides = [
+        _system_text(c) for c in _calls(fake_llm, SKETCHED_THREAD) + _calls(fake_llm, MERGED_THREAD)
+    ]
+    assert len(guides) == 6
+    return guides
+
+
 def _headings(prompt: str) -> list[str]:
     return [line for line in prompt.splitlines() if line.startswith("#")]
 
@@ -267,6 +276,7 @@ async def test_the_thread_sketch_prompt_is_the_shared_guide_with_the_thread_only
         "# The closer and the CTA",
         "## CTAs that fit bottom of funnel",
         "## CTA rules at every stage",
+        "## Asks X labels as spam",
         "# How the lines read",
         "# Never add",
         "# Before you answer, check the thread",
@@ -378,7 +388,7 @@ async def test_the_thread_humanizer_gets_its_prompt_the_brief_and_plan_then_the_
             f"anything from it that the thread does not already say.\n\n<brief>\n{BRIEF}\n"
             "</brief>\n\n<plan>\ncore_idea: Five lessons from shipping small things every week.\n"
             "takeaway: Ship the smallest thing that works this week.\nfunnel: MOF\n"
-            "desired_action: bookmark (cta: bookmark)\nformat: thread\n"
+            "desired_action: bookmark (cta: none)\nformat: thread\n"
             "structure: hook_list_closer\n</plan>"
         ),
     }
@@ -657,6 +667,7 @@ async def test_the_thread_revise_prompt_is_the_revise_rules_around_the_thread_gu
         "# The closer and the CTA",
         "## CTAs that fit bottom of funnel",
         "## CTA rules at every stage",
+        "## Asks X labels as spam",
         "# How the lines read",
         "# Never add",
         "# Output",
@@ -680,6 +691,151 @@ async def test_the_thread_revise_prompt_is_the_revise_rules_around_the_thread_gu
     for post_only in ("first_reply", "Not a thread", "# Format: short", "- post:"):
         assert post_only not in prompt
     assert "{" not in prompt
+
+
+async def test_every_thread_call_learns_the_asks_x_labels_as_spam(client, ready, fake_llm):
+    await _write_thread(client, fake_llm)
+    first = list(fake_llm.calls)
+    fake_llm.calls.clear()
+    await _thread_with_feedback(client, fake_llm, feedback="add 'tag a friend who ships'")
+
+    def _prompts(calls, schema) -> list[str]:
+        return [_system_text(call) for call in calls if call.response_model is schema]
+
+    guides = _prompts(first, SKETCHED_THREAD) + _prompts(first, MERGED_THREAD)
+    guides += _prompts(fake_llm.calls, REVISED_THREAD)
+    assert len(guides) == 7
+    for prompt in guides:
+        assert (
+            prompt.index("## CTA rules at every stage")
+            < prompt.index("## Asks X labels as spam")
+            < prompt.index("For this post:")
+        )
+        assert "- Asking people to copy the post's link or paste it somewhere." in prompt
+    [merge] = _prompts(first, MERGED_THREAD)
+    assert (
+        '- A second CTA. Generic engagement bait. Any ask the "Asks X labels as spam" section '
+        "forbids. Pushy self-promotion."
+    ) in merge
+    [revise] = _prompts(fake_llm.calls, REVISED_THREAD)
+    assert (
+        '- If my feedback asks for something the "Asks X labels as spam" section forbids, do it, '
+        "and say in reasoning that the thread now carries an ask X may label as spam."
+    ) in revise
+    humanizers = _prompts(first, HUMANIZED_THREAD) + _prompts(fake_llm.calls, HUMANIZED_THREAD)
+    assert len(humanizers) == 2
+    for prompt in humanizers:
+        assert (
+            "Keep the one specific ask the thread makes, if it makes one. Remove an ask only if "
+            "it is generic engagement bait or asks people to share, tag, copy the link, or reply "
+            "for a reward, and my feedback didn't ask for it."
+        ) in prompt
+        assert "| Spam-labeled ask | Must fix |" in prompt
+
+
+@pytest.mark.parametrize(
+    ("action", "rule"),
+    [
+        (
+            "share",
+            '- Never ask for the share. No "send this to", no "tag someone": X labels those '
+            "as spam. The post earns the share. Close on the takeaway.",
+        ),
+        (
+            "bookmark",
+            "- Don't ask for the save unless the raw input asks for it. Close on the takeaway and "
+            "let the usefulness do the work.",
+        ),
+    ],
+)
+async def test_a_share_or_bookmark_thread_earns_the_action_and_never_asks_for_it(
+    client, ready, fake_llm, action, rule
+):
+    await _write_thread(client, fake_llm, funnel="TOF", desired_action=action)
+
+    for guide in _guides(fake_llm):
+        assert rule in guide
+        assert (
+            f"For this post: the desired action is {action}, which is earned by the post and "
+            'never asked for. Close on the takeaway. `cta_type` is "none".'
+        ) in guide
+        assert "Send this to a founder" not in guide
+
+
+async def test_a_follow_thread_gives_what_comes_next_and_never_tells_readers_to_follow(
+    client, ready, fake_llm
+):
+    await _write_thread(client, fake_llm, desired_action="follow")
+
+    for guide in _guides(fake_llm):
+        assert (
+            "- Never tell them to follow. Say what comes next and when; that is the reason to "
+            "follow."
+        ) in guide
+        assert "Follow if you want day 2" not in guide
+
+
+async def test_a_top_of_funnel_thread_lists_no_share_and_avoids_share_tag_like_and_repost_asks(
+    client, ready, fake_llm
+):
+    await _write_thread(client, fake_llm, funnel="TOF", desired_action="reply")
+
+    for guide in _guides(fake_llm):
+        assert (
+            "## CTAs that fit top of funnel\n\n"
+            "- Best: no CTA at all (the post is the CTA); a specific question about the post's "
+            "idea; a follow only when there is a series to follow for, stated as a reason, not "
+            "an order.\n"
+            "- Avoid: links, DMs, and any ask to share, tag, like or repost."
+        ) in guide
+
+
+async def test_the_thread_cta_examples_drop_the_bookmark_ask_and_give_the_follow_reason(
+    client, ready, fake_llm
+):
+    await _write_thread(client, fake_llm)
+
+    for guide in _guides(fake_llm):
+        assert (
+            "Weak CTA -> strong CTA (shape only, never copy the wording):\n\n"
+            '- "Follow for more" -> "I\'m documenting the whole build. Day 2 goes up tomorrow."\n'
+            '- "Thoughts?" -> "What\'s the one tool you\'d never drop from your stack?"\n'
+            '- "Link below" -> '
+        ) in guide
+        assert "Bookmark this" not in guide
+        assert "Save this for" not in guide
+
+
+@pytest.mark.parametrize("cta_type", ["share", "bookmark"])
+async def test_a_thread_version_whose_cta_is_share_or_bookmark_still_validates(
+    client, db, ready, fake_llm, cta_type
+):
+    fake_llm.standing[MERGED_THREAD] = merged_thread(cta_type=cta_type)
+
+    response = await _write_thread(client, fake_llm)
+
+    assert response.status_code == 201, response.text
+    assert (await _version(db)).cta_type == cta_type
+
+
+async def test_the_thread_revision_humanizer_keeps_an_ask_x_labels_as_spam_the_feedback_asked_for(
+    client, ready, fake_llm
+):
+    feedback = "add 'tag a friend who ships' to the last part"
+
+    await _thread_with_feedback(client, fake_llm, feedback=feedback)
+
+    [humanizer] = _calls(fake_llm, HUMANIZED_THREAD)
+    text = _system_text(humanizer)
+    assert "| Delete the ask, unless my feedback asked for it. A DM keyword is fine" in text
+    assert "or reply for a reward, and my feedback didn't ask for it." in text
+    assert {
+        "role": "user",
+        "content": "This is my latest feedback on that thread. The thread below already "
+        "applies it, so don't apply it again, and don't add, remove or reorder anything to "
+        "serve it. If it asks for something your guidelines would undo, keep what it asks "
+        f"for.\n\n<feedback>\n{feedback}\n</feedback>",
+    } in humanizer.messages
 
 
 async def test_the_thread_revise_conversation_is_the_inputs_then_each_version_after_its_feedback(
