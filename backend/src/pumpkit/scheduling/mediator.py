@@ -772,19 +772,9 @@ async def get_post(
 def _reach_warnings(
     post: Post, scheduled_post: Optional[ScheduledPost]
 ) -> list[ReachWarningResponse]:
-    """
-    The text warnings for what goes out on X: the Scheduled post's own text, else the Text, which
-    is also what a Failed post's retry copies.
-    """
-    if scheduled_post is not None and scheduled_post.state != FAILED:
-        parts = [part.text for part in scheduled_post.parts]
-        first_reply = scheduled_post.first_reply
-    else:
-        parts = list(post.text_parts or [])
-        first_reply = post.text_first_reply
     return [
         ReachWarningResponse(code=w.code, part=w.part, message=w.message)
-        for w in reach_warnings.text_warnings(parts, first_reply=first_reply)
+        for w in reach_warnings.post_warnings(post, scheduled_post)
     ]
 
 

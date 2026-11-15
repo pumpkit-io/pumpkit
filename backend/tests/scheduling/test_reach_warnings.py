@@ -82,6 +82,26 @@ FINDINGS = [
     ),
     pytest.param(["If it helped, share it."], [("share_ask", 1)], id="share-it-after-a-clause"),
     pytest.param(["Done.\n\nTag your cofounder."], [("tag_ask", 1)], id="tag-on-a-new-line"),
+    pytest.param(["Repost."], [("engagement_ask", 1)], id="bare-repost"),
+    pytest.param(["Retweet."], [("engagement_ask", 1)], id="bare-retweet"),
+    pytest.param(["Repost!"], [("engagement_ask", 1)], id="repost-exclaimed"),
+    pytest.param(["Please repost."], [("engagement_ask", 1)], id="please-repost"),
+    pytest.param(["Follow."], [("engagement_ask", 1)], id="bare-follow"),
+    pytest.param(["Please follow."], [("engagement_ask", 1)], id="please-follow"),
+    pytest.param(["Hit follow."], [("engagement_ask", 1)], id="hit-follow"),
+    pytest.param(["Follow for daily tips."], [("engagement_ask", 1)], id="follow-for-tips"),
+    pytest.param(["Follow @handle for more"], [("engagement_ask", 1)], id="follow-a-handle"),
+    pytest.param(["Please like."], [("engagement_ask", 1)], id="please-like"),
+    pytest.param(["Like if this helped."], [("engagement_ask", 1)], id="like-if-it-helped"),
+    pytest.param(["Give this a like."], [("engagement_ask", 1)], id="give-this-a-like"),
+    pytest.param(["Leave a like."], [("engagement_ask", 1)], id="leave-a-like"),
+    pytest.param(["Hit like."], [("engagement_ask", 1)], id="hit-like"),
+    pytest.param(["Repost if useful"], [("engagement_ask", 1)], id="repost-if-useful"),
+    pytest.param(["Repost so others see it."], [("engagement_ask", 1)], id="repost-so"),
+    pytest.param(["Repost to help a friend."], [("engagement_ask", 1)], id="repost-to-help"),
+    pytest.param(["Retweet to spread the word."], [("engagement_ask", 1)], id="retweet-to-spread"),
+    pytest.param(["Share if you agree."], [("share_ask", 1)], id="share-if-you-agree"),
+    pytest.param(["Pass this on to a friend."], [("share_ask", 1)], id="pass-this-on"),
 ]
 
 # Texts that ask for nothing X labels, though they come close.
@@ -118,6 +138,31 @@ CLEAN = [
     pytest.param(
         "Copy the link from your dashboard and paste it in the config.", id="copy-another-link"
     ),
+    pytest.param("I write every week and share it on my blog.", id="and-share-in-a-story"),
+    pytest.param(
+        "I build in public and share with my team every Friday.", id="and-share-with-my-team"
+    ),
+    pytest.param("I just share it with friends first.", id="i-just-share"),
+    pytest.param("Like it or not, AI agents are here.", id="like-it-or-not"),
+    pytest.param("And like it or not, the market moved.", id="and-like-it-or-not"),
+    pytest.param("Like it or hate it, it works.", id="like-it-or-hate-it"),
+    pytest.param("Like this, the cache stays warm.", id="like-this-comma"),
+    pytest.param("Like if you shipped on a Friday, you know the feeling.", id="like-if-you-comma"),
+    pytest.param("Follow along.", id="follow-along"),
+    pytest.param("Go follow up with your leads.", id="follow-up"),
+    pytest.param("Now tag your release.", id="now-tag-your-release"),
+    pytest.param("Next, tag a release.", id="tag-a-release"),
+    pytest.param("Fix the bugs and tag them later.", id="and-tag-them"),
+    pytest.param("Every comment on that PR gets addressed.", id="every-comment-gets-addressed"),
+    pytest.param(
+        "Every reply that wins the argument loses the friend.", id="every-reply-that-wins"
+    ),
+    pytest.param(
+        "Open settings, copy the link and paste it in Slack.", id="copy-the-link-and-paste"
+    ),
+    pytest.param("Click Copy link in the share menu.", id="click-copy-link"),
+    pytest.param("My rule: reply 'no' to every meeting invite.", id="reply-no-to-every"),
+    pytest.param("We hit like 10k users last month.", id="hit-like-a-number"),
 ]
 
 
@@ -150,11 +195,12 @@ async def test_close_calls_stay_clean(client, subscribed, post_with, text):
     ids=["after-copy", "newlines", "after-a-comma", "after-please"],
 )
 async def test_a_long_run_of_whitespace_reads_fast(client, subscribed, post_with, text):
-    post_id = await post_with(text)
+    # Four Parts so a quadratic search, seconds on each, overruns a bound slow CI still meets.
+    post_id = await post_with(text, text, text, text)
 
     started = time.monotonic()
     assert await _warnings(client, post_id) == []
-    assert time.monotonic() - started < 1
+    assert time.monotonic() - started < 5
 
 
 async def test_a_message_names_the_part_and_a_shortener_says_what_to_link(
