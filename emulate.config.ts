@@ -31,6 +31,7 @@ export default {
           },
           { id: '1002', username: 'grace', name: 'Grace', confirmed_email: 'grace@e2e-user.dev' },
           { id: '1003', username: 'no_email', name: 'No email' },
+          { id: '1004', username: 'leaver', name: 'Leaver', confirmed_email: 'leaver@e2e-user.dev' },
           {
             id: '2001',
             username: 'e2e_user',

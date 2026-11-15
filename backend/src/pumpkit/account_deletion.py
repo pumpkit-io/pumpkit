@@ -1,4 +1,7 @@
-"""Privileged support owner for deleting a settled local account and its stored files."""
+"""
+Deletes a settled account and its stored files: a User's own deletion from Settings (ADR 0031),
+and the Operator's command for a User who wrote to support.
+"""
 
 import argparse
 import asyncio
@@ -12,17 +15,40 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import pumpkit.models  # noqa: F401
+from pumpkit.auth.models import User
 from pumpkit.auth.service import users
 from pumpkit.billing import coupon_operations, coupon_redemption, prelaunch_reset
 from pumpkit.billing import service as billing
 from pumpkit.billing.gateway import BillingGateway, get_billing_gateway
 from pumpkit.billing.models import FreeAccess
+from pumpkit.core.background import TaskRegistry
 from pumpkit.core.db.session import _db_session_handler
-from pumpkit.core.errors import AppError, ConflictError
+from pumpkit.core.errors import AppError, ConflictError, RefusedError
+from pumpkit.core.logging import logger
 from pumpkit.core.storage import FileStorage, get_file_storage
 from pumpkit.posts import account_deletion as post_deletion
 from pumpkit.posts.models import AccountFileDeletion, Media
 from pumpkit.scheduling import service as scheduling
+from pumpkit.x_connection import service as x_connection
+from pumpkit.x_connection.x_publisher import XPublisher, XPublisherError
+
+PUBLISHING_IN_PROGRESS = "publishing_in_progress"
+BILLING_OPERATION_PENDING = "billing_operation_pending"
+UNPAID_INVOICE = "unpaid_invoice"
+SUBSCRIPTION_RUNNING = "subscription_running"
+
+# The command prints each refusal's own words; a User deleting from Settings reads these.
+_USER_MESSAGES = {
+    PUBLISHING_IN_PROGRESS: "A post is going out on X right now. Try again in a minute.",
+    BILLING_OPERATION_PENDING: (
+        "A billing change is still being processed. Try again in a few minutes."
+    ),
+    UNPAID_INVOICE: "You have an unpaid invoice. Contact support to delete your account.",
+    SUBSCRIPTION_RUNNING: (
+        "Your subscription is still running. Cancel it in Plan, then delete your account"
+        " once it has ended."
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -51,23 +77,38 @@ async def delete_account(
             raise ConflictError("The selected prelaunch account does not exist.")
         return
     user = locked
-    await coupon_operations.require_settled(db, user_id=user.id)
-    await scheduling.require_settled_publishing_before_account_deletion(db, user_id=user.id)
+    try:
+        await coupon_operations.require_settled(db, user_id=user.id)
+    except ConflictError as error:
+        raise ConflictError(error.detail, code=BILLING_OPERATION_PENDING) from error
+    try:
+        await scheduling.require_settled_publishing_before_account_deletion(db, user_id=user.id)
+    except ConflictError as error:
+        raise ConflictError(error.detail, code=PUBLISHING_IN_PROGRESS) from error
     if user.stripe_customer_id:
         states = await gateway.list_subscriptions(customer_id=user.stripe_customer_id)
         if await gateway.has_pending_checkout(customer_id=user.stripe_customer_id):
-            raise ConflictError("Resolve the pending paid checkout before deleting this account.")
-        if any(
-            state.status not in {"canceled", "incomplete_expired"} for state in states
-        ) or await gateway.has_unsettled_invoices(customer_id=user.stripe_customer_id):
             raise ConflictError(
-                "Resolve outstanding subscription and payment obligations before deleting this account."
+                "Resolve the pending paid checkout before deleting this account.",
+                code=BILLING_OPERATION_PENDING,
+            )
+        if any(state.status not in {"canceled", "incomplete_expired"} for state in states):
+            raise ConflictError(
+                "Resolve outstanding subscription and payment obligations before deleting this account.",
+                code=SUBSCRIPTION_RUNNING,
+            )
+        if await gateway.has_unsettled_invoices(customer_id=user.stripe_customer_id):
+            raise ConflictError(
+                "Resolve outstanding subscription and payment obligations before deleting this account.",
+                code=UNPAID_INVOICE,
             )
         await billing.sync_customer(
             db, gateway, user_id=user.id, customer_id=user.stripe_customer_id
         )
     if await billing.get_user_subscription(db, user_id=user.id):
-        raise ConflictError("Resolve the account's subscription before deletion.")
+        raise ConflictError(
+            "Resolve the account's subscription before deletion.", code=SUBSCRIPTION_RUNNING
+        )
     benefit_reset = await prelaunch_reset.prepare(db, user=user) if reset_benefits else None
     file_keys = frozenset(
         key
@@ -101,6 +142,52 @@ async def delete_account(
         await prelaunch_reset.apply(db, benefit_reset)
     await db.commit()
     return report
+
+
+async def delete_own_account(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    publisher: XPublisher,
+    tasks: TaskRegistry,
+    sessions: async_sessionmaker[AsyncSession],
+    storage: FileStorage,
+    *,
+    user: User,
+    handle: str,
+) -> None:
+    """
+    Delete the signed-in User's account once they typed their handle, then revoke Pumpkit's X
+    grant and delete their Media files in the background. Sessions and Connected apps cascade.
+    """
+    if not _confirms(user, handle):
+        raise RefusedError("Type your @handle to confirm.", code="handle_mismatch")
+    # The cascade removes the X connection, so its token is read first.
+    connection = await x_connection.get_connection(db, user_id=user.id)
+    refresh_token = x_connection.refresh_token(connection) if connection is not None else None
+    try:
+        await delete_account(db, gateway, user_id=user.id)
+    except ConflictError as error:
+        if error.code not in _USER_MESSAGES:
+            raise
+        raise ConflictError(_USER_MESSAGES[error.code], code=error.code) from error
+    if refresh_token:
+        try:
+            await publisher.revoke(token=refresh_token, token_type_hint="refresh_token")
+        except XPublisherError as error:
+            # The tokens are gone from Pumpkit either way, so the deletion stands.
+            logger.warning("Revoking a deleted account's X token failed: %s", error)
+    await tasks.start(f"delete the files of deleted account {user.id}", _sweep(sessions, storage))
+
+
+def _confirms(user: User, handle: str) -> bool:
+    typed = handle.strip().removeprefix("@").casefold()
+    return user.x_handle is not None and typed == user.x_handle.casefold()
+
+
+async def _sweep(sessions: async_sessionmaker[AsyncSession], storage: FileStorage) -> None:
+    # A failed sweep leaves the files queued for the next one, or for `--retry-files`.
+    async with sessions() as db:
+        await delete_files(db, storage)
 
 
 async def delete_files(

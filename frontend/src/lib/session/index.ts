@@ -3,7 +3,7 @@ import { hardRedirect } from '@/lib/navigation';
 import { storage } from '@/lib/storage';
 import { POSTHOG_IDENTIFIED_KEY, resetPostHog } from '@/lib/analyticsConsent';
 import { api, performRefresh } from '@/services/apiService';
-import { SIGN_IN_ERROR, signInPath } from './signInError';
+import { ACCOUNT_DELETED_PATH, SIGN_IN_ERROR, signInPath } from './signInError';
 import {
   clearSession,
   readSession,
@@ -14,7 +14,14 @@ import {
 
 export type { Session } from './store';
 export { SESSION_STORAGE_KEY } from './store';
-export { SIGN_IN_ERROR, isSignInErrorCode, signInPath, type SignInErrorCode } from './signInError';
+export {
+  ACCOUNT_DELETED_NOTICE,
+  ACCOUNT_DELETED_PATH,
+  SIGN_IN_ERROR,
+  isSignInErrorCode,
+  signInPath,
+  type SignInErrorCode,
+} from './signInError';
 
 /**
  * Why a Session ended.
@@ -22,8 +29,10 @@ export { SIGN_IN_ERROR, isSignInErrorCode, signInPath, type SignInErrorCode } fr
  * - `session_ended`: the refresh endpoint answered 401.
  * - `account_suspended`: the refresh endpoint answered 401 because the User is Suspended.
  * - `other_tab`: Session storage was cleared in another tab.
+ * - `account_deleted`: the User deleted their account, which already ended every Session.
  */
-export type EndSessionReason = 'user' | 'session_ended' | 'account_suspended' | 'other_tab';
+export type EndSessionReason =
+  'user' | 'session_ended' | 'account_suspended' | 'other_tab' | 'account_deleted';
 
 /**
  * Why a sign-in callback's fragment could not start a Session; the callback page maps it to an error code.
@@ -39,6 +48,7 @@ const ROUTE_AFTER_END: Record<EndSessionReason, string> = {
   session_ended: signInPath(),
   account_suspended: signInPath(SIGN_IN_ERROR.accountSuspended),
   other_tab: signInPath(),
+  account_deleted: ACCOUNT_DELETED_PATH,
 };
 
 /** The reason a refresh failure ends the Session, or null if it must not. */

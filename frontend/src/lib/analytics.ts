@@ -97,6 +97,9 @@ export const EVENTS = {
     description: 'Settings: changed the theme in Appearance. Props: theme (system/light/dark).',
   },
   settings_sign_out_clicked: { description: 'Settings: clicked "Sign out" in the header.' },
+  account_deleted: {
+    description: 'Settings: the User deleted their account, sent before signing out locally.',
+  },
   account_profile_saved: { description: 'Account: saved profile changes. Props: fields_changed.' },
   account_profile_save_failed: {
     description: 'Account: profile save failed. Props: error_message.',

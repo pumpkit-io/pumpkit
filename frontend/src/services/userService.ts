@@ -50,4 +50,9 @@ export const userService = {
     const response = await apiService.patch<UserProfileResponse>('/users/me', body);
     return toUserProfile(response.data);
   },
+
+  /** Deletes the account for good; the backend refuses a `handle` that isn't the User's. */
+  deleteAccount: async (handle: string): Promise<void> => {
+    await apiService.delete('/users/me', { data: { handle } });
+  },
 };

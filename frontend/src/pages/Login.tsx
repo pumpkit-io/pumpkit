@@ -13,7 +13,12 @@ import { redirectTo } from '@/lib/navigation';
 import { track } from '../lib/analytics';
 import mascot from '@/assets/brand/mascot.svg';
 import mascotHopWave from '@/assets/brand/mascot-hop-wave.gif';
-import { isSignInErrorCode, SIGN_IN_ERROR, type SignInErrorCode } from '../lib/session';
+import {
+  ACCOUNT_DELETED_NOTICE,
+  isSignInErrorCode,
+  SIGN_IN_ERROR,
+  type SignInErrorCode,
+} from '../lib/session';
 
 const SIGN_IN_ERROR_MESSAGES: Record<SignInErrorCode, string> = {
   [SIGN_IN_ERROR.invalidMagicLink]: 'That sign-in link is no longer available. Continue with X.',
@@ -35,13 +40,17 @@ export function Login() {
   const location = useLocation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const { operator, app_name } = useInstance();
   const hasTerms = operator !== null;
 
   useEffect(() => {
-    const code = new URLSearchParams(location.search).get('error');
-    if (!isSignInErrorCode(code)) return;
-    setError(SIGN_IN_ERROR_MESSAGES[code]);
+    const params = new URLSearchParams(location.search);
+    const code = params.get('error');
+    const deleted = params.get('notice') === ACCOUNT_DELETED_NOTICE;
+    if (!isSignInErrorCode(code) && !deleted) return;
+    if (isSignInErrorCode(code)) setError(SIGN_IN_ERROR_MESSAGES[code]);
+    if (deleted) setNotice('Your account is deleted.');
     // Drop the code from the URL so a reload doesn't show the message again.
     window.history.replaceState({}, document.title, location.pathname);
   }, [location.search, location.pathname]);
@@ -73,6 +82,14 @@ export function Login() {
               </p>
 
               <div className="mt-8 grid gap-6">
+                {notice && !error && (
+                  <p
+                    role="status"
+                    className="rounded-lg border border-border bg-muted p-3 text-sm font-medium text-foreground"
+                  >
+                    {notice}
+                  </p>
+                )}
                 {error && (
                   <div
                     role="alert"

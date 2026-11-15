@@ -1,0 +1,220 @@
+"""
+A User deleting their own account from Settings with `DELETE /users/me` (ADR 0031): confirmed by
+their handle, refused while something is in flight, and followed by revoking Pumpkit's X grant.
+"""
+
+from datetime import datetime, timezone
+from io import BytesIO
+
+import pytest
+from sqlalchemy import event, select
+
+from pumpkit.account_deletion_router import router as account_deletion_router
+from pumpkit.auth.models import User
+from pumpkit.billing.models import Subscription
+from pumpkit.core.background import get_background_tasks
+from pumpkit.core.db.session import get_session_maker
+from pumpkit.core.storage import get_file_storage
+from pumpkit.posts.models import Media
+from pumpkit.scheduling.models import PUBLISHING, ScheduledPost
+from pumpkit.x_connection.models import XConnection
+from tests.billing.test_billing import CHECKOUT, CHECKOUT_MONTHLY
+from tests.billing.test_trial_eligibility import BILLING_ME, ended_trial, sign_in
+from tests.billing.test_trial_eligibility import trial_app as trial_app
+from tests.billing.test_trial_eligibility import trial_browser as trial_browser
+from tests.billing.test_trial_eligibility import trial_keys as trial_keys
+from tests.conftest import InlineTasks
+from tests.mcp_client import McpClient
+from tests.x_connection.sign_in.conftest import sign_in_app as sign_in_app
+
+DELETE_ME = "/api/v1/users/me"
+NOW = datetime(2026, 11, 15, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+async def enforce_account_cascades(db_engine):
+    if db_engine.dialect.name == "sqlite":
+
+        def foreign_keys(connection, record):
+            connection.execute("PRAGMA foreign_keys=ON")
+
+        event.listen(db_engine.sync_engine, "connect", foreign_keys)
+
+
+async def delete_me(browser, handle="@ada"):
+    return await browser.request("DELETE", DELETE_ME, json={"handle": handle})
+
+
+async def user_exists(db, user) -> bool:
+    return await db.scalar(select(User.id).where(User.id == user.id)) is not None
+
+
+@pytest.mark.parametrize("handle", ["@ada", "ada", "@ADA", " Ada "])
+async def test_confirming_with_the_handle_deletes_the_account(authed_client, db, user, handle):
+    response = await delete_me(authed_client, handle)
+
+    assert response.status_code == 204, response.text
+    assert not await user_exists(db, user)
+
+
+async def test_a_wrong_handle_deletes_nothing(authed_client, db, user):
+    response = await delete_me(authed_client, "@grace")
+
+    assert response.status_code == 422, response.text
+    assert response.json()["code"] == "handle_mismatch"
+    assert await user_exists(db, user)
+
+
+async def test_deleting_clears_the_refresh_cookie_and_ends_every_session(
+    authed_client, new_browser, sign_in_for_test, user
+):
+    other_browser = new_browser()
+    await sign_in_for_test(other_browser, user.email)
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 204, response.text
+    assert "Max-Age=0" in response.headers["set-cookie"]
+    assert (await other_browser.post("/api/v1/refresh-token")).status_code == 401
+    assert (await authed_client.get("/api/v1/users/me")).status_code == 401
+
+
+async def test_a_connected_apps_token_stops_working(sells_no_plans, authed_client, mcp: McpClient):
+    assert (await mcp.send("tools/list")).status_code == 200
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert (await mcp.send("tools/list")).status_code == 401
+
+
+async def test_deleting_revokes_the_x_grant_read_before_the_cascade(
+    authed_client, db, user, connect_x, fake_x_publisher
+):
+    await connect_x()
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert fake_x_publisher.revoked == [f"refresh-{fake_x_publisher.account.user_id}-1"]
+    assert await db.scalar(select(XConnection.id)) is None
+
+
+async def test_a_failed_revoke_still_deletes(authed_client, db, user, connect_x, fake_x_publisher):
+    await connect_x()
+    fake_x_publisher.fail_revoke = True
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert not await user_exists(db, user)
+
+
+async def test_deleting_removes_the_media_files(authed_client, db, user, file_storage):
+    await file_storage.put("media/ada/photo", BytesIO(b"photo"))
+    db.add(
+        Media(
+            user_id=user.id,
+            kind="image",
+            content_type="image/png",
+            byte_size=5,
+            file_key="media/ada/photo",
+            created_at=NOW,
+        )
+    )
+    await db.commit()
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert await file_storage.list_files("media") == []
+
+
+async def test_a_post_going_out_on_x_refuses_deletion(authed_client, db, user, post_with):
+    post_id = await post_with("Going out now.")
+    db.add(
+        ScheduledPost(
+            user_id=user.id,
+            x_user_id="1001",
+            publish_at=NOW,
+            state=PUBLISHING,
+            post_id=post_id,
+            created_at=NOW,
+            updated_at=NOW,
+        )
+    )
+    await db.commit()
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 409, response.text
+    assert response.json() == {
+        "detail": "A post is going out on X right now. Try again in a minute.",
+        "code": "publishing_in_progress",
+    }
+    assert await user_exists(db, user)
+
+
+async def test_a_pending_checkout_refuses_deletion(authed_client, db, user, fake_billing):
+    user.stripe_customer_id = "cus_ada"
+    await db.commit()
+    await fake_billing.create_subscription_checkout(
+        customer_id="cus_ada", price_id="price_monthly", quantity=1, user_id=user.id
+    )
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 409, response.text
+    assert response.json() == {
+        "detail": "A billing change is still being processed. Try again in a few minutes.",
+        "code": "billing_operation_pending",
+    }
+    assert await user_exists(db, user)
+
+
+async def test_an_unpaid_invoice_refuses_deletion(authed_client, db, user, fake_billing):
+    user.stripe_customer_id = "cus_ada"
+    await db.commit()
+    fake_billing.unsettled_invoice_customers.add("cus_ada")
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 409, response.text
+    assert response.json() == {
+        "detail": "You have an unpaid invoice. Contact support to delete your account.",
+        "code": "unpaid_invoice",
+    }
+    assert await user_exists(db, user)
+
+
+async def test_a_running_subscription_refuses_deletion_for_now(
+    authed_client, db, user, subscribed: Subscription
+):
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "subscription_running"
+    assert "Cancel it in Plan" in response.json()["detail"]
+    assert await user_exists(db, user)
+
+
+@pytest.fixture
+def deleting_trial_app(trial_app, db_session_maker, file_storage):
+    trial_app.include_router(account_deletion_router, prefix="/api/v1")
+    trial_app.dependency_overrides[get_background_tasks] = InlineTasks
+    trial_app.dependency_overrides[get_session_maker] = lambda: db_session_maker
+    trial_app.dependency_overrides[get_file_storage] = lambda: file_storage
+    return trial_app
+
+
+async def test_signing_in_again_makes_a_new_account_with_no_trial(
+    deleting_trial_app, trial_browser, fake_x_publisher, fake_billing, fixed_clock
+):
+    original = await sign_in(trial_browser, fake_x_publisher)
+    assert (await trial_browser.post(CHECKOUT, json=CHECKOUT_MONTHLY)).status_code == 200
+    customer = fake_billing.checkouts[-1].customer_id
+    fake_billing.set_subscription(customer, ended_trial(fixed_clock))
+    await fake_billing.expire_open_checkouts(customer_id=customer)
+
+    assert (await delete_me(trial_browser)).status_code == 204
+
+    recreated = await sign_in(trial_browser, fake_x_publisher)
+    assert recreated["id"] != original["id"]
+    offer = (await trial_browser.get(BILLING_ME)).json()
+    assert offer["trial_days"] is None

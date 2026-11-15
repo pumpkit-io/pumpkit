@@ -13,7 +13,7 @@ from typing import Any, Optional, Union
 from urllib.parse import urlencode
 
 from fastapi import Request, status
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.refresh_tokens as refresh_tokens_service
@@ -260,8 +260,12 @@ def ended_session_response() -> JSONResponse:
     response = JSONResponse(
         content={"message": "Logged out successfully"}, status_code=status.HTTP_200_OK
     )
-    response.delete_cookie(**_refresh_cookie_attributes())
+    clear_refresh_cookie(response)
     return response
+
+
+def clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(**_refresh_cookie_attributes())
 
 
 async def _issue(

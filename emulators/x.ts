@@ -184,6 +184,7 @@ export function pumpkitX(config: {
           value = p.get('token') ?? '';
         const grant = state.refresh[value];
         if (grant) {
+          state.events.push({ kind: 'revoke', userId: grant.userId });
           for (const [credential, active] of Object.entries(state.access)) {
             if (active.id === grant.id) delete state.access[credential];
           }
