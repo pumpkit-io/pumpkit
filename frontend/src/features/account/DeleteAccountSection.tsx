@@ -25,12 +25,13 @@ function normalizeHandle(handle: string): string {
   return handle.trim().replace(/^@/, '').toLowerCase();
 }
 
-/** The statuses of a Running Subscription, which deleting the account cancels at once. */
-const RUNNING: ReadonlySet<SubscriptionStatus> = new Set([
+/**
+ * The Running statuses deleting the account cancels at once. Past due and unpaid are left out:
+ * their invoice is still owed, which refuses deletion until it's settled.
+ */
+const ENDED_BY_DELETION: ReadonlySet<SubscriptionStatus> = new Set([
   'trialing',
   'active',
-  'past_due',
-  'unpaid',
   'paused',
 ]);
 
@@ -41,13 +42,13 @@ const RUNNING: ReadonlySet<SubscriptionStatus> = new Set([
 function useLosses(usage: Usage | null): string[] {
   const me = useBilling().data?.me;
   const status = me?.subscription?.status;
-  const running = status !== undefined && RUNNING.has(status);
+  const ending = status !== undefined && ENDED_BY_DELETION.has(status);
   // Only a Subscribed User's usage lists their Top-ups.
   const holdsTopUps =
     Boolean(me?.subscribed) && (usage === null || (usage.allowance?.topUps.length ?? 0) > 0);
   const waiting = usePostCounts().counts?.scheduled ?? 0;
   const losses: string[] = [];
-  if (running) losses.push('ends your subscription now, with no refund');
+  if (ending) losses.push('ends your subscription now, with no refund');
   if (holdsTopUps) losses.push('loses your unused top-ups');
   if (waiting > 0) losses.push('deletes your scheduled posts before they go out');
   losses.push('disconnects X and every connected AI app');

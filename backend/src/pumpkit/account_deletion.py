@@ -179,7 +179,7 @@ async def _delete(
 async def _end_billing(db: AsyncSession, gateway: BillingGateway, *, user: User) -> None:
     """
     Cancel every Running Subscription now, with no refund, and expire open Checkouts (ADR 0031).
-    A cancel can't be undone, so every refusal comes before the first one: unpaid invoices, then
+    A cancel can't be undone, so every refusal comes before the first one: owed invoices, then
     Checkouts still pending once the open ones are expired. Any Stripe failure, or a Subscription
     still running after the cancels, is `SubscriptionNotEnded`; a retry skips those cancelled.
     """
@@ -201,7 +201,8 @@ async def _end_billing(db: AsyncSession, gateway: BillingGateway, *, user: User)
     )
     try:
         for customer_id in customers:
-            if await gateway.has_unsettled_invoices(customer_id=customer_id):
+            # Not `has_unsettled_invoices`: Stripe drafts each renewal's invoice about an hour ahead.
+            if await gateway.has_owed_invoices(customer_id=customer_id):
                 raise ConflictError(_RESOLVE_OBLIGATIONS, code=UNPAID_INVOICE)
         # Expired first, so a Checkout completing meanwhile starts a Subscription listed below.
         for customer_id in customers:

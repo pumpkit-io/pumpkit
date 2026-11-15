@@ -260,6 +260,34 @@ async def test_an_unpaid_invoice_refuses_before_ending_the_subscription(
     assert await user_exists(db, user)
 
 
+async def test_a_draft_renewal_invoice_doesnt_hold_up_deletion(
+    authed_client, db, user, fake_billing
+):
+    await running_subscription(db, user, fake_billing)
+    fake_billing.draft_invoice_customers.add("cus_ada")
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert fake_billing.cancelled_subscriptions == ["sub_ada"]
+    assert not await user_exists(db, user)
+
+
+async def test_an_open_invoice_refuses_a_running_subscriber_before_ending_anything(
+    authed_client, db, user, fake_billing
+):
+    await running_subscription(db, user, fake_billing)
+    fake_billing.draft_invoice_customers.add("cus_ada")
+    fake_billing.unsettled_invoice_customers.add("cus_ada")
+
+    response = await delete_me(authed_client)
+
+    assert response.status_code == 409, response.text
+    assert response.json()["code"] == "unpaid_invoice"
+    assert fake_billing.cancelled_subscriptions == []
+    assert fake_billing.expired_checkouts == []
+    assert await user_exists(db, user)
+
+
 @pytest.mark.parametrize("failing", ["cancel_subscription", "expire_open_checkouts"])
 async def test_stripe_failing_to_end_billing_deletes_nothing(
     authed_client, db, user, fake_billing, failing

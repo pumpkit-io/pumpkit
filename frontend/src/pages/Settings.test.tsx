@@ -1061,6 +1061,35 @@ describe('Settings', () => {
       );
     });
 
+    it.each(['past_due', 'unpaid'] as const)(
+      "doesn't promise to end a %s subscription, which an unpaid invoice holds up",
+      async (status) => {
+        vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+          ...SUBSCRIBED,
+          subscription: { ...SUBSCRIBED.subscription!, status },
+        });
+        vi.mocked(usageService.get).mockResolvedValue(
+          usageWith({
+            topUps: [
+              {
+                generationsLeft: 40,
+                xPostsLeft: 10,
+                linkXPostsLeft: 1,
+                expiresAt: new Date('2027-01-01T00:00:00Z'),
+              },
+            ],
+          }),
+        );
+        const dialog = await openDeletion();
+
+        expect(await dialog.findByText('loses your unused top-ups')).toBeVisible();
+        expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+          'loses your unused top-ups',
+          'disconnects X and every connected AI app',
+        ]);
+      },
+    );
+
     it('says unused top-ups are lost when usage could not load', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(SUBSCRIBED);
       vi.mocked(usageService.get).mockRejectedValue(apiError(500, 'Down.'));

@@ -1116,3 +1116,31 @@ async def test_legacy_interval_change_replays_original_anchor_parameter():
     )
     assert http.forms[0]["billing_cycle_anchor"] == ["unchanged"]
     assert http.headers[0]["Idempotency-Key"] == "plan-change-legacy_change"
+
+
+@pytest.mark.parametrize(
+    "invoice_status, owed",
+    [
+        ("paid", False),
+        ("void", False),
+        ("draft", False),
+        ("open", True),
+        ("uncollectible", True),
+    ],
+)
+async def test_owed_invoices_leave_out_a_draft(invoice_status, owed):
+    body = json.dumps(
+        {
+            "object": "list",
+            "url": "/v1/invoices",
+            "has_more": False,
+            "data": [
+                {"id": "in_older", "object": "invoice", "status": invoice_status},
+                {"id": "in_latest", "object": "invoice", "status": "paid"},
+            ],
+        }
+    )
+    http = _RecordedStripe(body)
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    assert await gateway.has_owed_invoices(customer_id="cus_Contract") is owed
+    assert parse_qs(urlsplit(http.urls[0]).query)["customer"] == ["cus_Contract"]
