@@ -153,6 +153,7 @@ function postWith(final: string): PostDetail {
     scheduledPost: null,
     textMedia: [],
     reachWarnings: [],
+    oneIdeaADay: null,
   };
 }
 

@@ -750,6 +750,9 @@ async def get_post(
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
     scheduled_post = await service.get_for_post(db, post_id=post_id)
     written = post.text_version_number is not None
+    latest_of_brief = await service.latest_of_brief(
+        db, brief_id=post.idea.brief_id, but_post_id=post.id
+    )
     return PostDetailResponse(
         id=post.id,
         brief=post.brief,
@@ -766,6 +769,7 @@ async def get_post(
         status=post_status(scheduled_post.state if scheduled_post else None) if written else None,
         scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
         reach_warnings=_reach_warnings(post, scheduled_post),
+        one_idea_a_day=as_utc(latest_of_brief) if latest_of_brief else None,
     )
 
 

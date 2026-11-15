@@ -146,6 +146,9 @@ class PostDetailResponse(BaseModel):
     scheduled_post: Optional[ScheduledPostResponse]
     # For the Scheduled post's own text unless it Failed, else for the Text; worked out on each read.
     reach_warnings: list[ReachWarningResponse]
+    # The latest time another Post of the Brief goes or went out, from which "Post to…" presets the
+    # next day so split Ideas go out one a day; None when no other has a Scheduled post.
+    one_idea_a_day: Optional[datetime]
 
 
 class BriefPostDetailResponse(BriefPostResponse):

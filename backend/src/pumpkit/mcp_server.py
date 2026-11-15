@@ -92,6 +92,9 @@ post's text again, by its number, without writing a new version; feedback then r
 now: `schedule_post` and `post_now` take the post. A scheduled post copied from a thread keeps \
 every part, in order. Every scheduled post comes from its post's text: there is no typing one \
 by hand.
+- Split ideas from one brief go out one a day, so they don't compete for the same readers. \
+`get_post` gives `one_idea_a_day`, the latest time another post of its brief goes or went out: \
+unless the user picks a time, schedule the post for the day after it, at the same time of day.
 - A post goes out once, so it has at most one scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
 failed post takes feedback: a scheduled or published one doesn't.

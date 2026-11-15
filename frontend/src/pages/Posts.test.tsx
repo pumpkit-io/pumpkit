@@ -332,6 +332,7 @@ describe('Posts page', () => {
         failedFeedback: null,
         textMedia: [],
         reachWarnings: [],
+        oneIdeaADay: null,
         text: {
           format: 'post',
           firstReply: false,
@@ -646,6 +647,7 @@ describe('Posts page', () => {
         scheduledPost: null,
         textMedia: [],
         reachWarnings: [],
+        oneIdeaADay: null,
         ...extra,
       };
     }

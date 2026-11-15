@@ -210,6 +210,7 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
       scheduledPost: null,
       textMedia: [],
       reachWarnings: [],
+      oneIdeaADay: null,
     },
     versions,
   );
@@ -5179,6 +5180,66 @@ describe('Post page', () => {
         await dialog.findByText('Pick a time at least a minute from now.'),
       ).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: /^Schedule for/ })).toBeEnabled();
+    });
+
+    describe('one idea a day', () => {
+      const LINE = /^One idea a day:/;
+
+      it('opens on Now, with Schedule at the next whole hour, when no other post of the brief is scheduled', async () => {
+        const dialog = await openPostTo();
+
+        expect(dialog.getByRole('radio', { name: 'Now' })).toBeChecked();
+        fireEvent.click(dialog.getByRole('radio', { name: 'Schedule' }));
+        expect(dialog.getByLabelText('Date')).toHaveValue('2026-10-10');
+        expect(dialog.getByLabelText('Time')).toHaveValue('13:00');
+        expect(dialog.queryByText(LINE)).not.toBeInTheDocument();
+      });
+
+      it('presets Schedule to the day after the brief’s latest scheduled post, at its time of day, and says why', async () => {
+        vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
+        const dialog = await openPostTo({
+          ...postWith('the final text'),
+          oneIdeaADay: '2026-10-11T07:00:00Z',
+        });
+
+        expect(dialog.getByRole('radio', { name: 'Schedule' })).toBeChecked();
+        expect(dialog.getByLabelText('Date')).toHaveValue('2026-10-12');
+        expect(dialog.getByLabelText('Time')).toHaveValue('09:00');
+        expect(
+          dialog.getByText(
+            'One idea a day: your other post from this brief goes out Sun, Oct 11, 9:00 AM.',
+          ),
+        ).toBeInTheDocument();
+        fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
+
+        await dialogClosed();
+        expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+          { postId: 'post_01' },
+          '2026-10-12T07:00:00.000Z',
+          { community: null, shareWithFollowers: false },
+        );
+      });
+
+      it('drops the line once the user picks another date', async () => {
+        const dialog = await openPostTo({
+          ...postWith('the final text'),
+          oneIdeaADay: '2026-10-11T07:00:00Z',
+        });
+
+        fireEvent.change(dialog.getByLabelText('Date'), { target: { value: '2026-10-14' } });
+
+        expect(dialog.queryByText(LINE)).not.toBeInTheDocument();
+      });
+
+      it('opens as usual when the day after the brief’s latest post has passed', async () => {
+        const dialog = await openPostTo({
+          ...postWith('the final text'),
+          oneIdeaADay: '2026-10-08T07:00:00Z',
+        });
+
+        expect(dialog.getByRole('radio', { name: 'Now' })).toBeChecked();
+        expect(dialog.queryByText(LINE)).not.toBeInTheDocument();
+      });
     });
 
     function usageWithLinkPostsLeft(left: number): Usage {

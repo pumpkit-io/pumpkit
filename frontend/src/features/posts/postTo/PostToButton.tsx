@@ -16,6 +16,7 @@ export function PostToButton({
   parts,
   sender,
   initialWhere,
+  oneIdeaADay = null,
   disabled = false,
   quiet = false,
   waitingFor = null,
@@ -27,6 +28,8 @@ export function PostToButton({
   parts: ShownPart[];
   sender: PostToSender;
   initialWhere?: DestinationDraft;
+  /** When the latest other Post of the Brief goes or went out: Schedule presets the day after. */
+  oneIdeaADay?: string | null;
   disabled?: boolean;
   /** An outline button, for a page where no action is primary. */
   quiet?: boolean;
@@ -76,6 +79,7 @@ export function PostToButton({
           parts={parts}
           sender={sender}
           initialWhere={initialWhere}
+          oneIdeaADay={oneIdeaADay}
           onClose={() => setOpen(false)}
           onDone={(scheduledPost) => {
             setOpen(false);
