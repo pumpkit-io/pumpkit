@@ -30,6 +30,7 @@ function draft(versions: Version[]): PostDetail {
     failedFeedback: null,
     scheduledPost: null,
     textMedia: [],
+    reachWarnings: [],
   };
 }
 

@@ -126,6 +126,7 @@ const POST: PostDetail = {
   failedFeedback: null,
   scheduledPost: null,
   textMedia: [],
+  reachWarnings: [],
 };
 
 async function sidebar() {

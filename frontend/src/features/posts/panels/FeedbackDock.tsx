@@ -33,6 +33,7 @@ export function FeedbackDock({
   format: textFormat,
   feedback: sending,
   restoreError,
+  warnings,
 }: {
   name: string;
   /** Under the composer, such as why a Failed Post didn't go out. */
@@ -42,6 +43,8 @@ export function FeedbackDock({
   feedback: FeedbackSending;
   /** Why the last restore from History didn't happen. */
   restoreError?: string | null;
+  /** The Reach warnings, which render nothing when there are none. */
+  warnings?: ReactNode;
 }) {
   const phone = useMediaQuery(PHONE);
   const [feedback, setFeedback] = useState('');
@@ -83,10 +86,11 @@ export function FeedbackDock({
     <Dock
       name={name}
       notes={
-        (reason || error || notice || allowanceUsedUp || restoreError || low) && (
+        (reason || error || notice || allowanceUsedUp || restoreError || low || warnings) && (
           <div className="space-y-2">
             {low}
             {reason}
+            {warnings}
             {restoreError && <ErrorBanner message={restoreError} />}
             {error && (
               <ErrorBanner

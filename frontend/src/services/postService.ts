@@ -178,6 +178,16 @@ export function isUnwritten(post: PostDetail | UnwrittenPost): post is Unwritten
   return 'writingState' in post;
 }
 
+/** Something in a Post's text that may lead X to show it to fewer people; it never stops posting. */
+export interface ReachWarning {
+  /** Stable, such as `share_ask` or `many_hashtags`. */
+  code: string;
+  /** The Part it was found in, from 1. */
+  part: number | null;
+  /** One sentence for the User. */
+  message: string;
+}
+
 /** A Post as its page shows it, read from the server. */
 export interface PostDetail extends Post {
   briefId: string;
@@ -198,6 +208,8 @@ export interface PostDetail extends Post {
    * since undo, redo, restoring and Feedback change only its words.
    */
   textMedia: Media[][];
+  /** For the Scheduled post's own text when it has one, else for the Text, as the Post was read. */
+  reachWarnings: ReachWarning[];
 }
 
 /** How many Posts each status holds, for the Posts tabs and the sidebar's Failed badge. */
@@ -343,6 +355,7 @@ interface PostDetailApi extends PostApi {
   /** Null until the first Version is written. */
   status: PostStatus | null;
   scheduled_post: ScheduledPostApi | null;
+  reach_warnings: ReachWarning[];
 }
 
 export const toPlan = (p: PlanApi): Plan => ({
@@ -457,7 +470,13 @@ export const postService = {
       failedFeedback: data.failed_feedback,
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
+      reachWarnings: data.reach_warnings,
     };
+  },
+  /** The Post's Reach warnings as the server works them out now, for after its text changed. */
+  reachWarnings: async (postId: string): Promise<ReachWarning[]> => {
+    const { data } = await apiService.get<PostDetailApi>(`/posts/${encodeURIComponent(postId)}`);
+    return data.reach_warnings;
   },
   /**
    * Discards a Draft: the Post and its Versions are deleted for good, and its Idea is offered again

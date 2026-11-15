@@ -50,6 +50,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     restoreVersion: vi.fn(),
     saveText: vi.fn(),
     discard: vi.fn(),
+    reachWarnings: vi.fn(),
   },
 }));
 vi.mock('@/services/briefService', async (importOriginal) => ({
@@ -123,6 +124,7 @@ import {
   type Plan,
   type PostDetail,
   type PostText,
+  type ReachWarning,
   type UnwrittenPost,
   type Version,
 } from '@/services/postService';
@@ -207,6 +209,7 @@ function draft(versions: Version[] = [version(1, ['the final text'])]): PostDeta
       failedFeedback: null,
       scheduledPost: null,
       textMedia: [],
+      reachWarnings: [],
     },
     versions,
   );
@@ -312,6 +315,7 @@ describe('Post page', () => {
     vi.mocked(postService.awaitVersion).mockReset();
     vi.mocked(postService.dismissFailedFeedback).mockReset().mockResolvedValue();
     vi.mocked(postService.restoreVersion).mockReset();
+    vi.mocked(postService.reachWarnings).mockReset().mockResolvedValue([]);
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
     vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
@@ -4934,6 +4938,95 @@ describe('Post page', () => {
       );
       expect(second!.getByText('New two.')).toBeInTheDocument();
       expect(second!.queryByText('Live on X')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Reach warnings', () => {
+    const SHARE: ReachWarning = {
+      code: 'share_ask',
+      part: 1,
+      message:
+        "This post asks readers to share it, and X hides posts that ask for shares from people who don't follow you.",
+    };
+    const HASHTAGS: ReachWarning = {
+      code: 'many_hashtags',
+      part: 1,
+      message:
+        'This post has two or more hashtags, and X may treat that as hashtag abuse and show it to fewer people.',
+    };
+
+    it('shows one warning under the Draft dock as one line', async () => {
+      renderPost({ ...postWith('Share this with a founder.'), reachWarnings: [SHARE] });
+      await textCard();
+
+      const warnings = within(panel('Draft').getByRole('group', { name: 'Reach warnings' }));
+      expect(warnings.getByText(SHARE.message)).toBeInTheDocument();
+      expect(warnings.queryByRole('button')).not.toBeInTheDocument();
+    });
+
+    it('folds several into one line that opens to list each', async () => {
+      renderPost({ ...postWith('Share this. #a #b'), reachWarnings: [SHARE, HASHTAGS] });
+      await textCard();
+
+      const warnings = within(panel('Draft').getByRole('group', { name: 'Reach warnings' }));
+      const disclosure = warnings.getByRole('button', { name: '2 reach warnings' });
+      expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+      expect(warnings.queryByText(SHARE.message)).not.toBeInTheDocument();
+
+      fireEvent.click(disclosure);
+
+      expect(disclosure).toHaveAttribute('aria-expanded', 'true');
+      expect(warnings.getByText(SHARE.message)).toBeInTheDocument();
+      expect(warnings.getByText(HASHTAGS.message)).toBeInTheDocument();
+    });
+
+    it('shows nothing when there are none', async () => {
+      renderPost(postWith('the final text'));
+      await textCard();
+
+      expect(screen.queryByRole('group', { name: 'Reach warnings' })).not.toBeInTheDocument();
+    });
+
+    it('shows them under the Failed and Scheduled docks too', async () => {
+      const failed = renderPost({
+        ...withScheduledPost({ ...SCHEDULED, state: 'failed', failedReason: 'X refused it.' }),
+        reachWarnings: [SHARE],
+      });
+      await textCard();
+      expect(panel('Failed').getByText(SHARE.message)).toBeInTheDocument();
+      failed.unmount();
+
+      renderPost({ ...withScheduledPost(SCHEDULED), reachWarnings: [HASHTAGS] });
+      await textCard();
+      expect(panel('Scheduled').getByText(HASHTAGS.message)).toBeInTheDocument();
+    });
+
+    it('reads them again once a hand edit is saved', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        vi.mocked(postService.saveText)
+          .mockReset()
+          .mockImplementation(async (_postId, texts) => ({
+            format: 'post',
+            firstReply: false,
+            parts: texts.map((text) => part(text)),
+            versionNumber: 1,
+            edited: true,
+          }));
+        vi.mocked(postService.reachWarnings).mockReset().mockResolvedValue([HASHTAGS]);
+        renderPost(postWith('the final text'));
+        const box = (await textCard()).getByRole('textbox', { name: 'Post text' });
+
+        fireEvent.change(box, { target: { value: 'the final text #a #b' } });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(TEXT_SAVE_PAUSE_MS);
+        });
+
+        expect(await panel('Draft').findByText(HASHTAGS.message)).toBeInTheDocument();
+        expect(postService.reachWarnings).toHaveBeenCalledWith('post_01');
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

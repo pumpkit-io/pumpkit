@@ -110,6 +110,17 @@ class ScheduledPostResponse(BaseModel):
     posting: bool
 
 
+class ReachWarningResponse(BaseModel):
+    """Something that may lead X to show a post to fewer people; it never stops scheduling."""
+
+    # Stable for AI apps, such as "share_ask" or "many_hashtags".
+    code: str
+    # The Part it was found in, from 1.
+    part: Optional[int]
+    # One sentence for the User, saying what was found and what X does.
+    message: str
+
+
 class PostDetailResponse(BaseModel):
     """One Post with its Text, its Versions in order, and the status its Scheduled post gives it."""
 
@@ -132,6 +143,8 @@ class PostDetailResponse(BaseModel):
     status: Optional[PostStatus]
     # None while the Post is a Draft.
     scheduled_post: Optional[ScheduledPostResponse]
+    # For the Scheduled post's own text unless it Failed, else for the Text; worked out on each read.
+    reach_warnings: list[ReachWarningResponse]
 
 
 class BriefPostDetailResponse(BriefPostResponse):

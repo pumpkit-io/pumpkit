@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Notice } from '@/components/Notice';
 import { Button } from '@/components/ui/button';
@@ -14,16 +15,27 @@ export function ScheduledDock({
   scheduledPost,
   posting,
   notice,
+  warnings,
   onEdit,
 }: {
   scheduledPost: ScheduledPost;
   posting: boolean;
   /** Why the editor closed, under the card; the Post page announces it. */
   notice: string | null;
+  /** Its own text's Reach warnings, which render nothing when there are none. */
+  warnings?: ReactNode;
   onEdit: () => void;
 }) {
   return (
-    <Dock name="Scheduled" notes={notice && <Notice message={notice} announced={false} />}>
+    <Dock
+      name="Scheduled"
+      notes={
+        <>
+          {warnings}
+          {notice && <Notice message={notice} announced={false} />}
+        </>
+      }
+    >
       <div className={DOCK_CARD}>
         <div className="flex min-h-10 items-center gap-3 px-4 py-3">
           {posting && (

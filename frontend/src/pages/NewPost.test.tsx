@@ -152,6 +152,7 @@ function postWith(final: string): PostDetail {
     failedFeedback: null,
     scheduledPost: null,
     textMedia: [],
+    reachWarnings: [],
   };
 }
 
