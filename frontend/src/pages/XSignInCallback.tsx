@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { session, signInPath, SIGN_IN_ERROR, isSignInErrorCode } from '@/lib/session';
+import { XLogo } from '@/components/XLogo';
 import { returnTo } from '@/lib/returnTo';
 import { errorMessage } from '@/services/apiErrors';
 import { xSignInService } from '@/services/xSignInService';
@@ -39,7 +40,7 @@ export function XSignInCallback() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
       <p role="status" className="text-sm text-muted-foreground">
-        Signing you in with X…
+        Signing you in with <XLogo />…
       </p>
     </div>
   );
