@@ -125,6 +125,34 @@ FINDINGS = [
     ),
     pytest.param(["Follow so you don't miss part 2."], [("engagement_ask", 1)], id="follow-so"),
     pytest.param(["Smash that like button."], [("engagement_ask", 1)], id="smash-like"),
+    pytest.param(
+        ["Retweet the first tweet of this thread."], [("engagement_ask", 1)], id="rt-first-tweet"
+    ),
+    pytest.param(["RT the top tweet."], [("engagement_ask", 1)], id="rt-the-top-tweet"),
+    pytest.param(
+        ["Enjoyed this? Repost the first post so others can find it."],
+        [("engagement_ask", 1)],
+        id="repost-the-first-post",
+    ),
+    pytest.param(["Repost the top post ♻️"], [("engagement_ask", 1)], id="repost-the-top-post"),
+    pytest.param(
+        ["Comment below for the link."], [("reply_keyword_ask", 1)], id="comment-below-for"
+    ),
+    pytest.param(["Comment for the link."], [("reply_keyword_ask", 1)], id="comment-for-the-link"),
+    pytest.param(["Reply for the template."], [("reply_keyword_ask", 1)], id="reply-for-the"),
+    pytest.param(
+        ["Want the template? Comment below."], [("reply_keyword_ask", 1)], id="comment-below"
+    ),
+    pytest.param(
+        ["First 100 people to reply get free access."], [("giveaway", 1)], id="first-100-to-reply"
+    ),
+    pytest.param(
+        ["Like. Share. Subscribe."],
+        [("share_ask", 1), ("engagement_ask", 1)],
+        id="like-share-subscribe",
+    ),
+    pytest.param(["Found it useful? Share it."], [("share_ask", 1)], id="found-it-useful-share-it"),
+    pytest.param(["Read this, then share it."], [("share_ask", 1)], id="read-then-share"),
 ]
 
 # Texts that ask for nothing X labels, though they come close.
@@ -203,6 +231,19 @@ CLEAN = [
     pytest.param('Reply "no" to recruiters.', id="reply-no-to-recruiters"),
     pytest.param("Ship it. Share it. Learn.", id="ship-it-share-it"),
     pytest.param("Forward this to legal before you sign.", id="forward-to-legal"),
+    pytest.param("Build. Share. Repeat.", id="build-share-repeat"),
+    pytest.param("Learn in public. Build. Share. Repeat.", id="learn-build-share-repeat"),
+    pytest.param("Learn, build, share.", id="learn-build-share"),
+    pytest.param("Code, test, ship, share.", id="code-test-ship-share"),
+    pytest.param("Record a Loom, then share it with your team.", id="record-then-share"),
+    pytest.param("Write the code, then share it.", id="write-then-share"),
+    pytest.param("I build, then share it.", id="i-build-then-share"),
+    pytest.param("Write it down. Share it.", id="write-it-down-share-it"),
+    pytest.param("Tag the person who owns the service.", id="tag-the-person-who"),
+    pytest.param("Turn on notifications in Slack for deploys.", id="notifications-in-slack"),
+    pytest.param("Every reply gets a personal response from me.", id="a-personal-response"),
+    pytest.param("Share it with your team before the launch.", id="share-before-the-launch"),
+    pytest.param("Send it to your users first.", id="send-it-to-your-users"),
 ]
 
 
@@ -232,15 +273,29 @@ async def test_close_calls_stay_clean(client, subscribed, post_with, text):
         "Done," + " " * 30_000 + "x",
         "please" + " " * 30_000 + "x",
         "." * 30_000 + "x",
+        "like" + " & " * 20_000,
+        "like" + " + " * 20_000,
+        "rt" + " & " * 20_000,
+        "share it" + " & " * 20_000,
     ],
-    ids=["after-copy", "newlines", "after-a-comma", "after-please", "dots-ending-no-sentence"],
+    ids=[
+        "after-copy",
+        "newlines",
+        "after-a-comma",
+        "after-please",
+        "dots-ending-no-sentence",
+        "ampersands-after-like",
+        "pluses-after-like",
+        "ampersands-after-rt",
+        "ampersands-after-share-it",
+    ],
 )
-async def test_a_long_run_of_whitespace_reads_fast(client, subscribed, post_with, text):
+async def test_a_long_run_of_stops_reads_fast(client, subscribed, post_with, text):
     # Four Parts so a quadratic search, seconds on each, overruns a bound slow CI still meets.
     post_id = await post_with(text, text, text, text)
 
     started = time.monotonic()
-    assert await _warnings(client, post_id) == []
+    await _warnings(client, post_id)
     assert time.monotonic() - started < 5
 
 

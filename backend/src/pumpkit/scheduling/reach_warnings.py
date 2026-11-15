@@ -55,7 +55,17 @@ _CHAIN = re.compile(
 )
 _AND = re.compile(r"\s(?:and|&|\+|then)\s", re.IGNORECASE)
 # Two short steps such as "Ship it. Share it." are a list, not an ask for shares.
-_STEP = re.compile(r"[^\W\d_]+\s+it", re.IGNORECASE)
+_STEP = re.compile(r"[^\W\d_]+\s+it(?:\s+[^\W\d_]+)?", re.IGNORECASE)
+# Three one-word steps such as "Build. Share. Repeat." are a list too, unless all ask.
+_WORD = re.compile(r"[^\W\d_]+")
+_ASK_WORD = re.compile(
+    r"like|share|repost|retweet|rt|follow|subscribe|comment|reply|bookmark|save|tag",
+    re.IGNORECASE,
+)
+# "Record a Loom, then share it" goes on with the writer's own steps; only an order or an
+# "if" before it makes the "then" clause an ask.
+_THEN_CLAUSE = re.compile(r"\s*then\b", re.IGNORECASE)
+_IF = re.compile(r"if\b", re.IGNORECASE)
 
 _QUOTE_OPEN = "\"'\u201c\u2018"
 _QUOTE_CLOSE = "\"'\u201d\u2019"
@@ -71,7 +81,7 @@ _PERSON = (
 )
 _NEUTRAL = (
     r"(?:read|seen|answered|addressed|ignored|reviewed|considered|noticed|heard|replied|logged"
-    r"|counted|shown|deleted|moderated|hidden|looked\s+at|an?\s+(?:response|reply|answer)"
+    r"|counted|shown|deleted|moderated|hidden|looked\s+at|an?\s+(?:\w+\s+)?(?:response|reply|answer)"
     r"|my\s+attention|its\s+own)"
 )
 
@@ -97,10 +107,12 @@ _ASKS = [
         "asks readers to share it, and X hides posts that ask for shares from people who don't "
         "follow you.",
         order=_ignoring_case(
+            # "Share it with your team before the launch" is a step in the writer's how-to.
             rf"share(?:\s+{_THIS}\b(?!\s+(?:week|weekend|month|year|morning|evening)\b)"
-            rf"|(?=\s+(?:with|if)\b)|{_END})"
+            rf"|(?=\s+(?:with|if)\b)|{_END})(?![^,.]{{0,80}}\b(?:before|after|during|until)\b)"
             rf"|(?:send|forward)\s+{_THIS}\s+(?:along\b|to\s+(?:the\s+)?[\w-]+\s+who\b"
-            r"|to\s+(?:a|an|your|them|him|her|someone|somebody|anyone|everyone|every|those)\b)"
+            r"|to\s+(?:a|an|your|them|him|her|someone|somebody|anyone|everyone|every|those)\b"
+            r"(?!\s+(?:users?|customers?|clients?)\b))"
             rf"|pass\s+{_THIS}\s+(?:on|along)\b"
         ),
     ),
@@ -111,7 +123,7 @@ _ASKS = [
         # Anything tagged "who" is a person; else only a person counts, not "a stable release".
         order=_ignoring_case(
             rf"tag\s+(?:someone|somebody|anyone|them(?={_END})"
-            r"|(?:a|an|your|the|\d+)(?:\s+[\w'-]+){1,3}?\s+who\b"
+            r"|(?:a|an|your|\d+)(?:\s+[\w'-]+){1,3}?\s+who\b"
             rf"|(?:a|an|your|\d+)(?:\s+[\w'-]+){{0,2}}?\s+{_PERSON}\b)"
         ),
     ),
@@ -134,6 +146,8 @@ _ASKS = [
             r"(?:like|retweet|repost|rt)(?:\s*[&+/]\s*|\s+(?:and|or)\s+)"
             r"(?:like|retweet|repost|rt|follow|share)\b"
             rf"|(?:like|retweet|repost|rt)\s+{_THIS}\b{_THEN}"
+            r"|(?:retweet|repost|rt)\s+(?:the|my|our)\s+(?:first|1st|top|pinned|original|last)\s+"
+            r"(?:tweet|post|part)\b"
             rf"|(?:retweet|repost|rt)(?:\s+(?:if|so|to|for)\b|{_END})"
             # "Like if Stripe had built this" wonders, and an ask ends at its comma.
             rf"|like(?:\s+if\s+(?:you|this|it|u)\b[^,]{{0,120}}?)?{_END}"
@@ -142,7 +156,7 @@ _ASKS = [
             r"(?:like|follow|repost|retweet|rt|subscribe|bell)\b(?!\s+\d)"
             r"|(?:give|leave|drop)\s+(?:(?:this|it|us|me)\s+)?an?\s+"
             r"(?:like|follow|repost|retweet|heart)\b"
-            r"|turn\s+on\s+(?:(?:post|the|your)\s+)?notifications\b"
+            r"|turn\s+on\s+(?:(?:post|the|your)\s+)?notifications\b(?!\s+(?:in|on)\b)"
             r"|drop\s+an?\s+\S+\s+(?:below|in\s+the\s+(?:replies|comments))\b"
         ),
     ),
@@ -155,6 +169,9 @@ _ASKS = [
             rf"(?:reply|comment|respond)\s+(?:with\s+)?(?:[{_QUOTE_OPEN}][^{_QUOTE_CLOSE}]{{1,30}}"
             rf"[{_QUOTE_CLOSE}]|(?-i:[A-Z][A-Z0-9]+)\b(?=\s+(?:below|for|and|to|in|if)\b|{_END}))"
             r"(?!\s+to\b(?!\s+(?:get|receive|grab|claim|unlock)\b))"
+            r"|(?:reply|comment)(?:\s+below)?\s+for\s+(?:the|my|a|an|this|our|your|free)\b"
+            r"(?!\s+(?:record|win|sake)\b)"
+            rf"|(?:reply|comment)\s+below{_END}"
         ),
         anywhere=_ignoring_case(
             r"\b(?:reply|comment)\b[^.\n]{0,40}\band\s+i(?:['\u2019]| wi)?ll\s+(?:send|dm|share)\b"
@@ -171,6 +188,9 @@ _ASKS = [
             r"|\bevery(?:one\s+who)?\s+(?:reply|replies|comments?)\b[^.\n]{0,40}?"
             r"(?<!\bi )(?<!\bwe )(?<!\byou )(?<!\bthey )(?<!\bthat )(?<!\bwhich )"
             rf"\b(?:gets?|wins?)\b(?!\s+{_NEUTRAL}\b)"
+            r"|\bfirst\s+\d+(?:\s+(?:people|folks|followers|of\s+you))?\s+(?:to|who)\s+"
+            r"(?:reply|replies|comment|comments|repost|reposts|retweet|retweets|rt)\b[^.\n]{0,40}?"
+            rf"\b(?:get|gets|win|wins|receive|receives)\b(?!\s+{_NEUTRAL}\b)"
         ),
     ),
 ]
@@ -234,28 +254,80 @@ def _asks_in(text: str) -> set[ReachWarningCode]:
     found: set[ReachWarningCode] = {
         ask.code for ask in _ASKS if ask.anywhere and ask.anywhere.search(text)
     }
-    previous = ""
-    for sentence in _SENTENCE_END.split(text):
-        sentence = sentence.strip()
-        if not sentence:
-            continue
-        if not (_STEP.fullmatch(sentence) and _STEP.fullmatch(previous)):
-            for start in _clause_starts(sentence):
+    sentences = [(sentence, stop) for sentence, stop in _sentences(text) if sentence]
+    clauses = [_clauses(sentence) for sentence, _ in sentences]
+    listed = _listed(sentences, clauses)
+    previous, previous_stop = "", ""
+    for index, (sentence, stop) in enumerate(sentences):
+        if not (
+            _STEP.fullmatch(sentence) and _STEP.fullmatch(previous) and "?" not in previous_stop
+        ):
+            for start in _clause_starts(sentence, clauses[index], listed[index]):
                 found.update(
                     ask.code for ask in _ASKS if ask.order and ask.order.match(sentence, start)
                 )
-        previous = sentence
+        previous, previous_stop = sentence, stop
     return found
 
 
-def _clause_starts(sentence: str) -> Iterator[int]:
+def _sentences(text: str) -> Iterator[tuple[str, str]]:
+    """Each sentence, stripped, with the stops that end it."""
+    begin = 0
+    for stop in _SENTENCE_END.finditer(text):
+        yield text[begin : stop.start()].strip(), stop.group()
+        begin = stop.end()
+    yield text[begin:].strip(), ""
+
+
+def _clauses(sentence: str) -> list[tuple[int, int]]:
     breaks = [0, *(m.end() for m in _CLAUSE_BREAK.finditer(sentence))]
-    for begin, end in zip(breaks, [*breaks[1:], len(sentence)]):
+    return list(zip(breaks, [*breaks[1:], len(sentence)]))
+
+
+def _listed(
+    sentences: list[tuple[str, str]], clauses: list[list[tuple[int, int]]]
+) -> list[set[int]]:
+    """For each sentence, its clauses that are a step in a run of one-word steps."""
+    listed: list[set[int]] = [set() for _ in sentences]
+    run: list[tuple[int, int, str]] = []
+
+    def close() -> None:
+        if len(run) >= 3 and not all(_ASK_WORD.fullmatch(word) for _, _, word in run):
+            for index, clause, _ in run:
+                listed[index].add(clause)
+        run.clear()
+
+    for index, (sentence, _) in enumerate(sentences):
+        for clause, (begin, end) in enumerate(clauses[index]):
+            word = sentence[begin:end].rstrip(",:").strip()
+            if _WORD.fullmatch(word):
+                run.append((index, clause, word))
+            else:
+                close()
+    close()
+    return listed
+
+
+def _clause_starts(
+    sentence: str, clauses: list[tuple[int, int]], listed: set[int]
+) -> Iterator[int]:
+    ordered = False
+    for clause, (begin, end) in enumerate(clauses):
         start = _after_lead(sentence, begin)
+        chained = _CHAIN.match(sentence, start) is not None
+        goes_on = begin > 0 and _THEN_CLAUSE.match(sentence, begin) and not ordered
+        ordered = chained or _IF.match(sentence, start) is not None
+        if clause in listed or goes_on:
+            continue
         yield start
-        if _CHAIN.match(sentence, start):
+        if chained:
+            # A lead runs to the next word, so a joint inside one already read adds nothing.
+            reached = start
             for joint in _AND.finditer(sentence, start, end):
-                yield _after_lead(sentence, joint.end())
+                if joint.end() < reached:
+                    continue
+                reached = _after_lead(sentence, joint.end())
+                yield reached
 
 
 def _after_lead(sentence: str, position: int) -> int:
