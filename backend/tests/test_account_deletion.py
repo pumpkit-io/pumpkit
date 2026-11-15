@@ -3,12 +3,14 @@ A User deleting their own account from Settings with `DELETE /users/me` (ADR 003
 their handle, refused while something is in flight, and followed by revoking Pumpkit's X grant.
 """
 
+import asyncio
 from datetime import datetime, timezone
 from io import BytesIO
 
 import pytest
 from sqlalchemy import event, select
 
+from pumpkit.account_deletion import delete_files
 from pumpkit.account_deletion_router import router as account_deletion_router
 from pumpkit.auth.models import User
 from pumpkit.billing.models import Subscription
@@ -228,3 +230,52 @@ async def test_signing_in_again_makes_a_new_account_with_no_trial(
     assert recreated["id"] != original["id"]
     offer = (await trial_browser.get(BILLING_ME)).json()
     assert offer["trial_days"] is None
+
+
+async def test_two_accounts_sweeps_each_delete_their_own_files(db, db_session_maker, file_storage):
+    await file_storage.put("media/ada/photo", BytesIO(b"ada"))
+    await file_storage.put("media/grace/photo", BytesIO(b"grace"))
+    db.add_all(
+        [AccountFileDeletion(key="media/ada/photo"), AccountFileDeletion(key="media/grace/photo")]
+    )
+    await db.commit()
+
+    for key in ("media/grace/photo", "media/ada/photo"):
+        async with db_session_maker() as sweeping:
+            await delete_files(sweeping, file_storage, only_keys=frozenset({key}))
+
+    assert await file_storage.list_files("media") == []
+    assert await db.scalar(select(AccountFileDeletion.key)) is None
+
+
+async def test_the_x_revoke_doesnt_hold_up_the_deletion(
+    authed_client, db, user, connect_x, fake_x_publisher, background_tasks, monkeypatch
+):
+    await connect_x()
+    release = asyncio.Event()
+    revoke = fake_x_publisher.revoke
+
+    async def slow_revoke(**kwargs):
+        await asyncio.wait_for(release.wait(), 10)
+        await revoke(**kwargs)
+
+    monkeypatch.setattr(fake_x_publisher, "revoke", slow_revoke)
+
+    assert (await delete_me(authed_client)).status_code == 204
+    assert fake_x_publisher.revoked == []
+
+    release.set()
+    await background_tasks.wait()
+    assert fake_x_publisher.revoked == [f"refresh-{fake_x_publisher.account.user_id}-1"]
+
+
+async def test_a_failed_revoke_logs_no_token(
+    authed_client, user, connect_x, fake_x_publisher, caplog
+):
+    await connect_x()
+    fake_x_publisher.fail_revoke = True
+
+    assert (await delete_me(authed_client)).status_code == 204
+
+    assert "Revoking a deleted account's X token failed" in caplog.text
+    assert f"refresh-{fake_x_publisher.account.user_id}" not in caplog.text

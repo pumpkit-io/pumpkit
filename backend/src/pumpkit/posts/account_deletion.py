@@ -1,3 +1,6 @@
+from collections.abc import Collection
+from typing import Optional
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,11 +16,13 @@ async def queue_files(db: AsyncSession, *, user_id: str) -> None:
     await db.flush()
 
 
-async def pending_files(db: AsyncSession) -> list[AccountFileDeletion]:
+async def pending_files(
+    db: AsyncSession, *, keys: Optional[Collection[str]] = None
+) -> list[AccountFileDeletion]:
+    """Lock the queued files no other sweep holds, only `keys` when given so others stay free."""
+    query = select(AccountFileDeletion)
+    if keys is not None:
+        query = query.where(AccountFileDeletion.key.in_(keys))
     return list(
-        await db.scalars(
-            select(AccountFileDeletion)
-            .order_by(AccountFileDeletion.key)
-            .with_for_update(skip_locked=True)
-        )
+        await db.scalars(query.order_by(AccountFileDeletion.key).with_for_update(skip_locked=True))
     )

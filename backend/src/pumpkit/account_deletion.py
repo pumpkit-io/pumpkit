@@ -162,6 +162,7 @@ async def _delete(
     await users.delete_account(db, user)
     if benefit_reset is not None:
         await prelaunch_reset.apply(db, benefit_reset)
+    # Committed before revoking at X and deleting files, which a failure there mustn't undo.
     await db.commit()
     return _Deletion(report, file_keys, x_refresh_token)
 
@@ -192,11 +193,10 @@ async def delete_own_account(
     if deletion is None:
         return
     if deletion.x_refresh_token:
-        try:
-            await publisher.revoke(token=deletion.x_refresh_token, token_type_hint="refresh_token")
-        except XPublisherError as error:
-            # The tokens are gone from Pumpkit either way, so the deletion stands.
-            logger.warning("Revoking a deleted account's X token failed: %s", error)
+        await tasks.start(
+            f"revoke the X grant of deleted account {user.id}",
+            _revoke(publisher, deletion.x_refresh_token),
+        )
     await tasks.start(
         f"delete the files of deleted account {user.id}",
         _sweep(sessions, storage, deletion.file_keys),
@@ -206,6 +206,14 @@ async def delete_own_account(
 def _confirms(user: User, handle: str) -> bool:
     typed = handle.strip().removeprefix("@").casefold()
     return user.x_handle is not None and typed == user.x_handle.casefold()
+
+
+async def _revoke(publisher: XPublisher, refresh_token: str) -> None:
+    try:
+        await publisher.revoke(token=refresh_token, token_type_hint="refresh_token")
+    except XPublisherError as error:
+        # The tokens are gone from Pumpkit either way; the message carries no X response body.
+        logger.warning("Revoking a deleted account's X token failed: %s", error)
 
 
 async def _sweep(
@@ -219,9 +227,7 @@ async def _sweep(
 async def delete_files(
     db: AsyncSession, storage: FileStorage, *, only_keys: Optional[frozenset[str]] = None
 ) -> None:
-    for pending in await post_deletion.pending_files(db):
-        if only_keys is not None and pending.key not in only_keys:
-            continue
+    for pending in await post_deletion.pending_files(db, keys=only_keys):
         await storage.delete(pending.key)
         await db.delete(pending)
     if only_keys and await db.scalar(

@@ -93,7 +93,8 @@ test('a User deletes their account from Settings and signing in again starts a f
     page.getByRole('status').filter({ hasText: 'Your account is deleted.' }),
   ).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('pumpkit:session'))).toBeNull();
-  expect(await revokes(page, emulator)).toBe(revokedBefore + 1);
+  // The revoke runs in the background after the deletion answers.
+  await expect.poll(() => revokes(page, emulator)).toBe(revokedBefore + 1);
 
   await signIn(page);
   await expect(page).toHaveURL(/\/subscribe$/);
