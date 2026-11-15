@@ -49,8 +49,7 @@ export function FeedbackDock({
   feedback: FeedbackSending;
   /** Why the last restore from History didn't happen. */
   restoreError?: string | null;
-  /** The Reach warnings, which render nothing when there are none. */
-  warnings?: ReachWarning[];
+  warnings: ReachWarning[];
 }) {
   const phone = useMediaQuery(PHONE);
   const [feedback, setFeedback] = useState('');
@@ -84,7 +83,6 @@ export function FeedbackDock({
     onDismiss();
   };
 
-  const warningsNote = warnings && warnings.length > 0 && <ReachWarnings warnings={warnings} />;
   const low = !allowanceUsedUp && (
     <LowUsageWarning allowance={usage?.allowance} count="generations" />
   );
@@ -93,23 +91,22 @@ export function FeedbackDock({
     <Dock
       name={name}
       notes={
-        (reason || error || notice || allowanceUsedUp || restoreError || low || warningsNote) && (
-          <div className="space-y-2">
-            {low}
-            {reason}
-            {warningsNote}
-            {restoreError && <ErrorBanner message={restoreError} />}
-            {error && (
-              <ErrorBanner
-                message={error}
-                onRetry={typed ? () => void send() : undefined}
-                onDismiss={failed ? dismiss : undefined}
-              />
-            )}
-            {notice && <Notice message={notice} />}
-            {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
-          </div>
-        )
+        // Hidden while every note renders nothing, so it adds no gap under the composer.
+        <div className="space-y-2 empty:hidden">
+          {low}
+          {reason}
+          <ReachWarnings warnings={warnings} />
+          {restoreError && <ErrorBanner message={restoreError} />}
+          {error && (
+            <ErrorBanner
+              message={error}
+              onRetry={typed ? () => void send() : undefined}
+              onDismiss={failed ? dismiss : undefined}
+            />
+          )}
+          {notice && <Notice message={notice} />}
+          {allowanceUsedUp && <AllowanceNotice refusal={allowanceUsedUp} />}
+        </div>
       }
     >
       <Composer

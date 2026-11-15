@@ -23,8 +23,8 @@ export function ScheduledDock({
   posting: boolean;
   /** Why the editor closed, under the card; the Post page announces it. */
   notice: string | null;
-  /** Its own text's Reach warnings, which render nothing when there are none. */
-  warnings?: ReachWarning[];
+  /** Its own text's Reach warnings. */
+  warnings: ReachWarning[];
   onEdit: () => void;
 }) {
   return (
@@ -32,7 +32,7 @@ export function ScheduledDock({
       name="Scheduled"
       notes={
         <>
-          {warnings && <ReachWarnings warnings={warnings} />}
+          <ReachWarnings warnings={warnings} />
           {notice && <Notice message={notice} announced={false} />}
         </>
       }

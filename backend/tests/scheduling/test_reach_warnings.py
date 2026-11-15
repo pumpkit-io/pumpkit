@@ -102,6 +102,29 @@ FINDINGS = [
     pytest.param(["Retweet to spread the word."], [("engagement_ask", 1)], id="retweet-to-spread"),
     pytest.param(["Share if you agree."], [("share_ask", 1)], id="share-if-you-agree"),
     pytest.param(["Pass this on to a friend."], [("share_ask", 1)], id="pass-this-on"),
+    pytest.param(["♻️ Repost to help others."], [("engagement_ask", 1)], id="emoji-repost-to"),
+    pytest.param(["♻️ Repost if this helped."], [("engagement_ask", 1)], id="emoji-repost-if"),
+    pytest.param(["👇 Tag a friend who needs this."], [("tag_ask", 1)], id="emoji-tag"),
+    pytest.param(["➡️ Share this with a friend."], [("share_ask", 1)], id="arrow-share"),
+    pytest.param(["🔁 Retweet if you agree"], [("engagement_ask", 1)], id="emoji-retweet-if"),
+    pytest.param(["Bookmark this and share it."], [("share_ask", 1)], id="bookmark-and-share"),
+    pytest.param(["Save this and send it to a friend."], [("share_ask", 1)], id="save-and-send-it"),
+    pytest.param(["Save it and tag a friend."], [("tag_ask", 1)], id="save-and-tag"),
+    pytest.param(
+        ["Bookmark this, then share it with your team."], [("share_ask", 1)], id="then-share"
+    ),
+    pytest.param(["Reply to win."], [("giveaway", 1)], id="reply-to-win"),
+    pytest.param(["Reply to win a copy."], [("giveaway", 1)], id="reply-to-win-a-copy"),
+    pytest.param(["Comment to enter."], [("giveaway", 1)], id="comment-to-enter"),
+    pytest.param(["Comment GUIDE below."], [("reply_keyword_ask", 1)], id="bare-keyword-below"),
+    pytest.param(["Reply GUIDE for the doc."], [("reply_keyword_ask", 1)], id="bare-keyword-for"),
+    pytest.param(["Every reply gets followed back."], [("giveaway", 1)], id="followed-back"),
+    pytest.param(["Every reply gets retweeted."], [("giveaway", 1)], id="replies-retweeted"),
+    pytest.param(
+        ["Every reply gets featured in next week's post."], [("giveaway", 1)], id="featured"
+    ),
+    pytest.param(["Follow so you don't miss part 2."], [("engagement_ask", 1)], id="follow-so"),
+    pytest.param(["Smash that like button."], [("engagement_ask", 1)], id="smash-like"),
 ]
 
 # Texts that ask for nothing X labels, though they come close.
@@ -163,6 +186,23 @@ CLEAN = [
     pytest.param("Click Copy link in the share menu.", id="click-copy-link"),
     pytest.param("My rule: reply 'no' to every meeting invite.", id="reply-no-to-every"),
     pytest.param("We hit like 10k users last month.", id="hit-like-a-number"),
+    pytest.param("We now share it with every customer on day one.", id="we-now-share"),
+    pytest.param("Teams now like it because builds are faster.", id="teams-now-like"),
+    pytest.param("I now like this approach more than the old one.", id="i-now-like"),
+    pytest.param("Users now follow us from the docs.", id="users-now-follow"),
+    pytest.param("Every reply gets read.", id="every-reply-gets-read"),
+    pytest.param("Every reply gets read by me personally.", id="read-by-me"),
+    pytest.param("Every reply gets seen.", id="every-reply-gets-seen"),
+    pytest.param("Like if you're on Next.js, this breaks.", id="like-if-youre-on"),
+    pytest.param("Like if Stripe had built this.", id="like-if-stripe-had"),
+    pytest.param("Tag a Docker image that you push to prod.", id="tag-a-docker-image"),
+    pytest.param("Tag a stable release.", id="tag-a-stable-release"),
+    pytest.param('Click "Copy link" and paste it into the form.', id="click-quoted-copy-link"),
+    pytest.param("Copy the link, then paste it into the form.", id="copy-then-paste"),
+    pytest.param("Copy the link to your repo", id="copy-the-link-to-your-repo"),
+    pytest.param('Reply "no" to recruiters.', id="reply-no-to-recruiters"),
+    pytest.param("Ship it. Share it. Learn.", id="ship-it-share-it"),
+    pytest.param("Forward this to legal before you sign.", id="forward-to-legal"),
 ]
 
 

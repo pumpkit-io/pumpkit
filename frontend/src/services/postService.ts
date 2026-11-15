@@ -178,10 +178,20 @@ export function isUnwritten(post: PostDetail | UnwrittenPost): post is Unwritten
   return 'writingState' in post;
 }
 
+export type ReachWarningCode =
+  | 'share_ask'
+  | 'tag_ask'
+  | 'copy_link_ask'
+  | 'engagement_ask'
+  | 'reply_keyword_ask'
+  | 'giveaway'
+  | 'many_mentions'
+  | 'many_hashtags'
+  | 'shortened_link';
+
 /** Something in a Post's text that may lead X to show it to fewer people; it never stops posting. */
 export interface ReachWarning {
-  /** Stable, such as `share_ask` or `many_hashtags`. */
-  code: string;
+  code: ReachWarningCode;
   /** The Part it was found in, from 1. */
   part: number | null;
   /** One sentence for the User. */

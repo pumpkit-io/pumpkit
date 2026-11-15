@@ -23,7 +23,7 @@ export function FailedDock({
   feedback: FeedbackSending;
   restoreError?: string | null;
   /** The Text's Reach warnings, which a retry would carry. */
-  warnings?: ReachWarning[];
+  warnings: ReachWarning[];
   /** Why the editor closed, under the reason; the Post page announces it. */
   notice: string | null;
 }) {
