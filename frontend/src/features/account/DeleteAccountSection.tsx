@@ -25,13 +25,12 @@ function normalizeHandle(handle: string): string {
   return handle.trim().replace(/^@/, '').toLowerCase();
 }
 
-/**
- * The Running statuses deleting the account cancels at once. Past due and unpaid are left out:
- * their invoice is still owed, which refuses deletion until it's settled.
- */
+/** The Running statuses, each of which deleting the account cancels at once. */
 const ENDED_BY_DELETION: ReadonlySet<SubscriptionStatus> = new Set([
   'trialing',
   'active',
+  'past_due',
+  'unpaid',
   'paused',
 ]);
 

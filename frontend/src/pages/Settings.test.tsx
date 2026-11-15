@@ -1062,7 +1062,7 @@ describe('Settings', () => {
     });
 
     it.each(['past_due', 'unpaid'] as const)(
-      "doesn't promise to end a %s subscription, which an unpaid invoice holds up",
+      'warns that deleting ends a %s subscription, since a running one is cancelled at once',
       async (status) => {
         vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
           ...SUBSCRIBED,
@@ -1082,11 +1082,14 @@ describe('Settings', () => {
         );
         const dialog = await openDeletion();
 
-        expect(await dialog.findByText('loses your unused top-ups')).toBeVisible();
-        expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
-          'loses your unused top-ups',
-          'disconnects X and every connected AI app',
-        ]);
+        expect(await dialog.findByText('ends your subscription now, with no refund')).toBeVisible();
+        await waitFor(() =>
+          expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+            'ends your subscription now, with no refund',
+            'loses your unused top-ups',
+            'disconnects X and every connected AI app',
+          ]),
+        );
       },
     );
 
