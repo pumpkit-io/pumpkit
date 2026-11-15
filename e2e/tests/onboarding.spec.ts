@@ -54,7 +54,7 @@ test('the Persona step drafts the positioning, and Continue saves the edit and o
   const step = page.getByRole('region', { name: 'Who you are on X' });
   const field = step.getByRole('textbox', { name: 'Who you are on X' });
   const continueButton = step.getByRole('button', { name: 'Continue' });
-  await expect(step.getByText(/^Reading your/)).toBeVisible();
+  await expect(field).toHaveAccessibleDescription(/^Reading your X profile…/);
   await expect(field).toBeDisabled();
   await expect(continueButton).toBeDisabled();
 
