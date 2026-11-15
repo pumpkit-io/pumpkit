@@ -22,7 +22,7 @@ DRAFT_POST_MAX_CHARS = 1000
 
 # Several times a full-length Positioning, so a model that reasons first still has room.
 DRAFT_MAX_TOKENS = 4000
-# The panel stays locked while the draft is written, so the call gets this long once sent.
+# The model call's timeout, part of how long the Persona step waits before a draft counts as lost.
 DRAFT_CALL_SECONDS = 90.0
 # Post writing can hold every model slot, and a draft that waits past this fails rather than hang.
 DRAFT_SLOT_WAIT_SECONDS = 60.0

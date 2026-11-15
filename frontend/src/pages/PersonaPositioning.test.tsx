@@ -155,13 +155,14 @@ describe('Persona: the Positioning panel', () => {
     expect((await panel()).getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
-  it('disables the textarea and Save while the Positioning loads', async () => {
+  it('shows "Reading your X profile…" over the disabled textarea, with Save disabled, while the Positioning loads', async () => {
     vi.mocked(positioningService.get).mockReturnValue(new Promise(() => {}));
     renderSignedIn('/persona');
 
     const textarea = await field();
     expect(textarea).toBeDisabled();
-    expect(textarea).toHaveAttribute('placeholder', 'Loading your positioning…');
+    expect(textarea).toHaveAccessibleDescription(`Reading your X profile… ${ADVICE}`);
+    expect(textarea).not.toHaveAttribute('placeholder');
     expect((await panel()).getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
@@ -450,7 +451,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it('says in muted text why a draft failed, under an empty textarea, without an alert', async () => {
-    const reason = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
+    const reason = "We couldn't read your X profile. Write it yourself.";
     vi.mocked(positioningService.get).mockResolvedValue({
       text: null,
       draft: { state: 'failed', text: null, reason },

@@ -179,7 +179,7 @@ Reads a User's newest posts to draft their Positioning (ADR 0005), and the name 
 - Pricing: [twitterapi.io pricing](https://twitterapi.io/pricing).
 - Settings: `TWITTERAPI_IO_API_KEY`.
 - Without it: `scripts/setup.sh` refuses to write `.env`. With a wrong key, the Positioning draft comes back empty and the User writes their Positioning themselves. A pasted Community shows its ID instead of its name, and posting into it still works.
-- **Check:** **Draft again from my X profile** on the **Persona** page fills the textarea.
+- **Check:** sign in with an X account that has no Positioning yet. The **Persona** step of Onboarding opens with a draft from that account's X profile in the textarea.
 
 ### Inactive legacy sign-in implementations
 

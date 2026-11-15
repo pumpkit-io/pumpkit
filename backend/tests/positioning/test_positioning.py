@@ -3,8 +3,14 @@
 from datetime import timedelta
 
 import pytest
+from sqlalchemy import delete, func, select
 
-from tests.positioning.positioning import POSITIONING, TEXT
+from pumpkit.auth.dependencies import get_current_user
+from pumpkit.auth.models import User
+from pumpkit.billing.dependencies import require_subscribed_user
+from pumpkit.main import app
+from pumpkit.positioning.models import Positioning, PositioningDraftRecord
+from tests.positioning.positioning import POSITIONING, START_DRAFT, TEXT
 
 
 async def test_a_user_who_saved_nothing_reads_no_positioning(client, subscribed):
@@ -116,3 +122,37 @@ async def test_each_user_reads_and_saves_only_their_own_positioning(
     }
     await client.put(POSITIONING, json={"text": "I'm Bob."})
     assert (await client.get(POSITIONING)).json()["text"] == "I'm Bob."
+
+
+@pytest.fixture
+def deleted_while_waiting(db_session_maker, user):
+    """The request's User is deleted once the request has loaded them, as if while it waited."""
+
+    async def _deleted() -> User:
+        async with db_session_maker() as other:
+            loaded = await other.get(User, user.id)
+            assert loaded is not None
+            await other.execute(delete(User).where(User.id == user.id))
+            await other.commit()
+        return loaded
+
+    app.dependency_overrides[get_current_user] = _deleted
+    app.dependency_overrides[require_subscribed_user] = _deleted
+
+
+async def test_a_user_deleted_while_saving_is_refused_and_nothing_is_saved(
+    client, db, deleted_while_waiting
+):
+    response = await client.put(POSITIONING, json={"text": TEXT})
+
+    assert response.status_code == 403
+    assert (await db.scalar(select(func.count()).select_from(Positioning))) == 0
+
+
+async def test_a_draft_started_for_a_user_deleted_while_waiting_starts_nothing(
+    client, db, deleted_while_waiting
+):
+    response = await client.post(START_DRAFT)
+
+    assert response.status_code == 202
+    assert (await db.scalar(select(func.count()).select_from(PositioningDraftRecord))) == 0

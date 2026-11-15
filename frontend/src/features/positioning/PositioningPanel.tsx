@@ -49,7 +49,7 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
   const Heading = step ? 'h1' : 'h2';
   // Continue goes on with unchanged text too: the step needs a Positioning, not a change.
   const canSubmit = step ? idle && hasText && !continuing : canSave;
-  const describedBy = [drafting && readingId, draftReason && reasonId, error && errorId, adviceId]
+  const describedBy = [busy && readingId, draftReason && reasonId, error && errorId, adviceId]
     .filter(Boolean)
     .join(' ');
   // Announces the draft as it starts and lands; a failed one's reason shows here too.
@@ -114,19 +114,13 @@ export function PositioningPanel({ onContinue }: { onContinue?: () => Promise<st
                 aria-invalid={textRefused ? true : undefined}
                 value={busy ? '' : text}
                 onChange={(event) => edit(event.target.value)}
-                placeholder={
-                  loading === 'loading'
-                    ? 'Loading your positioning…'
-                    : drafting
-                      ? undefined
-                      : 'I’m … I post about … I write for … I post to …'
-                }
+                placeholder={busy ? undefined : 'I’m … I post about … I write for … I post to …'}
                 disabled={busy || continuing}
                 maxLength={maxUnits}
                 rows={7}
                 className="min-h-40 resize-y font-sans text-base/6 text-foreground focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring sm:text-sm/6"
               />
-              {drafting && (
+              {busy && (
                 <p
                   id={readingId}
                   className="pointer-events-none absolute inset-0 flex items-center justify-center gap-[0.3em] px-4 text-center font-sans text-sm text-muted-foreground motion-safe:animate-pulse"

@@ -79,9 +79,15 @@ async def delete_account(
     user_id: str,
     reset_benefits: bool = False,
     dry_run: bool = False,
+    end_billing: bool = False,
 ) -> Optional[ResetReport]:
     deletion = await _delete(
-        db, gateway, user_id=user_id, reset_benefits=reset_benefits, dry_run=dry_run
+        db,
+        gateway,
+        user_id=user_id,
+        reset_benefits=reset_benefits,
+        dry_run=dry_run,
+        end_billing=end_billing,
     )
     return deletion.report if deletion is not None else None
 
