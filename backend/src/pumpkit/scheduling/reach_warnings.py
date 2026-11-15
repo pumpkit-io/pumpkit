@@ -80,16 +80,18 @@ _NOT_A_TIME = r"(?!\s+(?:week|weekend|month|year|morning|evening)\b)"
 _END = r"[^\w,:]*$"
 # What may follow "like this" or "repost it" in an order, unlike "Like it or not".
 _THEN = rf"(?={_END}|\s+(?:and|&|\+|if|so|to|for|too|now|please)\b)"
-# A share aimed at this post or at a person, which asks even before "before" or "after".
+_POST_NOUN = r"\s+(?:post|thread|tweet)\b"
+# A reader picked out by who they are, unlike "a teammate" or "someone on your team".
+_READER = r"(?:a\s+(?:friend|founder)|(?:someone|somebody|anyone)\s+who)\b"
+# A share of this post or to a person asks, whatever follows, "before" and "after" included.
 _AIMED_SHARE_PATTERN = (
-    rf"share\s+this(?:\s+(?:post|thread|tweet))?\b{_NOT_A_TIME}"
+    rf"share\s+this(?:{_POST_NOUN})?\b{_NOT_A_TIME}"
     r"|share\s+it\s+with\s+(?:a|an|someone|somebody)\b"
 )
-# After the writer's own steps, "then share this file" is one more step: only a share naming
-# the post, ending its clause or going to someone asks.
+# After the writer's own steps, "then share this file" or "then share it with a teammate" is
+# one more step: only a share naming the post, ending its clause or going to a reader asks.
 _AIMED_SHARE = re.compile(
-    r"share\s+(?:this\s+(?:post|thread|tweet)\b|this(?=[^\w,:]*(?:$|[,:]))"
-    r"|(?:this|it)\s+with\s+(?:a|an|someone|somebody)\b)",
+    rf"share\s+(?:this(?:{_POST_NOUN}|(?=[^\w,:]*(?:$|[,:])))|(?:this|it)\s+with\s+{_READER})",
     re.IGNORECASE,
 )
 _PERSON = (

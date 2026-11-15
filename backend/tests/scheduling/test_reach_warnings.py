@@ -270,6 +270,11 @@ FINDINGS = [
         [("share_ask", 1), ("engagement_ask", 1)],
         id="follow-me-then-share-it-with-a-friend",
     ),
+    pytest.param(
+        ["Finish reading, then share this with a friend."],
+        [("share_ask", 1)],
+        id="finish-reading-then-share-this-with-a-friend",
+    ),
 ]
 
 # Texts that ask for nothing X labels, though they come close.
@@ -375,6 +380,13 @@ CLEAN = [
     ),
     pytest.param("Ship it, then share this file with your boss.", id="then-share-this-file"),
     pytest.param("Build it, then share this with your manager.", id="then-share-this-with-your"),
+    pytest.param(
+        "Export the CSV, then share it with a teammate.", id="then-share-it-with-a-teammate"
+    ),
+    pytest.param(
+        "Write the doc, then share it with someone on your team.",
+        id="then-share-it-with-someone-on-your-team",
+    ),
     pytest.param("Write. Share. Save. Repeat.", id="write-share-save-repeat"),
     pytest.param(
         "Comment for the code reviewer, not yourself.",
