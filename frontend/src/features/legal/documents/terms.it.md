@@ -1,5 +1,7 @@
 I presenti Termini costituiscono il contratto tra te e il Gestore, INCEPTIONAL S.R.L., per l'uso di Pumpkit su pumpkit.io. Ti chiediamo di leggerli prima di sottoscrivere un Abbonamento o riscattare un Coupon. L'[Informativa sulla privacy](/it/privacy) spiega cosa fa il Gestore con i tuoi dati personali.
 
+Per gli Utenti esistenti, le modifiche sostanziali di questa versione si applicano solo dopo il preavviso richiesto dalla clausola 19. Fino ad allora, i Termini precedenti continuano a disciplinare il servizio e gli acquisti esistenti. Le disposizioni Sold through Link descrivono gli acquisti indicati in quel modo al pagamento; la pubblicazione di questi Termini non cambia il venditore di un acquisto esistente.
+
 ## 1. Il Gestore e i presenti Termini {#operator}
 
 Pumpkit è gestito da INCEPTIONAL S.R.L., società a responsabilità limitata a socio unico, di seguito il Gestore:

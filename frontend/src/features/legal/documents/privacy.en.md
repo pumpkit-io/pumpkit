@@ -4,6 +4,8 @@ It covers only the hosted service at pumpkit.io. Pumpkit's code is open source, 
 
 This Privacy Policy is available in English and Italian. Both versions are equally valid.
 
+For existing Users, any new processing described by a material change in this version starts only after the advance notice promised below. Publishing this policy does not itself enable purchases sold through Link or change the seller of an existing purchase.
+
 ## Who is responsible for your data {#controller}
 
 The controller of your personal data is INCEPTIONAL S.R.L., Via Eugenio Curiel, 34, Fano (PU), Italy, VAT ID IT02853580419, called the Operator in this Privacy Policy.

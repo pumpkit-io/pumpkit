@@ -4,6 +4,8 @@ Riguarda soltanto il servizio ospitato su pumpkit.io. Il codice di Pumpkit è op
 
 La presente Informativa sulla privacy è disponibile in inglese e in italiano. Entrambe le versioni hanno pari valore.
 
+Per gli Utenti esistenti, ogni nuovo trattamento descritto da una modifica sostanziale di questa versione inizia solo dopo il preavviso promesso sotto. La pubblicazione di questa informativa non attiva di per sé gli acquisti venduti tramite Link e non cambia il venditore di un acquisto esistente.
+
 ## Chi è responsabile dei tuoi dati {#controller}
 
 Il titolare del trattamento dei tuoi dati personali è INCEPTIONAL S.R.L., Via Eugenio Curiel, 34, Fano (PU), Italia, partita IVA IT02853580419, di seguito il Gestore.

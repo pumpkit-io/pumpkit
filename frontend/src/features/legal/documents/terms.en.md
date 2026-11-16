@@ -1,5 +1,7 @@
 These Terms are the contract between you and the Operator, INCEPTIONAL S.R.L., for using Pumpkit at pumpkit.io. Please read them before you subscribe or redeem a Coupon. The [Privacy Policy](/privacy) explains what the Operator does with your personal data.
 
+For existing Users, material changes in this version apply only after the advance notice required by clause 19. Until then, the preceding Terms continue to govern their existing service and purchases. The Sold through Link provisions describe purchases identified that way at checkout; publishing these Terms does not change the seller of an existing purchase.
+
 ## 1. The Operator and these Terms {#operator}
 
 Pumpkit is run by INCEPTIONAL S.R.L., a single-member limited liability company (società a responsabilità limitata a socio unico), called the Operator in these Terms:
