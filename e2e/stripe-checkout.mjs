@@ -1,8 +1,13 @@
 // Completes a Stripe test-mode hosted Checkout with Stripe's published Visa test card.
 // Used by backend/tests/billing/test_stripe_managed_payments_live.py.
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
-const [url] = process.argv.slice(2);
+const [destination, scenario = 'success'] = process.argv.slice(2);
+const url = destination === '-' ? readFileSync(0, 'utf8') : destination;
+if (!['success', 'decline-after-setup'].includes(scenario)) {
+  throw new Error('Unsupported synthetic card scenario');
+}
 if (!url?.startsWith('https://checkout.stripe.com/c/pay/cs_test_')) {
   console.error('usage: node stripe-checkout.mjs <test-mode Checkout URL>');
   process.exit(2);
@@ -17,7 +22,10 @@ try {
     // The accordion's cover takes the pointer, so the click goes straight to the button.
     await page.getByTestId('card-accordion-item-button').dispatchEvent('click');
   }
-  await card.pressSequentially('4242424242424242', { delay: 30 });
+  await card.pressSequentially(
+    scenario === 'decline-after-setup' ? '4000000000000341' : '4242424242424242',
+    { delay: 30 },
+  );
   await page.locator('#cardExpiry').pressSequentially('1234', { delay: 30 });
   await page.locator('#cardCvc').pressSequentially('123', { delay: 30 });
   await page.locator('#billingName').pressSequentially('Synthetic Tester', { delay: 20 });
