@@ -592,7 +592,7 @@ describe('New post', () => {
       ).toBeInTheDocument();
       expect(
         within(dialog).getByRole('checkbox', {
-          name: 'I ask for the top-up to be available immediately, and acknowledge I lose the 14-day right of withdrawal once I use any of it.',
+          name: 'I ask for the top-up to be available immediately, and acknowledge I lose the 14-day right of withdrawal once I use any of it, subject to any additional withdrawal rights in clause 13.',
         }),
       ).toBeInTheDocument();
       const pay = within(dialog).getByRole('button', { name: 'Pay €10' });
