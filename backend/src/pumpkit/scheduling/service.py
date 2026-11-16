@@ -232,8 +232,8 @@ async def get_for_post(db: AsyncSession, *, post_id: str) -> Optional[ScheduledP
     return result.scalar_one_or_none()
 
 
-async def latest_of_brief(
-    db: AsyncSession, *, brief_id: str, but_post_id: str
+async def latest_publish_at_of_brief(
+    db: AsyncSession, *, brief_id: str, excluding_post_id: str
 ) -> Optional[datetime]:
     """
     The latest time a Scheduled post of the Brief's other Posts goes or went out, or None; a Failed
@@ -243,7 +243,9 @@ async def latest_of_brief(
         select(func.max(ScheduledPost.publish_at))
         .join(Post, Post.id == ScheduledPost.post_id)
         .join(Idea, Idea.id == Post.idea_id)
-        .where(Idea.brief_id == brief_id, Post.id != but_post_id, ScheduledPost.state != FAILED)
+        .where(
+            Idea.brief_id == brief_id, Post.id != excluding_post_id, ScheduledPost.state != FAILED
+        )
     )
     return result.scalar_one_or_none()
 

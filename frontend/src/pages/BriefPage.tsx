@@ -148,6 +148,7 @@ function CardPostTo({
       format={text.format}
       parts={parts}
       sender={sender}
+      oneIdeaADay={post.oneIdeaADay}
       disabled={post.writingState === 'writing'}
       onDone={onDone}
     />

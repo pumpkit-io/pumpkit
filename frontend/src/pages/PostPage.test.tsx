@@ -5240,6 +5240,32 @@ describe('Post page', () => {
         expect(dialog.getByRole('radio', { name: 'Now' })).toBeChecked();
         expect(dialog.queryByText(LINE)).not.toBeInTheDocument();
       });
+
+      it('opens as usual when the day after the brief’s latest post is only minutes away', async () => {
+        vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
+        const dialog = await openPostTo({
+          ...postWith('the final text'),
+          oneIdeaADay: '2026-10-09T12:03:00Z',
+        });
+
+        expect(dialog.getByRole('radio', { name: 'Now' })).toBeChecked();
+        expect(dialog.queryByText(LINE)).not.toBeInTheDocument();
+      });
+
+      it('says the other post went out when its time has passed', async () => {
+        vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
+        const dialog = await openPostTo({
+          ...postWith('the final text'),
+          oneIdeaADay: '2026-10-10T07:00:00Z',
+        });
+
+        expect(dialog.getByLabelText('Date')).toHaveValue('2026-10-11');
+        expect(
+          dialog.getByText(
+            'One idea a day: your other post from this brief went out Sat, Oct 10, 9:00 AM.',
+          ),
+        ).toBeInTheDocument();
+      });
     });
 
     function usageWithLinkPostsLeft(left: number): Usage {

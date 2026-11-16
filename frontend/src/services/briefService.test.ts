@@ -47,6 +47,7 @@ const BRIEF_API = {
         writing_state: null,
         status: 'draft',
         publishing: false,
+        one_idea_a_day: null,
         text: {
           format: 'post',
           parts: [{ text: 'Shipped.', char_count: 8, char_limit: 280, media: [] }],
@@ -98,6 +99,7 @@ const BRIEF: Brief = {
         writingState: null,
         status: 'draft',
         publishing: false,
+        oneIdeaADay: null,
         text: {
           format: 'post',
           parts: [{ text: 'Shipped.', charCount: 8, charLimit: 280 }],

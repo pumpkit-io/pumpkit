@@ -22,16 +22,19 @@ export function dateTimeOf(iso: string): DateTimeDraft {
   return { date, time };
 }
 
+// How far ahead the day after must be to preset it, clear of the minute a schedule needs ahead.
+const ONE_IDEA_A_DAY_MARGIN_MS = 5 * 60 * 1000;
+
 /**
  * Schedule preset to the day after `oneIdeaADay`, at the same time of day, so split Ideas go out
- * one a day; else, or once that day has passed, Now, with Schedule preset to the next whole hour.
+ * one a day; else, or once that day is (nearly) past, Now, with Schedule preset to the next hour.
  */
-export function initialWhen(oneIdeaADay: string | null = null): WhenDraft {
+export function initialWhen(oneIdeaADay: string | null): WhenDraft {
   if (oneIdeaADay) {
     const dayAfter = new Date(oneIdeaADay);
     // Local days, so the time of day holds across a daylight saving change.
     dayAfter.setDate(dayAfter.getDate() + 1);
-    if (dayAfter.getTime() > Date.now())
+    if (dayAfter.getTime() >= Date.now() + ONE_IDEA_A_DAY_MARGIN_MS)
       return { now: false, ...dateTimeOf(dayAfter.toISOString()) };
   }
   const next = new Date();

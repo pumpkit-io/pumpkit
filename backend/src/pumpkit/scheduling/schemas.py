@@ -158,6 +158,8 @@ class BriefPostDetailResponse(BriefPostResponse):
     status: Optional[PostStatus]
     # Scheduled and being published now, for the "Publishing" badge.
     publishing: bool
+    # As on `PostDetailResponse`, so the card's "Post to…" presets the same day; None until written.
+    one_idea_a_day: Optional[datetime]
 
 
 class IdeaDetailResponse(IdeaFields):

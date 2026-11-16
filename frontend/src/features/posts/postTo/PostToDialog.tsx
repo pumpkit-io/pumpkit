@@ -189,7 +189,7 @@ export function PostToDialog({
   parts,
   sender,
   initialWhere = PROFILE_DRAFT,
-  oneIdeaADay = null,
+  oneIdeaADay,
   onClose,
   onDone,
 }: {
@@ -200,7 +200,7 @@ export function PostToDialog({
   sender: PostToSender;
   initialWhere?: DestinationDraft;
   /** When the latest other Post of the Brief goes or went out: Schedule presets the day after. */
-  oneIdeaADay?: string | null;
+  oneIdeaADay: string | null;
   onClose: () => void;
   onDone: (scheduledPost: ScheduledPost) => void;
 }) {
@@ -240,7 +240,9 @@ export function PostToDialog({
   // Only while the date is the one the default chose, so it never contradicts the User's pick.
   const oneIdeaADayNote =
     oneIdeaADay && !initial.now && when.date === initial.date
-      ? `One idea a day: your other post from this brief goes out ${formatWhen(oneIdeaADay)}.`
+      ? `One idea a day: your other post from this brief ${
+          new Date(oneIdeaADay).getTime() > Date.now() ? 'goes' : 'went'
+        } out ${formatWhen(oneIdeaADay)}.`
       : null;
   const liveLine = live && (
     <p

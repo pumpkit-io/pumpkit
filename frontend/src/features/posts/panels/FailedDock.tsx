@@ -63,7 +63,6 @@ export function FailedPostTo({
   onRetried,
 }: {
   scheduledPost: ScheduledPost;
-  /** When the latest other Post of the Brief goes or went out: Schedule presets the day after. */
   oneIdeaADay: string | null;
   textVersion: Version;
   /** What the retry sends, the live Parts first. */
