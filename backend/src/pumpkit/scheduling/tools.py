@@ -50,7 +50,7 @@ from pumpkit.scheduling.schemas import (
     PostsPageRequest,
     PostsPageResponse,
     ScheduledPostCreateRequest,
-    ScheduledPostResponse,
+    ScheduledPostSavedResponse,
     ScheduledPostToolResponse,
     ScheduledPostUpdateRequest,
     UsageResponse,
@@ -61,7 +61,7 @@ from pumpkit.x_connection.x_publisher import get_x_publisher
 FILE_PATH = "FILE_PATH"
 
 
-def _tool_response(scheduled_post: ScheduledPostResponse) -> ScheduledPostToolResponse:
+def _tool_response(scheduled_post: ScheduledPostSavedResponse) -> ScheduledPostToolResponse:
     return ScheduledPostToolResponse(
         **scheduled_post.model_dump(), post_url=mediator.post_url(scheduled_post.post_id)
     )
@@ -118,7 +118,8 @@ async def schedule_post(
     holds the `[link]` placeholder is refused. A post goes out once: it has at most one scheduled post, so to change
     one already scheduled, edit it, or delete it first. The post goes to the user's profile, or
     to the community whose URL or ID is in `community`. In a community, `share_with_followers`
-    also shows it to the user's followers.
+    also shows it to the user's followers. `reach_warnings` lists what in the scheduled text may
+    lead X to show it to fewer people, each with its `part` and a `message` to tell the user.
     """
     return await _create_scheduled_post(
         call,
@@ -160,7 +161,8 @@ async def post_now(
     `community`. In a community, `share_with_followers` also shows it to the user's followers.
     A post with a GIF or a video comes back scheduled before its media is uploaded: Pumpkit then
     uploads it and waits while X processes it, up to an hour for a video, and `get_post` shows
-    when it's published.
+    when it's published. `reach_warnings` lists what in the text may lead X to show it to fewer
+    people, each with its `part` and a `message` to tell the user.
     """
     posted = await _create_scheduled_post(
         call,
@@ -209,7 +211,9 @@ async def edit_scheduled_post(
     are on X and locked: keep them first in `parts`, unchanged; the text's parts in their
     places are skipped. A new time publishes only the parts not live, as replies to the last
     live one. While a part that isn't on X yet has media, `parts` must keep the same number of
-    parts: to add or remove one, change the post's text and use `copy_text`.
+    parts: to add or remove one, change the post's text and use `copy_text`. `reach_warnings`
+    lists what in the edited text may lead X to show it to fewer people, each with its `part`
+    and a `message` to tell the user.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
         {

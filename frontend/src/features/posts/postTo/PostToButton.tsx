@@ -12,6 +12,7 @@ import { PostToDialog } from './PostToDialog';
 
 /** "Post to…" on a Draft or a Failed Post. */
 export function PostToButton({
+  postId,
   format,
   parts,
   sender,
@@ -23,6 +24,7 @@ export function PostToButton({
   prepare,
   onDone,
 }: {
+  postId: string;
   /** The Text's Format. */
   format: Format;
   parts: ShownPart[];
@@ -74,6 +76,7 @@ export function PostToButton({
       </HoverLabels>
       {open && (
         <PostToDialog
+          postId={postId}
           format={format}
           parts={parts}
           sender={sender}

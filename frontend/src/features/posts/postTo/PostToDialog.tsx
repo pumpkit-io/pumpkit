@@ -31,10 +31,12 @@ import type { ScheduledPost } from '@/services/scheduledPostService';
 import type { AllowanceUsage } from '@/services/usageService';
 import { formatWhen } from '../panels/panelFacts';
 import { ReadOnlyMediaTiles } from '../media/MediaTiles';
+import { ReachWarningList } from '../panels/ReachWarnings';
 import { X_MEDIA_RULE, breaksXMediaRule, mediaWhere } from '../media/mediaRules';
 import { partSubject, shapeName } from '../postShape';
 import { hasFirstReply, type ShownPart } from '../shownText';
 import type { PostToSender } from './postTo';
+import { useReachWarningsAt } from './useReachWarningsAt';
 import { initialWhen, publishAtFrom, WhenField, type WhenDraft } from './WhenField';
 import { WhereField } from './WhereField';
 
@@ -185,6 +187,7 @@ function PartsToPost({
  * `onDone` gets the Scheduled post once the dialog is through with it.
  */
 export function PostToDialog({
+  postId,
   format,
   parts,
   sender,
@@ -193,6 +196,7 @@ export function PostToDialog({
   onClose,
   onDone,
 }: {
+  postId: string;
   /** The Text's Format. */
   format: Format;
   /** The text that goes out, in order, after any Parts already live, which come first. */
@@ -213,6 +217,7 @@ export function PostToDialog({
   const publishAt = publishAtFrom(when);
   // The period the post would count against: the chosen time's, or now's for Post now.
   const { usage } = useUsage(publishAt);
+  const reachWarnings = useReachWarningsAt(postId, publishAt);
 
   const liveCount = parts.filter((part) => part.live).length;
   const thread = format === FORMAT_THREAD || liveCount > 0;
@@ -361,6 +366,7 @@ export function PostToDialog({
         {liveLine}
         <WhereField value={where} onChange={setWhere} disabled={sending} />
         <WhenField value={when} onChange={setWhen} disabled={sending} note={oneIdeaADayNote} />
+        <ReachWarningList warnings={reachWarnings} />
         {unpostable.map((problem) => (
           <p key={problem} className="font-sans text-sm font-medium text-destructive">
             {problem}

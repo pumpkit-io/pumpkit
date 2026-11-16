@@ -95,6 +95,10 @@ by hand.
 - Split ideas from one brief go out one a day, so they don't compete for the same readers. \
 `get_post` gives `one_idea_a_day`, the latest time another post of its brief goes or went out: \
 unless the user picks a time, schedule the post for the day after it, at the same time of day.
+- `schedule_post`, `post_now` and `edit_scheduled_post` answer with `reach_warnings`, as \
+`get_post` does: what in the post's text may lead X to show it to fewer people, such as an ask \
+to share or tag, each with the `part` it is in. Tell the user each warning's `message`. They \
+never stop scheduling or posting: the user decides whether to change the text.
 - A post goes out once, so it has at most one scheduled post. To change one already \
 scheduled, edit it, or delete it first, which makes the post a draft again. Only a draft or a \
 failed post takes feedback: a scheduled or published one doesn't.

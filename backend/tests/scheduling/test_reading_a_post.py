@@ -16,6 +16,7 @@ from pumpkit.x_connection.x_publisher import XPostRejectedError
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import PLAN, start_thread, written_post
+from tests.scheduling.reading import as_read
 
 POSTS = "/api/v1/posts"
 BRIEFS = "/api/v1/briefs"
@@ -122,7 +123,7 @@ async def test_a_scheduled_post_reads_as_scheduled_with_its_scheduled_post(clien
 
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 
-    assert (read["status"], read["scheduled_post"]) == ("scheduled", scheduled)
+    assert (read["status"], read["scheduled_post"]) == ("scheduled", as_read(scheduled))
 
 
 async def test_a_post_being_published_still_reads_as_scheduled(
@@ -145,7 +146,7 @@ async def test_a_published_post_reads_as_published_with_its_link_on_x(client, po
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 
     assert read["status"] == "published"
-    assert read["scheduled_post"] == published
+    assert read["scheduled_post"] == as_read(published)
     assert read["scheduled_post"]["x_post_url"] == "https://x.com/i/web/status/1890000000000000001"
 
 
@@ -162,7 +163,7 @@ async def test_a_thread_that_failed_partway_reads_as_failed_with_its_live_part(
     read = (await client.get(f"{POSTS}/{post['id']}")).json()
 
     assert read["status"] == "failed"
-    assert read["scheduled_post"] == failed
+    assert read["scheduled_post"] == as_read(failed)
     assert [(p["text"], p["live"]) for p in read["scheduled_post"]["parts"]] == [
         ("Live one.", True),
         ("Refused two.", False),
@@ -236,7 +237,7 @@ async def test_the_get_post_tool_reads_the_text_the_status_and_the_scheduled_pos
         "writing_state": None,
         "failed_feedback": None,
         "status": "failed",
-        "scheduled_post": failed,
+        "scheduled_post": as_read(failed),
         "reach_warnings": [],
         "one_idea_a_day": None,
     }

@@ -492,6 +492,14 @@ export const postService = {
     const { data } = await apiService.get<PostDetailApi>(`/posts/${encodeURIComponent(postId)}`);
     return data.reach_warnings;
   },
+  /** Every Reach warning for the Post's Text were it to go out at `publishAt`, or now for null. */
+  reachWarningsAt: async (postId: string, publishAt: string | null): Promise<ReachWarning[]> => {
+    const { data } = await apiService.get<{ reach_warnings: ReachWarning[] }>(
+      `/posts/${encodeURIComponent(postId)}/reach-warnings`,
+      publishAt ? { params: { publish_at: publishAt } } : undefined,
+    );
+    return data.reach_warnings;
+  },
   /**
    * Discards a Draft: the Post and its Versions are deleted for good, and its Idea is offered again
    * on its Brief. The server refuses any other Post, and one being written.

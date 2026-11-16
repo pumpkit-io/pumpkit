@@ -122,6 +122,19 @@ class ReachWarningResponse(BaseModel):
     message: str
 
 
+class ScheduledPostSavedResponse(ScheduledPostResponse):
+    """A Scheduled post as scheduling, Post now or an edit left it, with what may cost it reach."""
+
+    # For its own text, as created or edited; worked out on each answer and never stored.
+    reach_warnings: list[ReachWarningResponse]
+
+
+class ReachWarningsResponse(BaseModel):
+    """Every Reach warning for the Post's Text, were it to go out at the time asked about."""
+
+    reach_warnings: list[ReachWarningResponse]
+
+
 class PostDetailResponse(BaseModel):
     """One Post with its Text, its Versions in order, and the status its Scheduled post gives it."""
 
@@ -234,7 +247,7 @@ class PostsPageResponse(BaseModel):
     next_offset: Optional[int]
 
 
-class ScheduledPostToolResponse(ScheduledPostResponse):
+class ScheduledPostToolResponse(ScheduledPostSavedResponse):
     """A Scheduled post as an MCP tool answers with it, linking to its Post in the web app."""
 
     post_url: str

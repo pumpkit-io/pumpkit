@@ -33,6 +33,14 @@ async def scheduled_posts(client: AsyncClient) -> list[dict]:
     return found
 
 
+def as_read(answer: dict) -> dict:
+    """
+    A scheduling or edit answer as reading its Post gives the Scheduled post back, without the
+    Reach warnings only the answer carries.
+    """
+    return {key: value for key, value in answer.items() if key != "reach_warnings"}
+
+
 async def scheduled_posts_through_the_mediator(
     db, user: User, now: datetime
 ) -> list[ScheduledPostResponse]:

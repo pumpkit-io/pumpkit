@@ -8,7 +8,7 @@ from httpx import AsyncClient
 import pumpkit.scheduling.publish as publish_module
 from pumpkit.core.config import settings
 from pumpkit.x_connection.x_publisher import XPostRejectedError
-from tests.scheduling.reading import scheduled_posts
+from tests.scheduling.reading import as_read, scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 COMMUNITY_ID = "1493446837214187523"
@@ -53,7 +53,7 @@ async def test_post_now_into_a_community_publishes_it_there(
     assert body["share_with_followers"] is share_with_followers
     assert fake_x_publisher.published == [("access-1001-1", "Hello Community.")]
     assert fake_x_publisher.published_to == [(COMMUNITY_ID, share_with_followers)]
-    assert (await scheduled_posts(client)) == [body]
+    assert (await scheduled_posts(client)) == [as_read(body)]
 
 
 async def test_post_now_without_a_community_publishes_on_the_profile(

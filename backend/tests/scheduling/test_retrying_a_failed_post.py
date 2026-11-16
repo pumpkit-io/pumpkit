@@ -9,7 +9,7 @@ from httpx import AsyncClient
 
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import XPostRejectedError
-from tests.scheduling.reading import scheduled_posts
+from tests.scheduling.reading import as_read, scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 
@@ -136,7 +136,7 @@ async def test_a_source_version_is_no_longer_taken(
     )
 
     assert response.status_code == 422
-    assert await scheduled_posts(client) == [failed]
+    assert await scheduled_posts(client) == [as_read(failed)]
 
 
 async def test_parts_and_the_text_together_are_refused(
@@ -152,7 +152,7 @@ async def test_parts_and_the_text_together_are_refused(
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Give either the parts or the post's text, not both."
-    assert await scheduled_posts(client) == [failed]
+    assert await scheduled_posts(client) == [as_read(failed)]
 
 
 async def test_a_publish_time_and_publish_now_together_are_refused(

@@ -1,6 +1,6 @@
 """
-Reach warnings (ADR 0032) on a Post read through `GET /posts/{id}` and the `get_post` tool: what
-in the Text, or in its Scheduled post's own text, may lead X to show it to fewer people.
+Reach warnings (ADR 0032) through `GET /posts/{id}`, its reach-warnings read, scheduling's answers
+and the MCP tools: what in the Text, or in a Scheduled post's own text, may cost it reach.
 """
 
 import time
@@ -16,6 +16,13 @@ LATER = "2026-10-10T14:00:00Z"
 
 async def _warnings(client, post_id: str) -> list[dict]:
     response = await client.get(f"{POSTS}/{post_id}")
+    assert response.status_code == 200, response.text
+    return response.json()["reach_warnings"]
+
+
+async def _text_warnings(client, post_id: str) -> list[dict]:
+    """The Text's warnings through the read "Post to…" makes as the User picks a time."""
+    response = await client.get(f"{POSTS}/{post_id}/reach-warnings")
     assert response.status_code == 200, response.text
     return response.json()["reach_warnings"]
 
@@ -403,7 +410,7 @@ async def test_each_finding_warns_in_the_part_it_lands_in(
 ):
     post_id = await post_with(*parts, first_reply=len(parts) == 2)
 
-    warnings = await _warnings(client, post_id)
+    warnings = await _text_warnings(client, post_id)
 
     assert [(w["code"], w["part"]) for w in warnings] == found
 
@@ -412,7 +419,7 @@ async def test_each_finding_warns_in_the_part_it_lands_in(
 async def test_close_calls_stay_clean(client, subscribed, post_with, text):
     post_id = await post_with(text)
 
-    assert await _warnings(client, post_id) == []
+    assert await _text_warnings(client, post_id) == []
 
 
 @pytest.mark.parametrize(
@@ -434,7 +441,7 @@ async def test_long_runs_of_stops_and_joints_read_fast(client, subscribed, post_
     post_id = await post_with(text, text, text, text)
 
     started = time.monotonic()
-    warnings = await _warnings(client, post_id)
+    warnings = await _text_warnings(client, post_id)
     assert time.monotonic() - started < 5
 
     assert [w["code"] for w in warnings] == codes * 4
@@ -515,3 +522,103 @@ async def test_a_failed_post_warns_from_its_text_which_a_retry_copies(
     assert saved.status_code == 200, saved.text
 
     assert [w["code"] for w in await _warnings(client, post_id)] == ["engagement_ask"]
+
+
+async def test_the_reach_warnings_read_gives_the_texts_warnings_at_a_time(
+    client, subscribed, post_with
+):
+    post_id = await post_with("Ship small things. Tag a friend who doesn't.")
+
+    at_a_time = await client.get(f"{POSTS}/{post_id}/reach-warnings", params={"publish_at": LATER})
+    now = await client.get(f"{POSTS}/{post_id}/reach-warnings")
+
+    assert at_a_time.status_code == 200, at_a_time.text
+    assert [(w["code"], w["part"]) for w in at_a_time.json()["reach_warnings"]] == [("tag_ask", 1)]
+    assert now.json() == at_a_time.json()
+
+
+async def test_the_reach_warnings_read_is_the_users_own(
+    client, subscribed, post_with, sign_in_as_another_subscribed_user
+):
+    post_id = await post_with("Tag a friend.")
+    await sign_in_as_another_subscribed_user()
+
+    read = await client.get(f"{POSTS}/{post_id}/reach-warnings")
+
+    assert read.status_code == 404
+
+
+def _found(answer: dict) -> list[tuple[str, int]]:
+    return [(w["code"], w["part"]) for w in answer["reach_warnings"]]
+
+
+async def test_scheduling_answers_with_the_scheduled_posts_warnings(
+    client, subscribed, connect_x, fixed_clock, post_with
+):
+    await connect_x()
+    post_id = await post_with("Ship small things. Tag a friend who doesn't.")
+
+    scheduled = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": LATER})
+
+    assert scheduled.status_code == 201, scheduled.text
+    assert _found(scheduled.json()) == [("tag_ask", 1)]
+
+
+async def test_post_now_answers_with_the_warnings_of_what_went_out(
+    client, subscribed, connect_x, fixed_clock, post_with
+):
+    await connect_x()
+    post_id = await post_with("Like and repost if you agree.")
+
+    posted = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_now": True})
+
+    assert posted.status_code == 201, posted.text
+    assert posted.json()["state"] == "published"
+    assert _found(posted.json()) == [("engagement_ask", 1)]
+
+
+async def test_an_edit_answers_with_the_warnings_of_the_edited_text(
+    client, subscribed, connect_x, fixed_clock, post_with
+):
+    await connect_x()
+    post_id = await post_with("Ship small things. Tag a friend who doesn't.")
+    scheduled = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": LATER})
+
+    edited = await client.patch(
+        f"{SCHEDULED_POSTS}/{scheduled.json()['id']}",
+        json={"parts": ["Ship small things. #shipping #small"]},
+    )
+
+    assert edited.status_code == 200, edited.text
+    assert _found(edited.json()) == [("many_hashtags", 1)]
+
+
+async def test_a_link_placeholder_is_still_refused_beside_a_warning(
+    client, subscribed, connect_x, fixed_clock, post_with
+):
+    await connect_x()
+    post_id = await post_with("Share this with a founder.", "Read it: [link]", first_reply=True)
+
+    refused = await client.post(SCHEDULED_POSTS, json={"post_id": post_id, "publish_at": LATER})
+
+    assert refused.status_code == 422, refused.text
+    assert refused.json()["code"] == "LINK_PLACEHOLDER"
+
+
+async def test_the_scheduling_tools_give_the_warnings(
+    subscribed, connect_x, fixed_clock, mcp, post_with
+):
+    await connect_x()
+    scheduled = await mcp.call_tool(
+        "schedule_post", post_id=await post_with("Tag a friend who ships."), publish_at=LATER
+    )
+    edited = await mcp.call_tool(
+        "edit_scheduled_post",
+        scheduled_post_id=scheduled["structuredContent"]["id"],
+        parts=["Built with @alice and @bob."],
+    )
+    posted = await mcp.call_tool("post_now", post_id=await post_with("Follow me for more."))
+
+    assert _found(scheduled["structuredContent"]) == [("tag_ask", 1)]
+    assert _found(edited["structuredContent"]) == [("many_mentions", 1)]
+    assert _found(posted["structuredContent"]) == [("engagement_ask", 1)]
