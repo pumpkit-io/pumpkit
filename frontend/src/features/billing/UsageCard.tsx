@@ -8,7 +8,7 @@ import { BuyTopUpButton } from './BuyTopUp';
 import { generationsAndXPosts } from './counts';
 import { SubscribeNowButton } from './SubscribeNow';
 import { allowanceDay, isLow, resetsLine } from './usage';
-import { useUsage } from './useUsage';
+import type { UsageState } from './useUsage';
 import { useOpenPortal } from './useOpenPortal';
 
 /** The count left, then what it counts: "382 generations left", or out of the Trial's limit. */
@@ -207,8 +207,13 @@ function useReloadAfterTopUp(topUpBought: boolean, reload: () => void) {
  * What a Subscribed User has left of their Allowance this period, counted in what is left with a
  * bar under each count. Renders nothing where there is no Allowance.
  */
-export function UsageCard({ topUpBought = false }: { topUpBought?: boolean }) {
-  const { usage, failed, reload } = useUsage();
+export function UsageCard({
+  state: { usage, failed, reload },
+  topUpBought = false,
+}: {
+  state: UsageState;
+  topUpBought?: boolean;
+}) {
   useReloadAfterTopUp(topUpBought, reload);
 
   if (usage && !usage.allowance) return null;

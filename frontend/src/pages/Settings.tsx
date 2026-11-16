@@ -10,6 +10,7 @@ import { generationsAndXPosts } from '@/features/billing/counts';
 import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
 import { UsageCard } from '@/features/billing/UsageCard';
 import { useBilling } from '@/features/billing/useBilling';
+import { useUsage } from '@/features/billing/useUsage';
 import { ConnectedAppsCard } from '@/features/connectedApps/ConnectedAppsCard';
 import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { useInstance } from '@/features/instance/useInstance';
@@ -73,6 +74,15 @@ function useTopUpAddedToast(topUpBought: boolean, offer: TopUpOffer | null | und
   }, [topUpBought, offer]);
 }
 
+/** Loads usage again when `value` changes once loaded (undefined until then). */
+function useReloadOnChange(value: string | null | undefined, reload: () => void) {
+  const previous = useRef(value);
+  useEffect(() => {
+    if (previous.current !== undefined && previous.current !== value) reload();
+    previous.current = value;
+  }, [value, reload]);
+}
+
 /** Rendered inside AppLayout: the User's account as one column of cards. */
 export function Settings() {
   const { logout } = useAuth();
@@ -84,6 +94,10 @@ export function Settings() {
   const topUpBought = arrival.checkoutStatus === 'top_up_bought';
   useBillingOnArrival(topUpBought);
   useTopUpAddedToast(topUpBought, data?.topUp);
+  // Shared by the Usage card and the delete dialog, which lists unused Top-ups.
+  const usage = useUsage(null, sells_plans && Boolean(data?.me.subscribed));
+  // Free access moves the Allowance period.
+  useReloadOnChange(data ? (data.me.freeAccess?.endsAt ?? null) : undefined, usage.reload);
 
   return (
     <>
@@ -125,10 +139,10 @@ export function Settings() {
             />
           )}
           {sells_plans && data?.me.subscribed && (
-            <UsageCard key={data.me.freeAccess?.endsAt} topUpBought={topUpBought} />
+            <UsageCard state={usage} topUpBought={topUpBought} />
           )}
           <ConnectedAppsCard />
-          <DeleteAccountSection />
+          <DeleteAccountSection usage={usage.usage} />
           <footer className="pt-4">
             {/* A new tab, because leaving the signed-in layout would drop the Post on New post. */}
             <LegalLinks

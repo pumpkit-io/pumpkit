@@ -14,12 +14,16 @@ from pumpkit.billing.models import FreeAccess
 from pumpkit.billing.paid_signup_recovery import run_cli
 from pumpkit.core.config import settings
 from pumpkit.core.errors import ConflictError
+from tests.billing.paid_signups import (
+    SIGNUPS,
+    accept_paid_signup,
+    open_paid_signup,
+    redeem_coupon,
+)
 from tests.billing.test_coupon_preview import coupons as coupons
 from tests.billing.test_coupon_redemption import PREVIEW, REDEEM, confirmation
 from tests.billing.test_monthly_coupons import monthly
 from tests.billing.test_top_ups import _send
-
-SIGNUPS = "/api/v1/billing/paid-signups"
 
 
 @pytest.fixture(autouse=True)
@@ -80,41 +84,10 @@ async def test_explicit_future_signup_preserves_free_allowance_and_exact_payment
     assert len(fake_billing.paid_signups_created) == 1
 
 
-async def _redeem(client, coupons):
-    created = await coupons("--months", "1")
-    free = (await client.post(PREVIEW, json={"code": created["code"]})).json()
-    assert (await client.post(REDEEM, json=confirmation(free))).status_code == 200
-    return free
-
-
-async def _accept(client, plan_key="pumpkit_pro_monthly"):
-    preview = await client.post(SIGNUPS + "/preview", json={"plan_key": plan_key})
-    assert preview.status_code == 200, preview.text
-    paid = preview.json()
-    request = {
-        "operation_id": "11111111-1111-4111-8111-111111111111",
-        "revision": paid["revision"],
-        "terms_version": paid["terms_version"],
-        "accepted_terms": True,
-        "requested_immediate_start": True,
-        "approved_specific_clauses": True,
-        "language": "en",
-    }
-    result = await client.post(SIGNUPS, json=request)
-    assert result.status_code == 200, result.text
-    return request, result.json()
-
-
-async def _open(client, coupons, plan_key="pumpkit_pro_monthly"):
-    free = await _redeem(client, coupons)
-    request, opened = await _accept(client, plan_key)
-    return free, request, opened
-
-
 async def test_later_coupon_extends_arranged_payment_without_inventing_paid_or_trial_coverage(
     authed_client, coupons, fake_billing, db
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
@@ -149,7 +122,7 @@ def _ends(free) -> datetime:
 async def test_free_access_ending_within_49_hours_is_too_soon_to_arrange_payment(
     authed_client, coupons, fake_billing, fixed_clock, remaining
 ):
-    free = await _redeem(authed_client, coupons)
+    free = await redeem_coupon(authed_client, coupons)
     fixed_clock.advance(_ends(free) - remaining - fixed_clock())
 
     assert (await authed_client.get("/api/v1/billing/me")).json()[
@@ -169,11 +142,11 @@ async def test_free_access_ending_within_49_hours_is_too_soon_to_arrange_payment
 async def test_free_access_ending_in_49_hours_still_arranges_the_exact_payment_date(
     authed_client, coupons, fake_billing, fixed_clock
 ):
-    free = await _redeem(authed_client, coupons)
+    free = await redeem_coupon(authed_client, coupons)
     end = _ends(free)
     fixed_clock.advance(end - timedelta(hours=49) - fixed_clock())
     assert (await authed_client.get("/api/v1/billing/me")).json()["may_arrange_paid_signup"]
-    request, opened = await _accept(authed_client)
+    request, opened = await accept_paid_signup(authed_client)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     result = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
     assert result.json()["status"] == "completed", result.text
@@ -187,10 +160,10 @@ async def test_free_access_ending_in_49_hours_still_arranges_the_exact_payment_d
 async def test_a_checkout_delayed_past_the_two_day_floor_is_refused_before_it_opens(
     authed_client, coupons, fake_billing, fixed_clock
 ):
-    free = await _redeem(authed_client, coupons)
+    free = await redeem_coupon(authed_client, coupons)
     fixed_clock.advance(_ends(free) - timedelta(hours=50) - fixed_clock())
     fake_billing.fail_on.add("create_customer")
-    request, opened = await _accept(authed_client)
+    request, opened = await accept_paid_signup(authed_client)
     assert opened["status"] == "pending" and opened["url"] is None
     fake_billing.fail_on.clear()
     fixed_clock.advance(timedelta(hours=3))
@@ -206,7 +179,7 @@ async def test_a_checkout_delayed_past_the_two_day_floor_is_refused_before_it_op
 async def test_an_unfinished_checkout_expires_without_a_subscription_or_lost_free_access(
     authed_client, coupons, fake_billing, fixed_clock
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fixed_clock.advance(timedelta(hours=24))
     with pytest.raises(BillingProviderError):
         fake_billing.complete_paid_signup_checkout(opened["session_id"])
@@ -223,7 +196,7 @@ async def test_a_checkout_lost_on_the_way_back_is_recovered_without_a_browser(
     authed_client, coupons, fake_billing, fixed_clock, db_session_maker
 ):
     fake_billing.fail_on.add("after_create_paid_signup_checkout")
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     assert opened["status"] == "pending" and opened["url"] is None
     fake_billing.fail_on.clear()
     [checkout] = fake_billing.paid_signup_checkouts.values()
@@ -264,7 +237,7 @@ async def test_a_refused_checkout_logs_the_provider_reason_and_stays_pending(
 ):
     fake_billing.fail_on.add("create_paid_signup_checkout")
     with caplog.at_level(logging.ERROR):
-        _, _, opened = await _open(authed_client, coupons)
+        _, _, opened = await open_paid_signup(authed_client, coupons)
     assert opened["status"] == "pending" and opened["url"] is None
     assert "set to fail create_paid_signup_checkout" in caplog.text
 
@@ -272,7 +245,7 @@ async def test_a_refused_checkout_logs_the_provider_reason_and_stays_pending(
 async def test_open_signup_blocks_billing_coupon_and_deletion_until_cancelled_without_losing_free_access(
     authed_client, coupons, fake_billing, monkeypatch, db_session_maker, user
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     coupon = await coupons("--months", "1")
     assert (await authed_client.post(PREVIEW, json={"code": coupon["code"]})).status_code == 409
     for route in ["/api/v1/billing/portal", "/api/v1/billing/subscribe-now"]:
@@ -338,7 +311,7 @@ async def test_customer_response_lost_before_local_id_is_recovered_from_provider
     authed_client, coupons, fake_billing, fixed_clock
 ):
     fake_billing.fail_on.add("after_create_customer")
-    _, request, opened = await _open(authed_client, coupons)
+    _, request, opened = await open_paid_signup(authed_client, coupons)
     assert opened["status"] == "pending" and opened["url"] is None
     fixed_clock.advance(timedelta(hours=25))
     fake_billing.fail_on.clear()
@@ -351,7 +324,7 @@ async def test_customer_response_lost_before_local_id_is_recovered_from_provider
 async def test_provider_success_database_commit_failure_is_recovered_without_another_subscription(
     authed_client, coupons, fake_billing, db_session_maker, fixed_clock, monkeypatch
 ):
-    _, request, opened = await _open(authed_client, coupons)
+    _, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     failed = False
 
@@ -389,7 +362,7 @@ async def test_subsecond_clock_free_access_uses_provider_representable_exact_bou
     authed_client, coupons, fake_billing, fixed_clock
 ):
     fixed_clock.advance(timedelta(microseconds=123456))
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     assert datetime.fromisoformat(free["ends_at"].replace("Z", "+00:00")).microsecond == 0
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     result = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
@@ -429,7 +402,7 @@ async def test_existing_fractional_grant_is_never_rounded_or_sent_to_provider(
 async def test_later_coupon_after_signup_detail_purge_uses_real_paid_settlement_not_stale_metadata(
     authed_client, coupons, fake_billing, fixed_clock, settled_paid
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
@@ -514,7 +487,7 @@ async def test_current_and_queued_cardless_grants_offer_the_combined_payment_dat
 
 
 async def _complete_unlisted(client, coupons, fake_billing):
-    free, request, opened = await _open(client, coupons)
+    free, request, opened = await open_paid_signup(client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
     attempt = await client.get(SIGNUPS + "/" + request["operation_id"])
     assert attempt.json()["status"] == "pending"
@@ -591,7 +564,7 @@ async def test_a_subscription_listed_late_after_the_agreed_date_stands_once_list
 async def test_attributed_unfinished_or_ended_subscription_is_not_confirmed_renewal(
     authed_client, coupons, fake_billing, provider_status, expected
 ):
-    _, request, opened = await _open(authed_client, coupons)
+    _, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
@@ -607,7 +580,7 @@ async def test_attributed_unfinished_or_ended_subscription_is_not_confirmed_rene
 async def test_late_listed_cancellation_preserves_only_proven_paid_coverage(
     authed_client, coupons, fake_billing, fixed_clock, db_session_maker, user, settled_paid
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
     assert (await authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")).json()[
         "status"
@@ -669,7 +642,7 @@ async def test_cancellation_across_first_payment_preserves_final_proven_coverage
     fake_billing.plans.append(
         Plan("pumpkit_pro_yearly", "price_yearly", "Pro", 20000, "eur", "year", 1)
     )
-    free, request, opened = await _open(
+    free, request, opened = await open_paid_signup(
         authed_client,
         coupons,
         "pumpkit_pro_yearly" if interval == "year" else "pumpkit_pro_monthly",
@@ -748,7 +721,7 @@ async def test_cancellation_across_first_payment_preserves_final_proven_coverage
 async def test_final_settlement_read_keeps_an_already_preserved_paid_allowance(
     authed_client, coupons, fake_billing, fixed_clock, monkeypatch
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
     assert (await authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")).json()[
         "status"
@@ -777,7 +750,7 @@ async def test_final_settlement_read_keeps_an_already_preserved_paid_allowance(
 async def test_webhook_cancellation_uses_fresh_clock_after_first_payment_read(
     authed_client, coupons, fake_billing, fixed_clock, monkeypatch
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
@@ -822,7 +795,7 @@ async def test_webhook_cancellation_uses_fresh_clock_after_first_payment_read(
 async def test_cancellation_waits_for_an_attributed_final_ended_state(
     authed_client, coupons, fake_billing, monkeypatch
 ):
-    _, request, opened = await _open(authed_client, coupons)
+    _, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"], listed=False)
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
@@ -853,7 +826,7 @@ async def test_cancellation_waits_for_an_attributed_final_ended_state(
 async def test_stale_signup_cancellation_after_coupon_extension_requires_current_plan_action(
     authed_client, coupons, fake_billing, fixed_clock, after_original_target
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     await _send(
         authed_client,
@@ -892,7 +865,7 @@ async def test_stale_signup_cancellation_after_coupon_extension_requires_current
 async def test_stale_completed_signup_cancellation_after_paid_start_is_explicit_conflict(
     authed_client, coupons, fake_billing, fixed_clock
 ):
-    free, request, opened = await _open(authed_client, coupons)
+    free, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
@@ -929,7 +902,7 @@ async def test_stale_completed_signup_cancellation_after_paid_start_is_explicit_
 async def test_completed_signup_cancellation_does_not_claim_success_for_unknown_provider_facts(
     authed_client, coupons, fake_billing, mismatch
 ):
-    _, request, opened = await _open(authed_client, coupons)
+    _, request, opened = await open_paid_signup(authed_client, coupons)
     fake_billing.complete_paid_signup_checkout(opened["session_id"])
     assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
         "status"
@@ -968,7 +941,7 @@ async def test_ambiguous_completed_signup_cancellation_keeps_durable_coverage_an
     fake_billing.plans.append(
         Plan("pumpkit_pro_yearly", "price_yearly", "Pro", 20000, "eur", "year", 1)
     )
-    free, request, opened = await _open(
+    free, request, opened = await open_paid_signup(
         authed_client,
         coupons,
         "pumpkit_pro_yearly" if interval == "year" else "pumpkit_pro_monthly",
@@ -1090,7 +1063,7 @@ async def test_unknown_cancel_and_failed_final_commit_keep_the_committed_paid_ch
     fake_billing.plans.append(
         Plan("pumpkit_pro_yearly", "price_yearly", "Pro", 20000, "eur", "year", 1)
     )
-    free, request, opened = await _open(
+    free, request, opened = await open_paid_signup(
         authed_client,
         coupons,
         "pumpkit_pro_yearly" if interval == "year" else "pumpkit_pro_monthly",

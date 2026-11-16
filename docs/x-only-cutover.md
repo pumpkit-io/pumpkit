@@ -52,7 +52,7 @@ docker compose exec -T backend python -m pumpkit.account_deletion --retry-files
 
 Do not repeat reset after the user is gone: identity attribution is unavailable and the command refuses. Do not declare content deletion complete while selected files remain. Publish aggregate counts/status only; privately verify selected rows/files are gone and unrelated state is unchanged. Stripe customer/invoice/payment records keep their provider retention. The CLI does not claim remote X authorization revocation.
 
-Normal `python -m pumpkit.account_deletion --user-id user_ID` intentionally preserves trial eligibility and coupon claims. Never use the prelaunch exception for ordinary deletion or support-requested benefit restoration.
+Normal `python -m pumpkit.account_deletion --user-id user_ID` intentionally preserves trial eligibility and coupon claims, and so does a User's own deletion with Delete account in Settings, which also cancels a Running Subscription at once. Neither is a reset. Never use the prelaunch exception for ordinary deletion or support-requested benefit restoration.
 
 ## Postchecks and stops
 

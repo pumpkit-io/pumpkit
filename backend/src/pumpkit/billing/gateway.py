@@ -241,6 +241,10 @@ class BillingGateway(Protocol):
         """Whether any customer invoice still requires settlement, including an older debt."""
         ...
 
+    async def has_owed_invoices(self, *, customer_id: str) -> bool:
+        """Whether any finalized invoice is still owed; a draft, such as a renewal's, isn't."""
+        ...
+
     async def cancel_subscription(self, *, subscription_id: str) -> None:
         """Cancel a Subscription now, so it Ends and can never run."""
         ...
@@ -765,6 +769,16 @@ class StripeBillingGateway:
 
         return await self._call("check invoice settlement", unsettled)
 
+    async def has_owed_invoices(self, *, customer_id: str) -> bool:
+        def owed() -> bool:
+            invoices = self._client.v1.invoices.list({"customer": customer_id, "limit": 100})
+            return any(
+                invoice.to_dict().get("status") in {"open", "uncollectible"}
+                for invoice in invoices.auto_paging_iter()
+            )
+
+        return await self._call("check owed invoices", owed)
+
     async def cancel_subscription(self, *, subscription_id: str) -> None:
         await self._call(
             "cancel a Subscription",
@@ -989,6 +1003,8 @@ class FakeBillingGateway:
     expired_checkouts: list[str] = field(default_factory=list)
     cancelled_subscriptions: list[str] = field(default_factory=list)
     unsettled_invoice_customers: set[str] = field(default_factory=set)
+    # Customers holding only a draft invoice, which Stripe hasn't finalized into a debt yet.
+    draft_invoice_customers: set[str] = field(default_factory=set)
     prices: list[OneOffPrice] = field(default_factory=list)
     top_up_checkouts: list[TopUpCheckoutCall] = field(default_factory=list)
     ended_trials: list[str] = field(default_factory=list)
@@ -1215,6 +1231,13 @@ class FakeBillingGateway:
         for session_id in expired:
             self._open_checkouts.pop(session_id, None)
             self._payment_checkouts.pop(session_id, None)
+        self._expire_lapsed_paid_signup_checkouts()
+        for checkout in list(self.paid_signup_checkouts.values()):
+            if checkout.customer_id == customer_id and checkout.status == "open":
+                self.paid_signup_checkouts[checkout.id] = replace(
+                    checkout, status="expired", url=None
+                )
+                expired.append(checkout.id)
         self.expired_checkouts.extend(expired)
         return expired
 
@@ -1241,6 +1264,13 @@ class FakeBillingGateway:
 
     async def has_unsettled_invoices(self, *, customer_id: str) -> bool:
         self._maybe_fail("has_unsettled_invoices")
+        return (
+            customer_id in self.unsettled_invoice_customers
+            or customer_id in self.draft_invoice_customers
+        )
+
+    async def has_owed_invoices(self, *, customer_id: str) -> bool:
+        self._maybe_fail("has_owed_invoices")
         return customer_id in self.unsettled_invoice_customers
 
     async def cancel_subscription(self, *, subscription_id: str) -> None:

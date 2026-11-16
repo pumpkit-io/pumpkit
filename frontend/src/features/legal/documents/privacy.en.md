@@ -172,7 +172,7 @@ To use any of these rights, write to support@pumpkit.io from the email address o
 
 ### Deleting your account {#account-deletion}
 
-To delete your account, write to support@pumpkit.io from the email address of your account. The Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period. The minimal trial eligibility record remains for the lifetime of this Instance. Coupon claim fingerprints and unresolved recovery evidence follow their separate periods above. Recreating an account cannot restore a trial, or let the same X account or verified email claim the same Coupon again. Billing records stay with Stripe and in the Operator's accounts for the 10 years the law requires, and backups keep the deleted data until they are overwritten, as [How long data is kept](#retention) says.
+To delete your account, use Delete account in Settings: the account is deleted at once. If you can't sign in, write to support@pumpkit.io from the email address of your account, and the Operator deletes the account within 30 days. Deleting your account ends any Running Subscription at once, with no refund for the unused period. The minimal trial eligibility record remains for the lifetime of this Instance. Coupon claim fingerprints and unresolved recovery evidence follow their separate periods above. Recreating an account cannot restore a trial, or let the same X account or verified email claim the same Coupon again. Billing records stay with Stripe and in the Operator's accounts for the 10 years the law requires, and backups keep the deleted data until they are overwritten, as [How long data is kept](#retention) says.
 
 ### Complaints {#complaints}
 

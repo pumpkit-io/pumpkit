@@ -10,11 +10,14 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { useBilling } from '@/features/billing/useBilling';
 import { usePostCounts } from '@/features/posts/usePostCounts';
 import { trackBeforeLeaving } from '@/lib/analytics';
 import { session } from '@/lib/session';
 import { useProfile } from '@/pages/layout/ProfileContext';
 import { errorMessage } from '@/services/apiErrors';
+import type { SubscriptionStatus } from '@/services/billingService';
+import type { Usage } from '@/services/usageService';
 import { userService } from '@/services/userService';
 
 /** The handle as the backend matches it: without "@", in any case. */
@@ -22,17 +25,39 @@ function normalizeHandle(handle: string): string {
   return handle.trim().replace(/^@/, '').toLowerCase();
 }
 
-/** What deleting takes away, from what Settings already loaded, each line only when it applies. */
-function useLosses(): string[] {
+const RUNNING_STATUSES: ReadonlySet<SubscriptionStatus> = new Set([
+  'trialing',
+  'active',
+  'past_due',
+  'unpaid',
+  'paused',
+]);
+
+/**
+ * What deleting takes away, from what Settings already loaded, each line only when it applies.
+ * Top-ups are listed whenever usage hasn't loaded, since a destructive dialog mustn't hide a loss.
+ */
+function useLosses(usage: Usage | null): string[] {
+  const me = useBilling().data?.me;
+  const status = me?.subscription?.status;
+  const ending = status !== undefined && RUNNING_STATUSES.has(status);
+  // Only a Subscribed User's usage lists their Top-ups.
+  const holdsTopUps =
+    Boolean(me?.subscribed) && (usage === null || (usage.allowance?.topUps.length ?? 0) > 0);
   const waiting = usePostCounts().counts?.scheduled ?? 0;
   const losses: string[] = [];
+  if (ending) losses.push('ends your subscription now, with no refund');
+  if (holdsTopUps) losses.push('loses your unused top-ups');
   if (waiting > 0) losses.push('deletes your scheduled posts before they go out');
   losses.push('disconnects X and every connected AI app');
   return losses;
 }
 
-/** The last section of Settings: deleting the account at once, confirmed by typing the @handle. */
-export function DeleteAccountSection() {
+/**
+ * The last section of Settings: deleting the account at once, confirmed by typing the @handle.
+ * `usage` is what Settings loaded for the Usage card, null until it loads.
+ */
+export function DeleteAccountSection({ usage }: { usage: Usage | null }) {
   const headingId = useId();
   const [open, setOpen] = useState(false);
 
@@ -54,14 +79,14 @@ export function DeleteAccountSection() {
       >
         Delete account
       </Button>
-      {open && <DeleteAccountDialog onClose={() => setOpen(false)} />}
+      {open && <DeleteAccountDialog usage={usage} onClose={() => setOpen(false)} />}
     </section>
   );
 }
 
-function DeleteAccountDialog({ onClose }: { onClose: () => void }) {
+function DeleteAccountDialog({ usage, onClose }: { usage: Usage | null; onClose: () => void }) {
   const handle = useProfile()?.xHandle ?? null;
-  const losses = useLosses();
+  const losses = useLosses(usage);
   const fieldId = useId();
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);

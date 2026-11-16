@@ -17,10 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import pumpkit.models  # noqa: F401
 from pumpkit.auth.models import User
 from pumpkit.auth.service import users
-from pumpkit.billing import coupon_operations, coupon_redemption, prelaunch_reset
+from pumpkit.billing import coupon_operations, coupon_redemption, paid_signups, prelaunch_reset
 from pumpkit.billing import service as billing
-from pumpkit.billing.gateway import BillingGateway, get_billing_gateway
-from pumpkit.billing.models import FreeAccess
+from pumpkit.billing.gateway import BillingGateway, BillingProviderError, get_billing_gateway
+from pumpkit.billing.models import FreeAccess, Subscription
+from pumpkit.billing.subscription_status import ENDED_STATUSES
 from pumpkit.core.background import TaskRegistry
 from pumpkit.core.db.session import _db_session_handler
 from pumpkit.core.errors import AppError, ConflictError, RefusedError
@@ -48,11 +49,13 @@ _USER_MESSAGES = {
         "A billing change is still being processed. Try again in a few minutes."
     ),
     UNPAID_INVOICE: "You have an unpaid invoice. Contact support to delete your account.",
-    SUBSCRIPTION_RUNNING: (
-        "Your subscription is still running. Cancel it in Plan, then delete your account"
-        " once it has ended."
-    ),
 }
+
+
+class SubscriptionNotEnded(BillingProviderError):
+    """Stripe failed to end the User's billing, so their own deletion deletes nothing."""
+
+    public_detail = "Couldn't end your subscription. Try again, or contact support."
 
 
 @dataclass(frozen=True)
@@ -90,6 +93,7 @@ async def _delete(
     user_id: str,
     reset_benefits: bool,
     dry_run: bool,
+    end_billing: bool = False,
 ) -> Optional[_Deletion]:
     user = await users.get_user_by_id(db, user_id)
     if user is None:
@@ -103,28 +107,33 @@ async def _delete(
         return
     user = locked
     try:
-        await coupon_operations.require_settled(db, user_id=user.id)
+        # Ending billing expires a pending paid signup's Checkout, so it can't start a Subscription.
+        await coupon_operations.require_settled(
+            db, user_id=user.id, include_paid_signups=not end_billing
+        )
     except ConflictError as error:
         raise ConflictError(error.detail, code=BILLING_OPERATION_PENDING) from error
     try:
         await scheduling.require_settled_publishing_before_account_deletion(db, user_id=user.id)
     except ConflictError as error:
         raise ConflictError(error.detail, code=PUBLISHING_IN_PROGRESS) from error
-    if user.stripe_customer_id:
+    if end_billing:
+        await _end_billing(db, gateway, user=user)
+    elif user.stripe_customer_id:
         states = await gateway.list_subscriptions(customer_id=user.stripe_customer_id)
         if await gateway.has_pending_checkout(customer_id=user.stripe_customer_id):
             raise ConflictError(
                 "Resolve the pending paid checkout before deleting this account.",
                 code=BILLING_OPERATION_PENDING,
             )
-        if any(state.status not in {"canceled", "incomplete_expired"} for state in states):
+        if any(state.status not in ENDED_STATUSES for state in states):
             raise ConflictError(_RESOLVE_OBLIGATIONS, code=SUBSCRIPTION_RUNNING)
         if await gateway.has_unsettled_invoices(customer_id=user.stripe_customer_id):
             raise ConflictError(_RESOLVE_OBLIGATIONS, code=UNPAID_INVOICE)
         await billing.sync_customer(
             db, gateway, user_id=user.id, customer_id=user.stripe_customer_id
         )
-    if await billing.get_user_subscription(db, user_id=user.id):
+    if not end_billing and await billing.get_user_subscription(db, user_id=user.id):
         raise ConflictError(
             "Resolve the account's subscription before deletion.", code=SUBSCRIPTION_RUNNING
         )
@@ -167,6 +176,59 @@ async def _delete(
     return _Deletion(report, file_keys, x_refresh_token)
 
 
+async def _end_billing(db: AsyncSession, gateway: BillingGateway, *, user: User) -> None:
+    """
+    Cancel every Running Subscription now, with no refund, and expire open Checkouts (ADR 0031).
+    A cancel can't be undone, so every refusal comes before the first one: owed invoices, then
+    Checkouts still pending once the open ones are expired. Any Stripe failure, or a Subscription
+    still running after the cancels, is `SubscriptionNotEnded`; a retry skips those cancelled.
+    """
+    customers = sorted(
+        {
+            customer_id
+            for customer_id in [
+                user.stripe_customer_id,
+                *(signup.customer_id for signup in await paid_signups.pending(db, user_id=user.id)),
+                *await db.scalars(
+                    select(Subscription.stripe_customer_id).where(
+                        Subscription.user_id == user.id,
+                        Subscription.status.not_in(ENDED_STATUSES),
+                    )
+                ),
+            ]
+            if customer_id
+        }
+    )
+    try:
+        for customer_id in customers:
+            # Not `has_unsettled_invoices`: Stripe drafts each renewal's invoice about an hour ahead.
+            if await gateway.has_owed_invoices(customer_id=customer_id):
+                raise ConflictError(_RESOLVE_OBLIGATIONS, code=UNPAID_INVOICE)
+        # Expired first, so a Checkout completing meanwhile starts a Subscription listed below.
+        for customer_id in customers:
+            await gateway.expire_open_checkouts(customer_id=customer_id)
+        for customer_id in customers:
+            # A delayed payment, such as a Top-up's, completes its Checkout unpaid: no expiry.
+            if await gateway.has_pending_checkout(customer_id=customer_id):
+                raise ConflictError(
+                    _USER_MESSAGES[BILLING_OPERATION_PENDING], code=BILLING_OPERATION_PENDING
+                )
+        running = [
+            state.id
+            for customer_id in customers
+            for state in await gateway.list_subscriptions(customer_id=customer_id)
+            if state.status not in ENDED_STATUSES
+        ]
+        for subscription_id in running:
+            await gateway.cancel_subscription(subscription_id=subscription_id)
+        for customer_id in customers:
+            await billing.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
+    except BillingProviderError as error:
+        raise SubscriptionNotEnded(str(error)) from error
+    if await billing.get_user_subscription(db, user_id=user.id):
+        raise SubscriptionNotEnded("Pumpkit's copy still holds a Subscription Stripe didn't end")
+
+
 async def delete_own_account(
     db: AsyncSession,
     gateway: BillingGateway,
@@ -179,13 +241,16 @@ async def delete_own_account(
     handle: str,
 ) -> None:
     """
-    Delete the signed-in User's account once they typed their handle, then revoke Pumpkit's X
-    grant and delete their Media files in the background. Sessions and Connected apps cascade.
+    Delete the signed-in User's account once they typed their handle, ending their billing at
+    Stripe first, then revoke Pumpkit's X grant and delete their Media files in the background.
+    Sessions and Connected apps cascade.
     """
     if not _confirms(user, handle):
         raise RefusedError("Type your @handle to confirm.", code="handle_mismatch")
     try:
-        deletion = await _delete(db, gateway, user_id=user.id, reset_benefits=False, dry_run=False)
+        deletion = await _delete(
+            db, gateway, user_id=user.id, reset_benefits=False, dry_run=False, end_billing=True
+        )
     except ConflictError as error:
         if error.code not in _USER_MESSAGES:
             raise
