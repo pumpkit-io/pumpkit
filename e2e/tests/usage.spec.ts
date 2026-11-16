@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../fixtures';
 import { runSeedScript } from '../backend';
 
 test.use({ storageState: { cookies: [], origins: [] } });

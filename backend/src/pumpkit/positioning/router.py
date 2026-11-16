@@ -56,7 +56,7 @@ async def start_positioning_draft(
 ) -> Response:
     """
     Starts drafting the User's Positioning in the background and answers at once, Subscribed or
-    not, so sign-in can start it (ADR 0030). `GET /positioning` shows the draft.
+    not, so the sign-in callback page can start it (ADR 0030). `GET /positioning` shows the draft.
     """
     await mediator.start_draft(db, reader, llm, tasks, sessions, current_user, clock)
     return Response(status_code=status.HTTP_202_ACCEPTED)

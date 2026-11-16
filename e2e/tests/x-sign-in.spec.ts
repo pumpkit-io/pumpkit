@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures';
 import { stagedXBaseURL } from '../backend';
 
 test.use({ storageState: { cookies: [], origins: [] } });

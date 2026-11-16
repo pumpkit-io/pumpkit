@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from '../fixtures';
 import { runSeedScript } from '../backend';
 
 // A User of its own per test, so each one starts at the Paywall.

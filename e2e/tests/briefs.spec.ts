@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from '../fixtures';
 import { runSeedScript } from '../backend';
 
 // The stack's model is real and costs money, so POST /briefs and POST /briefs/{id}/posts are

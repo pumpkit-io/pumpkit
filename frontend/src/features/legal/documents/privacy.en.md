@@ -38,6 +38,12 @@ Your photo follows X when Pumpkit next fetches your profile for sign-in or publi
 - **Why:** to keep you signed in, and to detect and stop misuse of accounts.
 - **Legal basis:** performance of the contract for the Session itself (Art. 6(1)(b) GDPR), and the Operator's legitimate interest in keeping accounts secure for the IP address and user agent (Art. 6(1)(f) GDPR).
 
+### Positioning and its draft {#data-positioning}
+
+- **What:** your Positioning, the few sentences you save about who you are on X, and its draft. When you sign in with X and have no Positioning, Pumpkit takes the handle, bio, location and website X gives it when you sign in, reads up to 20 of your newest posts through twitterapi.io, and sends them to OpenRouter to draft your Positioning. This happens at sign-in, before you subscribe. Pumpkit keeps the draft, unsaved, and the time of each draft request, which it uses to limit drafts to 5 a day. It does not keep the posts it read.
+- **Why:** to plan every Post around your Positioning, and to have a draft ready when you reach the Persona step.
+- **Legal basis:** performance of the contract, including the steps you take before subscribing (Art. 6(1)(b) GDPR).
+
 ### Briefs, Feedback and Versions {#data-writing}
 
 - **What:** the Briefs and Feedback you write, and every Version Pumpkit writes from them, including the Sketch it starts from and the Version's text.
@@ -116,15 +122,15 @@ The public posts of those authors are covered in [Inspiration authors](#inspirat
 
 The Operator shares personal data only with the providers below, and each receives only what its task needs.
 
-| Recipient                                                        | What it receives                                                                                                        | Where              |
-| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                                    | Frankfurt, Germany |
-| Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout                      | United States      |
-| X (sign-in and publishing)                                       | Your sign-in and publishing authorization, and the text, Media and alt text of each Scheduled post when it is published | United States      |
-| twitterapi.io (reading public posts)                             | The handles of your Inspiration authors                                                                                 |                    |
-| OpenRouter (writing)                                             | Your Brief, your Feedback, earlier Versions of the Post, and the recent public posts of your Inspiration authors        | United States      |
-| The model provider behind OpenRouter, currently OpenAI (writing) | The same as OpenRouter                                                                                                  | United States      |
-| PostHog (analytics)                                              | Analytics in your browser, only after Analytics consent, and server events and error reports                            | European Union     |
+| Recipient                                                        | What it receives                                                                                                                                                                  | Where              |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| DigitalOcean (hosting)                                           | All the data above, on the server that runs Pumpkit and its database                                                                                                              | Frankfurt, Germany |
+| Stripe (billing)                                                 | Your name, email address and user identifier, and the payment details you enter on Stripe Checkout                                                                                | United States      |
+| X (sign-in and publishing)                                       | Your sign-in and publishing authorization, and the text, Media and alt text of each Scheduled post when it is published                                                           | United States      |
+| twitterapi.io (reading public posts)                             | Your X account identifier, to draft your Positioning, and the handles of your Inspiration authors                                                                                 |                    |
+| OpenRouter (writing)                                             | Your Positioning, your X profile and newest posts for its draft, your Brief, your Feedback, earlier Versions of the Post, and the recent public posts of your Inspiration authors | United States      |
+| The model provider behind OpenRouter, currently OpenAI (writing) | The same as OpenRouter                                                                                                                                                            | United States      |
+| PostHog (analytics)                                              | Analytics in your browser, only after Analytics consent, and server events and error reports                                                                                      | European Union     |
 
 The Operator may also disclose personal data to public authorities when the law requires it.
 
@@ -140,8 +146,9 @@ The Operator does not use your Briefs, Feedback or Versions to train AI models. 
 
 ## How long data is kept {#retention}
 
-- **Account content** (your profile, stable X identity, Briefs, Feedback, Versions, Inspiration authors, Scheduled posts and publishing credentials): until your account is deleted.
+- **Account content** (your profile, stable X identity, Positioning, Briefs, Feedback, Versions, Inspiration authors, Scheduled posts and publishing credentials): until your account is deleted.
 - **Media:** each file is deleted from the server once the X post that carries it is published; its preview and alt text stay with the Post until your account is deleted. Media that neither a Post's text nor a Scheduled post holds any more, such as Media you remove from both, is deleted with its preview within two hours. Media you remove from a Scheduled post while its Post's text still holds it is deleted once that part is published on X, or once you remove it from the text too.
+- **Positioning draft:** until you save a Positioning or your account is deleted. The time of each draft request is kept until it is more than a day old and you ask for another draft, or your account is deleted.
 - **Upload links:** one day after they expire, which is 15 minutes after an AI app asks for them.
 - **Session records:** 90 days after expiry. Any retained records from earlier magic link sign-in also expire under that same 90-day rule. X authorization attempts expire after 10 minutes and are single-use; expired attempt records are removed when another sign-in starts.
 - **Connected apps:** until you disconnect the app or your account is deleted. A disconnected app's record and its tokens are deleted 90 days after you disconnect it, and an expired token within 90 days of expiring.

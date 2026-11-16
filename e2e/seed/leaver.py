@@ -1,6 +1,7 @@
 """
-Delete the account a failed run of the account deletion journey left for its User, Leaver
-(X ID 1004), ending their Subscriptions through this stack's Stripe Emulator first.
+Delete the account an earlier run left for Leaver (X ID 1004), whom the account deletion and
+sign-in draft journeys sign in as, ending their Subscriptions through this stack's Stripe
+Emulator first.
 """
 
 import asyncio
