@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-16
+
 - The English and Italian Terms and Privacy Policy identify Sold through Link, LLC as the seller for purchases marked "Sold through Link", explain its refund, withdrawal and VAT handling, and distinguish its billing-data responsibilities from the Operator’s. Earlier purchases keep their original seller. Checkout’s immediate-start acknowledgement preserves consumer rights and seller protections. **Upgrade notes:** before applying material changes to existing Users, send the notices promised by the current legal documents; the Terms require at least 30 days. Publishing these documents does not enable Managed Payments.
 
 ## [0.13.0] - 2026-11-16
