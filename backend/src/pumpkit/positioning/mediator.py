@@ -36,7 +36,7 @@ from pumpkit.positioning.schemas import (
 )
 from pumpkit.x_connection import service as x_connection_service
 
-_WRITE_IT_YOURSELF = "Write it yourself, a few sentences is enough."
+_WRITE_IT_YOURSELF = "Write it yourself."
 _X_NOT_READ = f"We couldn't read your X profile. {_WRITE_IT_YOURSELF}"
 _NOTHING_TO_DRAFT_FROM = f"Your X profile has nothing to draft from yet. {_WRITE_IT_YOURSELF}"
 _NOT_DRAFTED = f"We couldn't draft your positioning. {_WRITE_IT_YOURSELF}"
@@ -56,7 +56,7 @@ async def save_positioning(
     db: AsyncSession, user: User, text: str, now: datetime
 ) -> PositioningResponse:
     # The lock `start_draft` holds, so a save never lands between its check and its draft.
-    await users.lock_user_id(db, user_id=user.id)
+    await users.require_locked_user(db, user_id=user.id, clock=lambda: now)
     positioning = await service.save_positioning(db, user_id=user.id, text=text, now=now)
     await db.commit()
     return _response(positioning)
@@ -108,7 +108,8 @@ async def start_draft(
     or finds today's draft requests used up, runs nothing and leaves a draft that failed.
     """
     # Serializes a User's starts, so two tabs start one draft and can't both take the last request.
-    await users.lock_user_id(db, user_id=user.id)
+    if await users.lock_user_id(db, user_id=user.id) is None:
+        return
     now = clock()
     if await service.get_positioning(db, user_id=user.id) is not None:
         return

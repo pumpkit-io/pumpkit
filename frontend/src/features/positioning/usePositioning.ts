@@ -14,8 +14,7 @@ const DRAFT_POLL_MS = 2000;
 const DRAFT_READ_FAILURES_TOLERATED = 5;
 
 /** The backend's sentence for a draft it couldn't write, for a request that never got one. */
-const NOT_DRAFTED =
-  "We couldn't draft your positioning. Write it yourself, a few sentences is enough.";
+const NOT_DRAFTED = "We couldn't draft your positioning. Write it yourself.";
 
 /** True when the backend would find `text` blank: it drops what Postgres can't store, then trims. */
 function isBlank(text: string): boolean {

@@ -1,7 +1,7 @@
 """
 Delete the account an earlier run left for Leaver (X ID 1004), whom the account deletion and
-sign-in draft journeys sign in as, ending their Subscriptions through this stack's Stripe
-Emulator first.
+sign-in draft journeys sign in as, ending their billing through this stack's Stripe Emulator
+as deleting from Settings does.
 """
 
 import asyncio
@@ -26,12 +26,8 @@ async def main() -> None:
         user = await db.scalar(select(User).where(User.x_user_id == LEAVER_X_ID))
         if user is None:
             return
-        if user.stripe_customer_id:
-            for state in await gateway.list_subscriptions(customer_id=user.stripe_customer_id):
-                if state.status not in {"canceled", "incomplete_expired"}:
-                    await gateway.cancel_subscription(subscription_id=state.id)
-            await gateway.expire_open_checkouts(customer_id=user.stripe_customer_id)
-        await account_deletion.delete_account(db, gateway, user_id=user.id)
+        # Ends billing as Settings does: the operator path refuses a failed run's pending signup.
+        await account_deletion.delete_account(db, gateway, user_id=user.id, end_billing=True)
         await account_deletion.delete_files(db, get_file_storage())
 
 

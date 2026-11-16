@@ -27,8 +27,8 @@ from tests.positioning.positioning import (
 )
 
 USAGE = "/api/v1/usage"
-NO_X_READ = "We couldn't read your X profile. Write it yourself, a few sentences is enough."
-NO_MODEL = "We couldn't draft your positioning. Write it yourself, a few sentences is enough."
+NO_X_READ = "We couldn't read your X profile. Write it yourself."
+NO_MODEL = "We couldn't draft your positioning. Write it yourself."
 READY = {"state": "ready", "text": DRAFTED, "reason": None}
 
 
@@ -331,8 +331,7 @@ async def test_an_empty_profile_with_no_posts_fails_with_a_reason_and_asks_no_mo
     fake_x_reader.posts["ada"] = []
 
     assert await _start(client) == _failed(
-        "Your X profile has nothing to draft from yet. "
-        "Write it yourself, a few sentences is enough."
+        "Your X profile has nothing to draft from yet. Write it yourself."
     )
     assert fake_llm.calls == []
 

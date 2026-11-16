@@ -57,9 +57,8 @@ import { SUBSCRIBED, apiError, currentPath, renderSignedIn } from './testing/sig
 
 const DRAFTED = "I'm a solo founder building a pricing tool. I post about pricing for founders.";
 const EDITED = `${DRAFTED} I post to earn sign-ups.`;
-const NOT_READ = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
-const NOT_DRAFTED =
-  "We couldn't draft your positioning. Write it yourself, a few sentences is enough.";
+const NOT_READ = "We couldn't read your X profile. Write it yourself.";
+const NOT_DRAFTED = "We couldn't draft your positioning. Write it yourself.";
 const READY: PositioningDraft = { state: 'ready', text: DRAFTED, reason: null };
 const RUNNING: PositioningDraft = { state: 'running', text: null, reason: null };
 const FAILED: PositioningDraft = { state: 'failed', text: null, reason: NOT_READ };
@@ -181,6 +180,17 @@ describe('Onboarding', () => {
       await drafted();
 
       expect(positioningService.startDraft).not.toHaveBeenCalled();
+    });
+
+    it('shows "Reading your X profile…" with the textarea and Continue disabled while the Positioning loads', async () => {
+      vi.mocked(positioningService.get).mockReturnValue(new Promise(() => {}));
+      renderOnboarding();
+
+      const textarea = await field();
+      expect(textarea).toHaveAccessibleDescription(`Reading your X profile… ${ADVICE}`);
+      expect(textarea).not.toHaveAttribute('placeholder');
+      expect(textarea).toBeDisabled();
+      expect(continueButton()).toBeDisabled();
     });
 
     describe('while the draft runs', () => {

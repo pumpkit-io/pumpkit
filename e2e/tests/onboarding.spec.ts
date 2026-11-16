@@ -7,7 +7,7 @@ test.use({ storageState: { cookies: [], origins: [] } });
 const DRAFTED =
   "I'm a solo founder building a pricing tool. I post about pricing for people starting their first SaaS.";
 const ADDED = ' I post to earn sign-ups.';
-const NOT_READ = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
+const NOT_READ = "We couldn't read your X profile. Write it yourself.";
 
 // This User has no Positioning and has not finished Onboarding.
 test.describe('a seeded User', () => {
