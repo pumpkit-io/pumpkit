@@ -4,6 +4,7 @@ import { showToast } from '@/components/Toaster';
 import { ErrorBanner } from '@/components/ErrorBanner';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { DeleteAccountSection } from '@/features/account/DeleteAccountSection';
 import { ProfileCard } from '@/features/account/ProfileCard';
 import { generationsAndXPosts } from '@/features/billing/counts';
 import { SubscriptionCard } from '@/features/billing/SubscriptionCard';
@@ -127,6 +128,7 @@ export function Settings() {
             <UsageCard key={data.me.freeAccess?.endsAt} topUpBought={topUpBought} />
           )}
           <ConnectedAppsCard />
+          <DeleteAccountSection />
           <footer className="pt-4">
             {/* A new tab, because leaving the signed-in layout would drop the Post on New post. */}
             <LegalLinks

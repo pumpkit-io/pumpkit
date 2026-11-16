@@ -97,6 +97,9 @@ export const EVENTS = {
     description: 'Settings: changed the theme in Appearance. Props: theme (system/light/dark).',
   },
   settings_sign_out_clicked: { description: 'Settings: clicked "Sign out" in the header.' },
+  account_deleted: {
+    description: 'Settings: the User deleted their account, sent before signing out locally.',
+  },
   account_profile_saved: { description: 'Account: saved profile changes. Props: fields_changed.' },
   account_profile_save_failed: {
     description: 'Account: profile save failed. Props: error_message.',
@@ -271,4 +274,12 @@ export type EventName = keyof typeof EVENTS;
 
 export function track<E extends EventName>(event: E, properties?: Record<string, unknown>): void {
   captureEvent(event, properties);
+}
+
+/** For an event right before a PostHog reset or a hard redirect, which can drop a batched one. */
+export function trackBeforeLeaving<E extends EventName>(
+  event: E,
+  properties?: Record<string, unknown>,
+): void {
+  captureEvent(event, properties, { send_instantly: true });
 }

@@ -58,3 +58,9 @@ it('explains how to retry after missing confirmed email', () => {
   show('?error=x_email_required');
   expect(screen.getByRole('alert')).toHaveTextContent('Confirm an email address on X');
 });
+
+it('says the account is deleted once, after the User deleted it', () => {
+  show('?notice=account_deleted');
+  expect(screen.getByRole('status')).toHaveTextContent('Your account is deleted.');
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+});

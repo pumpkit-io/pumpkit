@@ -5,6 +5,7 @@ vi.mock('@/services/userService', () => ({
   userService: {
     fetchProfile: vi.fn(),
     updateProfile: vi.fn(),
+    deleteAccount: vi.fn(),
   },
 }));
 vi.mock('@/services/billingService', () => ({
@@ -60,24 +61,27 @@ vi.mock('@/lib/confetti', () => ({ fireSuccessConfetti: vi.fn() }));
 vi.mock('@/lib/analytics', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/analytics')>()),
   track: vi.fn(),
+  trackBeforeLeaving: vi.fn(),
 }));
 
 import App from '@/App';
 import { InstanceProvider } from '@/features/instance/InstanceProvider';
 import { SELLS_PLANS, WITH_OPERATOR } from '@/features/instance/testInstances';
-import { track } from '@/lib/analytics';
+import { track, trackBeforeLeaving } from '@/lib/analytics';
 import { storageKey } from '@/lib/storage';
 import { fireSuccessConfetti } from '@/lib/confetti';
 import type { Instance } from '@/lib/instance';
-import { redirectTo } from '@/lib/navigation';
+import { hardRedirect, redirectTo } from '@/lib/navigation';
 import { appConnectionService } from '@/services/appConnectionService';
 import { billingService, type BillingMe, type PlanCatalog } from '@/services/billingService';
 import { usageService } from '@/services/usageService';
 import { onboardingService } from '@/services/onboardingService';
+import { postService } from '@/services/postService';
 import { userService, type UserProfile } from '@/services/userService';
 import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import {
   NOT_SUBSCRIBED,
+  NO_POSTS,
   SUBSCRIBED,
   apiError,
   renderSignedIn,
@@ -208,6 +212,7 @@ describe('Settings', () => {
       'Plan',
       'Usage',
       'Connect AI apps',
+      'Delete account',
     ]);
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
   });
@@ -965,6 +970,7 @@ describe('Settings', () => {
       expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual([
         'Profile',
         'Connect AI apps',
+        'Delete account',
       ]);
       expect(screen.queryByRole('button', { name: 'Connect X' })).not.toBeInTheDocument();
       expect(billingService.fetchBillingMe).not.toHaveBeenCalled();
@@ -987,6 +993,133 @@ describe('Settings', () => {
     await card('Profile');
     expect(screen.queryByRole('region', { name: 'Appearance' })).not.toBeInTheDocument();
     expect(document.documentElement).toHaveClass('dark');
+  });
+
+  describe('Delete account', () => {
+    beforeEach(() => {
+      vi.mocked(userService.deleteAccount).mockReset();
+      vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
+      vi.mocked(hardRedirect).mockReset();
+    });
+
+    async function openDeletion() {
+      renderSettings();
+      const section = await card('Delete account');
+      expect(
+        section.getByText(
+          'Deletes your account and everything in it, and disconnects your X account.',
+        ),
+      ).toBeInTheDocument();
+      fireEvent.click(section.getByRole('button', { name: 'Delete account' }));
+      return within(await screen.findByRole('alertdialog', { name: 'Delete your account?' }));
+    }
+
+    async function confirmWith(dialog: ReturnType<typeof within>, handle = '@ada') {
+      fireEvent.change(await dialog.findByLabelText('Type @ada to confirm'), {
+        target: { value: handle },
+      });
+      fireEvent.click(dialog.getByRole('button', { name: 'Delete my account' }));
+    }
+
+    it('says what deleting loses, and that posts already on X stay there', async () => {
+      const dialog = await openDeletion();
+
+      expect(dialog.getByText("This can't be undone. Deleting your account:")).toBeInTheDocument();
+      expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'disconnects X and every connected AI app',
+      ]);
+      expect(dialog.getByText('Posts already on X stay on X.')).toBeInTheDocument();
+    });
+
+    it('says scheduled posts waiting to go out are deleted', async () => {
+      vi.mocked(postService.list).mockResolvedValue({
+        ...NO_POSTS,
+        counts: { ...NO_POSTS.counts, scheduled: 2 },
+      });
+      const dialog = await openDeletion();
+
+      expect(
+        await dialog.findByText('deletes your scheduled posts before they go out'),
+      ).toBeInTheDocument();
+      expect(dialog.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+        'deletes your scheduled posts before they go out',
+        'disconnects X and every connected AI app',
+      ]);
+    });
+
+    it('enables Delete my account only once the handle matches', async () => {
+      const dialog = await openDeletion();
+      const field = await dialog.findByLabelText('Type @ada to confirm');
+      const confirm = dialog.getByRole('button', { name: 'Delete my account' });
+      expect(confirm).toBeDisabled();
+
+      fireEvent.change(field, { target: { value: '@grace' } });
+      expect(confirm).toBeDisabled();
+
+      fireEvent.change(field, { target: { value: 'ADA' } });
+      expect(confirm).toBeEnabled();
+    });
+
+    it('reads Deleting… and holds the dialog open while it runs', async () => {
+      vi.mocked(userService.deleteAccount).mockReturnValue(new Promise(() => undefined));
+      const dialog = await openDeletion();
+
+      await confirmWith(dialog);
+
+      expect(await dialog.findByRole('button', { name: 'Deleting…' })).toBeDisabled();
+      expect(dialog.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+      expect(dialog.getByLabelText('Type @ada to confirm')).toBeDisabled();
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    });
+
+    it.each([
+      ['publishing_in_progress', 'A post is going out on X right now. Try again in a minute.'],
+      [
+        'billing_operation_pending',
+        'A billing change is still being processed. Try again in a few minutes.',
+      ],
+      ['unpaid_invoice', 'You have an unpaid invoice. Contact support to delete your account.'],
+      [
+        'subscription_running',
+        'Your subscription is still running. Cancel it in Plan, then delete your account once it has ended.',
+      ],
+    ])('shows the %s refusal inside the dialog', async (code, message) => {
+      vi.mocked(userService.deleteAccount).mockRejectedValue(apiError(409, message, { code }));
+      const dialog = await openDeletion();
+
+      await confirmWith(dialog);
+
+      expect(await dialog.findByRole('alert')).toHaveTextContent(message);
+      expect(dialog.getByRole('button', { name: 'Delete my account' })).toBeEnabled();
+      expect(hardRedirect).not.toHaveBeenCalled();
+    });
+
+    it('asks to try again when the request never got an answer', async () => {
+      vi.mocked(userService.deleteAccount).mockRejectedValue(
+        Object.assign(new Error('Network Error'), { isAxiosError: true }),
+      );
+      const dialog = await openDeletion();
+
+      await confirmWith(dialog);
+
+      expect(await dialog.findByRole('alert')).toHaveTextContent(
+        "Couldn't delete your account. Try again.",
+      );
+    });
+
+    it('signs out to the login page saying the account is deleted', async () => {
+      vi.mocked(userService.deleteAccount).mockResolvedValue(undefined);
+      const dialog = await openDeletion();
+
+      await confirmWith(dialog, 'ada');
+
+      await waitFor(() =>
+        expect(hardRedirect).toHaveBeenCalledWith('/login?notice=account_deleted'),
+      );
+      expect(userService.deleteAccount).toHaveBeenCalledWith('ada');
+      expect(trackBeforeLeaving).toHaveBeenCalledWith('account_deleted');
+    });
   });
 
   describe('Footer', () => {

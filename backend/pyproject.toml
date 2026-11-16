@@ -204,6 +204,12 @@ protected_modules = [
 allowed_importers = ["pumpkit.mcp_server"]
 
 [[tool.importlinter.contracts]]
+name = "Only pumpkit.main imports pumpkit.account_deletion_router"
+type = "protected"
+protected_modules = ["pumpkit.account_deletion_router"]
+allowed_importers = ["pumpkit.main"]
+
+[[tool.importlinter.contracts]]
 name = "Only pumpkit.main imports pumpkit.mcp_server"
 type = "protected"
 protected_modules = ["pumpkit.mcp_server"]

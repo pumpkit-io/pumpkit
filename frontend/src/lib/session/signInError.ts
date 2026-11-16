@@ -27,3 +27,8 @@ export function isSignInErrorCode(code: string | null): code is SignInErrorCode 
 export function signInPath(error?: SignInErrorCode): string {
   return error ? `/login?error=${error}` : '/login';
 }
+
+/** The `?notice=` the sign-in page shows after the User deleted their account. */
+export const ACCOUNT_DELETED_NOTICE = 'account_deleted';
+
+export const ACCOUNT_DELETED_PATH = `/login?notice=${ACCOUNT_DELETED_NOTICE}`;
