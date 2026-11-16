@@ -7,6 +7,8 @@ const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
+    // Same-day Reach warnings go by the User's day, not UTC's.
+    'X-Time-Zone': Intl.DateTimeFormat().resolvedOptions().timeZone,
   },
   withCredentials: true,
 });

@@ -92,4 +92,14 @@ describe('request interceptor', () => {
     await api.get('/users/me');
     expect(authorization).toBe('Bearer t');
   });
+
+  it("sends the browser's time zone, which same-day reach warnings go by", async () => {
+    let timeZone: unknown;
+    api.defaults.adapter = async (config) => {
+      timeZone = config.headers?.['X-Time-Zone'];
+      return { data: {}, status: 200, statusText: 'OK', headers: {}, config };
+    };
+    await api.get('/posts/post_01/reach-warnings');
+    expect(timeZone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  });
 });

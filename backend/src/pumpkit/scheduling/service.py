@@ -5,7 +5,7 @@ Flushes and never commits: the caller (the mediator or `publishing`) owns the tr
 
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Optional, cast
 
 from sqlalchemy import (
@@ -28,6 +28,7 @@ from sqlalchemy.sql import Subquery
 
 from pumpkit.billing.models import TopUpCharge
 from pumpkit.core.errors import ConflictError
+from pumpkit.core.time import as_utc
 from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Idea, Media, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
@@ -49,6 +50,7 @@ from pumpkit.scheduling.post_status import (
     STATUS_OF_STATE,
     PostStatus,
 )
+from pumpkit.scheduling.reach_warnings import OtherScheduledPost
 from pumpkit.scheduling.rules import XPosts, x_posts_in
 
 # A Part counts as an X post unless its Scheduled post Failed before X accepted it.
@@ -248,6 +250,34 @@ async def latest_publish_at_of_brief(
         )
     )
     return result.scalar_one_or_none()
+
+
+async def others_around(
+    db: AsyncSession, *, user_id: str, post_id: str, at: datetime
+) -> list[OtherScheduledPost]:
+    """
+    The User's Scheduled posts of other Posts that are waiting or Published and go or went out
+    within two days of `at`, which covers its calendar day in any time zone.
+    """
+    goes_out_at = func.coalesce(ScheduledPost.published_at, ScheduledPost.publish_at)
+    brief_id = (
+        select(Idea.brief_id).join(Post, Post.idea_id == Idea.id).where(Post.id == post_id)
+    ).scalar_subquery()
+    result = await db.execute(
+        select(goes_out_at, ScheduledPost.state, Idea.brief_id == brief_id)
+        .join(Post, Post.id == ScheduledPost.post_id)
+        .join(Idea, Idea.id == Post.idea_id)
+        .where(
+            ScheduledPost.user_id == user_id,
+            ScheduledPost.post_id != post_id,
+            ScheduledPost.state != FAILED,
+            goes_out_at.between(at - timedelta(days=2), at + timedelta(days=2)),
+        )
+    )
+    return [
+        OtherScheduledPost(goes_out_at=as_utc(time), published=state == PUBLISHED, same_brief=same)
+        for time, state, same in result.tuples()
+    ]
 
 
 async def states_of_posts(

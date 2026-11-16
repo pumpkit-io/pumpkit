@@ -5238,6 +5238,38 @@ describe('Post page', () => {
         expect(dialog.queryByText(SHARE.message)).not.toBeInTheDocument();
       });
 
+      it('refreshes the spacing warning as the date and time change, reading Post now as now', async () => {
+        const NEARBY: ReachWarning = {
+          code: 'nearby_post',
+          part: null,
+          message:
+            "Your other post goes out on Mon 12 Oct at 08:00 CEST, less than 2 hours away, so the two split each other's reach. Pick a time 2 hours from your other post.",
+        };
+        vi.mocked(postService.reachWarningsAt).mockImplementation(async (_postId, publishAt) =>
+          publishAt === '2026-10-12T07:00:00.000Z' ? [NEARBY] : [],
+        );
+        const dialog = await openPostTo();
+        await vi.waitFor(() =>
+          expect(postService.reachWarningsAt).toHaveBeenCalledWith('post_01', null),
+        );
+
+        scheduleAt(dialog, '2026-10-12', '09:00');
+        expect(await dialog.findByText(NEARBY.message)).toBeInTheDocument();
+
+        fireEvent.change(dialog.getByLabelText('Time'), { target: { value: '11:00' } });
+        await waitFor(() => expect(dialog.queryByText(NEARBY.message)).not.toBeInTheDocument());
+
+        fireEvent.change(dialog.getByLabelText('Time'), { target: { value: '09:00' } });
+        expect(await dialog.findByText(NEARBY.message)).toBeInTheDocument();
+        fireEvent.change(dialog.getByLabelText('Date'), { target: { value: '2026-10-13' } });
+        await waitFor(() => expect(dialog.queryByText(NEARBY.message)).not.toBeInTheDocument());
+
+        fireEvent.click(dialog.getByRole('radio', { name: 'Now' }));
+        await vi.waitFor(() =>
+          expect(postService.reachWarningsAt).toHaveBeenLastCalledWith('post_01', null),
+        );
+      });
+
       it('shows nothing when the read fails, and the dialog still schedules', async () => {
         vi.mocked(postService.reachWarningsAt).mockRejectedValue(apiError(500, 'Boom.'));
         vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);

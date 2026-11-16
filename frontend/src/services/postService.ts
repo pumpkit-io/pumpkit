@@ -187,12 +187,14 @@ export type ReachWarningCode =
   | 'giveaway'
   | 'many_mentions'
   | 'many_hashtags'
-  | 'shortened_link';
+  | 'shortened_link'
+  | 'nearby_post'
+  | 'same_brief_same_day';
 
 /** Something in a Post's text that may lead X to show it to fewer people; it never stops posting. */
 export interface ReachWarning {
   code: ReachWarningCode;
-  /** The Part it was found in, from 1. */
+  /** The Part it was found in, from 1; null for a warning about when it goes out. */
   part: number | null;
   /** One sentence for the User. */
   message: string;
