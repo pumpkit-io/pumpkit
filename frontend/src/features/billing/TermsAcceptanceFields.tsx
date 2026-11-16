@@ -83,12 +83,14 @@ export function TermsAcceptanceFields({
         {purchase === 'topUp' ? (
           <>
             I ask for the top-up to be available immediately, and acknowledge I lose the 14-day{' '}
-            {withdrawalLink} once I use any of it.
+            {withdrawalLink} once I use any of it, subject to any additional withdrawal rights in
+            clause 13.
           </>
         ) : (
           <>
             I ask for the service to start immediately, and acknowledge I lose the 14-day{' '}
-            {withdrawalLink} once the paid period starts.
+            {withdrawalLink} once the paid period starts, subject to any additional withdrawal
+            rights in clause 13.
           </>
         )}
       </AcceptanceCheckbox>
