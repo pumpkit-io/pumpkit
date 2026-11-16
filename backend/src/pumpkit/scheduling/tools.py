@@ -118,14 +118,12 @@ async def schedule_post(
     Schedule the post's text on the user's connected X account for `publish_at`, an ISO 8601
     time with its UTC offset, on a whole minute and at least a minute from now. A thread keeps
     every part in order, and a first reply goes out as a reply to its post. A text that still
-    holds the `[link]` placeholder is refused. A post goes out once: it has at most one scheduled post, so to change
-    one already scheduled, edit it, or delete it first. The post goes to the user's profile, or
-    to the community whose URL or ID is in `community`. In a community, `share_with_followers`
-    also shows it to the user's followers. `reach_warnings` lists what in the scheduled text may
-    lead X to show it to fewer people, each with its `part` and a `message` to tell the user.
-    It also warns when another of the user's posts goes or went out less than 2 hours from it,
-    and when another post of its brief goes out the same day in `time_zone`, the user's IANA time
-    zone such as "Europe/Rome", or UTC without one.
+    holds the `[link]` placeholder is refused. A post goes out once: it has at most one scheduled
+    post, so to change one already scheduled, edit it, or delete it first. The post goes to the
+    user's profile, or to the community whose URL or ID is in `community`. In a community,
+    `share_with_followers` also shows it to the user's followers. `reach_warnings` lists what in
+    the scheduled text or its time may lead X to show it to fewer people, each with a `message`
+    to tell the user. `time_zone` is the user's IANA time zone, as the server instructions say.
     """
     return await _create_scheduled_post(
         call,
@@ -164,15 +162,14 @@ async def post_now(
     Publish the post's text on the user's connected X account right away. Show the user the
     exact text of every part and get their yes first. A thread keeps every part in order, each
     replying to the one before, and a first reply replies to its post. A text that still holds
-    the `[link]` placeholder is refused. A post goes out once: one that already has a scheduled post is
-    refused. The post goes to the user's profile, or to the community whose URL or ID is in
-    `community`. In a community, `share_with_followers` also shows it to the user's followers.
-    A post with a GIF or a video comes back scheduled before its media is uploaded: Pumpkit then
-    uploads it and waits while X processes it, up to an hour for a video, and `get_post` shows
-    when it's published. `reach_warnings` lists what in the text may lead X to show it to fewer
-    people, each with its `part` and a `message` to tell the user. It also warns when another of the user's posts goes or went out less than 2 hours from it,
-    and when another post of its brief goes out the same day in `time_zone`, the user's IANA time
-    zone such as "Europe/Rome", or UTC without one.
+    the `[link]` placeholder is refused. A post goes out once: one that already has a scheduled
+    post is refused. The post goes to the user's profile, or to the community whose URL or ID is
+    in `community`. In a community, `share_with_followers` also shows it to the user's
+    followers. A post with a GIF or a video comes back scheduled before its media is uploaded:
+    Pumpkit then uploads it and waits while X processes it, up to an hour for a video, and
+    `get_post` shows when it's published. `reach_warnings` lists what in the text or its time
+    may lead X to show it to fewer people, each with a `message` to tell the user. `time_zone`
+    is the user's IANA time zone, as the server instructions say.
     """
     posted = await _create_scheduled_post(
         call,
@@ -224,10 +221,9 @@ async def edit_scheduled_post(
     places are skipped. A new time publishes only the parts not live, as replies to the last
     live one. While a part that isn't on X yet has media, `parts` must keep the same number of
     parts: to add or remove one, change the post's text and use `copy_text`. `reach_warnings`
-    lists what in the edited text may lead X to show it to fewer people, each with its `part`
-    and a `message` to tell the user. It also warns when another of the user's posts goes or went out less than 2 hours from it,
-    and when another post of its brief goes out the same day in `time_zone`, the user's IANA time
-    zone such as "Europe/Rome", or UTC without one.
+    lists what in the edited text or its time may lead X to show it to fewer people, each with
+    a `message` to tell the user. `time_zone` is the user's IANA time zone, as the server
+    instructions say.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
         {
@@ -339,11 +335,10 @@ async def get_post(
     can be scheduled. `reach_warnings` lists what may lead X to show the post to fewer people, in
     the scheduled post's own text while it waits or once published, else in the text: each with a
     `code`, the `part` it is in, counted from 1, and a `message` to tell the user. They never stop
-    scheduling. A scheduled post's warnings also say when another of the user's posts goes or went
-    out less than 2 hours from it, with `part` null, and when another post of its brief goes out
-    the same day in `time_zone`, the user's IANA time zone such as "Europe/Rome", or UTC without
-    one. `one_idea_a_day` is the latest time another post of its brief goes or went out, or null:
-    schedule this one for the day after, at the same time of day.
+    scheduling. A scheduled post's warnings also cover its time, with `part` null. `time_zone`
+    is the user's IANA time zone, as the server instructions say. `one_idea_a_day` is the latest
+    time another post of its brief goes or went out, or null: schedule this one for the day
+    after, at the same time of day.
     """
     return await mediator.get_post(
         db=call.db,

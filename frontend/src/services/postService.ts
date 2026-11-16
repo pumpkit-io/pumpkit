@@ -191,7 +191,10 @@ export type ReachWarningCode =
   | 'nearby_post'
   | 'same_brief_same_day';
 
-/** Something in a Post's text that may lead X to show it to fewer people; it never stops posting. */
+/**
+ * Something in a Post's text, or in when it goes out, that may lead X to show it to fewer people;
+ * it never stops posting.
+ */
 export interface ReachWarning {
   code: ReachWarningCode;
   /** The Part it was found in, from 1; null for a warning about when it goes out. */
@@ -220,7 +223,10 @@ export interface PostDetail extends Post {
    * since undo, redo, restoring and Feedback change only its words.
    */
   textMedia: Media[][];
-  /** For the Scheduled post's own text when it has one, else for the Text, as the Post was read. */
+  /**
+   * For the Scheduled post's own text and time unless it Failed, else for the Text, as the Post
+   * was read.
+   */
   reachWarnings: ReachWarning[];
   /** When the latest other Post of the Brief goes or went out, or null: "Post to…" goes a day after. */
   oneIdeaADay: string | null;

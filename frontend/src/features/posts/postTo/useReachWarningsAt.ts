@@ -3,7 +3,8 @@ import { postService, type ReachWarning } from '@/services/postService';
 
 /**
  * The Reach warnings for the Post's Text were it to go out at `publishAt`, or now for null. The
- * last list stays until the next arrives, so the dialog doesn't flicker as the time changes.
+ * last list stays while the next is read, so the dialog doesn't flicker as the time changes; a
+ * failed read shows none, since the last list may be for another time.
  */
 export function useReachWarningsAt(postId: string, publishAt: string | null): ReachWarning[] {
   const [warnings, setWarnings] = useState<ReachWarning[]>([]);
@@ -15,7 +16,6 @@ export function useReachWarningsAt(postId: string, publishAt: string | null): Re
       .then((fresh) => {
         if (live) setWarnings(fresh);
       })
-      // A missed warning costs less than a broken dialog.
       .catch(() => {
         if (live) setWarnings([]);
       });

@@ -116,7 +116,7 @@ class ReachWarningResponse(BaseModel):
 
     # Stable for AI apps.
     code: ReachWarningCode
-    # The Part it was found in, from 1.
+    # The Part it was found in, from 1; None for a warning about when the post goes out.
     part: Optional[int]
     # One sentence for the User, saying what was found and what X does.
     message: str
@@ -125,7 +125,7 @@ class ReachWarningResponse(BaseModel):
 class ScheduledPostSavedResponse(ScheduledPostResponse):
     """A Scheduled post as scheduling, Post now or an edit left it, with what may cost it reach."""
 
-    # For its own text, as created or edited; worked out on each answer and never stored.
+    # For its own text and time, as created or edited; worked out on each answer, never stored.
     reach_warnings: list[ReachWarningResponse]
 
 
@@ -157,7 +157,8 @@ class PostDetailResponse(BaseModel):
     status: Optional[PostStatus]
     # None while the Post is a Draft.
     scheduled_post: Optional[ScheduledPostResponse]
-    # For the Scheduled post's own text unless it Failed, else for the Text; worked out on each read.
+    # For the Scheduled post's own text and time unless it Failed, else for the Text; worked out on
+    # each read.
     reach_warnings: list[ReachWarningResponse]
     # The latest time another Post of the Brief goes or went out, from which "Post to…" presets the
     # next day so split Ideas go out one a day; None when no other has a Scheduled post.

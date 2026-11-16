@@ -434,14 +434,20 @@ function LoadedPost({
 }
 
 /**
- * What the server works the Post's Reach warnings out from, as a key: a waiting or Published
- * Scheduled post's own text, else the Text once saved; null while an edit or a write is out.
+ * What the server works the Post's Reach warnings out from, as a key: the Scheduled post's state
+ * and time, then a waiting or Published one's own text, else the Text once saved; null while an
+ * edit or a write is out.
  */
 function warningsSource(scheduledPost: ScheduledPost | null, text: TextSnapshot): string | null {
+  const timing = scheduledPost && [scheduledPost.state, scheduledPost.publishAt];
   if (scheduledPost && scheduledPost.state !== 'failed')
-    return JSON.stringify([scheduledPost.parts.map((p) => p.text), scheduledPost.firstReply]);
+    return JSON.stringify([
+      timing,
+      scheduledPost.parts.map((p) => p.text),
+      scheduledPost.firstReply,
+    ]);
   if (text.save.kind !== 'saved' || text.writing || text.restoring || !text.text) return null;
-  return JSON.stringify([text.text.parts.map((p) => p.text), text.text.firstReply]);
+  return JSON.stringify([timing, text.text.parts.map((p) => p.text), text.text.firstReply]);
 }
 
 /** One Post at /posts/:id, read from the server, so a reload shows the same Post. */
