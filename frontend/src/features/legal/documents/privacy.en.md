@@ -4,7 +4,7 @@ It covers only the hosted service at pumpkit.io. Pumpkit's code is open source, 
 
 This Privacy Policy is available in English and Italian. Both versions are equally valid.
 
-For existing Users, any new processing described by a material change in this version starts only after the advance notice promised below. Publishing this policy does not itself enable purchases sold through Link or change the seller of an existing purchase.
+Publishing this policy does not itself enable purchases sold through Link or change the seller of an existing purchase.
 
 ## Who is responsible for your data {#controller}
 
@@ -241,4 +241,4 @@ When you subscribe, you complete payment on Stripe Checkout, a page run by Strip
 
 ## Changes to this Privacy Policy {#changes}
 
-The "Last updated" date at the top shows when this Privacy Policy last changed. Before a material change applies, the Operator tells Users by email.
+The "Last updated" date at the top shows when this Privacy Policy last changed. A changed version applies from the date the Operator states with it.

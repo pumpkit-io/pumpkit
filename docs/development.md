@@ -235,7 +235,7 @@ Each document is a Markdown file per language in `frontend/src/features/legal/do
 
 1. Edit the English and the Italian file in the same change, keeping the same sections, clause numbers and `{#anchor}` ids. Links point at those anchors, such as the consent banner's link to `/privacy#cookies`.
 2. Set `TERMS_LAST_UPDATED` or `PRIVACY_LAST_UPDATED` in `documents.ts` to the day of the change. Both language versions read it, so the two pages show the same date. For the Terms, set `TERMS_VERSION` in `backend/src/pumpkit/billing/terms.py` to the same date in the same change: checkout refuses any other version with a 409, so users accept the new Terms before their next checkout (ADR 0010). Coupon confirmation follows the same current-version rule with its own cardless acceptance evidence (ADR 0022); see [the coupon acceptance contract](coupons.md#acceptance-contract). If a clause the Paywall's checkboxes cite moves or is renamed, update `ONEROUS_CLAUSES` and the withdrawal link in `frontend/src/features/billing/TermsAcceptanceFields.tsx`.
-3. For a material change, email every User at least 30 days before it applies, as clause 19 of the Terms and the last section of the Privacy Policy promise.
+3. The Terms and the Privacy Policy promise no advance notice of changes: clause 19 and the last section of the Privacy Policy say a changed version applies from the date the Operator states with it. Check whether the law requires notice for the change you are making, and send it if so.
 
 When you add a cookie or a browser storage key (a `storage.ts` key, a cookie the backend sets, or one a new third-party script sets), add a row for it to the cookie tables in both Privacy Policy files, under strictly necessary or Analytics consent, and follow the steps above.
 

@@ -1,6 +1,6 @@
 These Terms are the contract between you and the Operator, INCEPTIONAL S.R.L., for using Pumpkit at pumpkit.io. Please read them before you subscribe or redeem a Coupon. The [Privacy Policy](/privacy) explains what the Operator does with your personal data.
 
-For existing Users, material changes in this version apply only after the advance notice required by clause 19. Until then, the preceding Terms continue to govern their existing service and purchases. The Sold through Link provisions describe purchases identified that way at checkout; publishing these Terms does not change the seller of an existing purchase.
+The Sold through Link provisions describe purchases identified that way at checkout; publishing these Terms does not change the seller of an existing purchase.
 
 ## 1. The Operator and these Terms {#operator}
 
@@ -178,7 +178,7 @@ When the contract ends, the Operator deletes your account and your content as th
 
 The Operator may change these Terms, for example when Pumpkit changes or the law requires it. The "Last updated" date at the top shows when they last changed.
 
-For a material change, the Operator emails you at least 30 days before it applies. If you do not agree, you can cancel your Subscription or end the contract before the change applies. If you keep using Pumpkit after that date, the changed Terms apply to you.
+A changed version applies from the date the Operator states with it. If you do not agree, you can cancel your Subscription or end the contract before the change applies. If you keep using Pumpkit after that date, the changed Terms apply to you.
 
 ## 20. Governing law {#law}
 

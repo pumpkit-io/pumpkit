@@ -4,7 +4,7 @@ Riguarda soltanto il servizio ospitato su pumpkit.io. Il codice di Pumpkit è op
 
 La presente Informativa sulla privacy è disponibile in inglese e in italiano. Entrambe le versioni hanno pari valore.
 
-Per gli Utenti esistenti, ogni nuovo trattamento descritto da una modifica sostanziale di questa versione inizia solo dopo il preavviso promesso sotto. La pubblicazione di questa informativa non attiva di per sé gli acquisti venduti tramite Link e non cambia il venditore di un acquisto esistente.
+La pubblicazione di questa informativa non attiva di per sé gli acquisti venduti tramite Link e non cambia il venditore di un acquisto esistente.
 
 ## Chi è responsabile dei tuoi dati {#controller}
 
@@ -241,4 +241,4 @@ Quando sottoscrivi un Abbonamento, completi il pagamento su Stripe Checkout, una
 
 ## Modifiche alla presente Informativa sulla privacy {#changes}
 
-La data "Ultimo aggiornamento" in alto indica quando la presente Informativa sulla privacy è stata modificata l'ultima volta. Prima che una modifica sostanziale si applichi, il Gestore ne informa gli Utenti via email.
+La data "Ultimo aggiornamento" in alto indica quando la presente Informativa sulla privacy è stata modificata l'ultima volta. Una versione modificata si applica dalla data indicata dal Gestore insieme a essa.

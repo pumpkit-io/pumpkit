@@ -56,7 +56,7 @@ Where one row serves several purposes, remove unnecessary fields independently a
 
 #395 introduces the setting, key ring, migration and executable issuance/purge commands. Leave the setting off outside isolated tests until the complete implementation and final #394 are installed and verified. At that point, install a daily purge/recovery job, back up the complete key ring securely with the database recovery process, replace the legal documents for your instance and verify the disabled setting before starting it. Each runtime ticket adds its applicable Upgrade notes. An instance selling no plans needs no coupon key or job.
 
-Publishing these changed legal documents does not send the material-change notice promised in clause 19. The operator must arrange that notice before applying a material change to existing users; this PR sends no email. Self-hosters follow their own notice obligations and bump the frontend/backend Terms dates together when replacing the documents.
+Publishing these changed legal documents sends no notice to existing users; clause 19 of the Terms promises none. Operators and self-hosters follow whatever notice the law requires for their own changes, and bump the frontend/backend Terms dates together when replacing the documents.
 
 ## Privileged coupon commands
 
