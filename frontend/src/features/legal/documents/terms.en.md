@@ -1,5 +1,7 @@
 These Terms are the contract between you and the Operator, INCEPTIONAL S.R.L., for using Pumpkit at pumpkit.io. Please read them before you subscribe or redeem a Coupon. The [Privacy Policy](/privacy) explains what the Operator does with your personal data.
 
+For existing Users, material changes in this version apply only after the advance notice required by clause 19. Until then, the preceding Terms continue to govern their existing service and purchases. The Sold through Link provisions describe purchases identified that way at checkout; publishing these Terms does not change the seller of an existing purchase.
+
 ## 1. The Operator and these Terms {#operator}
 
 Pumpkit is run by INCEPTIONAL S.R.L., a single-member limited liability company (società a responsabilità limitata a socio unico), called the Operator in these Terms:
@@ -11,6 +13,8 @@ Pumpkit is run by INCEPTIONAL S.R.L., a single-member limited liability company 
 - share capital: €1, fully paid in
 - certified email (PEC): inceptional@pec.it
 - contact: support@pumpkit.io
+
+For a purchase identified at checkout as "Sold through Link", Sold through Link, LLC, a Stripe affiliate, is the seller and merchant of record for that purchase. The [Sold through Link terms](https://link.com/terms) also apply to the purchase. The Operator remains responsible for providing Pumpkit and product support. For a purchase not identified that way, the Operator remains the seller. An existing Subscription keeps its original seller; these Terms do not transfer it to another seller.
 
 These Terms cover only the hosted service at pumpkit.io. Pumpkit's code is open source, and anyone can run their own copy. The Operator does not run those self-hosted instances, and these Terms do not apply to them.
 
@@ -84,7 +88,7 @@ For a serious or repeated breach of clause 8, the Operator may end the contract 
 
 ## 10. Plans and Trial {#plans}
 
-Pumpkit's features need a Subscription to a Plan or current Free access from a Coupon. Pro is the name of the offer at pumpkit.io; a Plan is its recurring monthly or annual offer. Settings shows each Plan with its price and billing period before you subscribe. You pay through Stripe Checkout, and Stripe processes your payment.
+Pumpkit's features need a Subscription to a Plan or current Free access from a Coupon. Pro is the name of the offer at pumpkit.io; a Plan is its recurring monthly or annual offer. Settings shows each Plan with its price and billing period before you subscribe. You pay through Stripe Checkout. Checkout and the receipt identify the seller for your purchase, as clause 1 describes.
 
 Your first Subscription may start with a Trial, a free opening period whose length Settings shows before checkout. Each X account gets at most one introductory Trial on this Instance, including after account deletion and recreation. Receiving Free access removes eligibility to start a new Trial; an existing Trial finishes under its original dates and Allowance. You enter a payment method at checkout, and nothing is charged during the Trial. When the Trial ends, the first billing period starts and the price of the Plan is charged automatically, unless you cancelled before then.
 
@@ -104,7 +108,7 @@ A Subscription or current Free access gives you an Allowance for each Allowance 
 
 Paid Subscriptions have monthly Allowance periods, also on an annual Plan, anchored to the original paid period. Each calendar month of Free access is an Allowance period with the same full monthly Allowance. Short months use the last valid day without moving later monthly anchors. A Trial is one Allowance period on its own, with a smaller Allowance. What is left of an Allowance at the end of its Allowance period does not carry over. Settings shows the Allowance before you subscribe, and how much of it is left.
 
-If you need more than your Allowance, you can buy a Top-up: a one-off purchase of extra Generations and X posts, of which only a few may contain a link. Pumpkit shows what a Top-up holds and its price before checkout. You pay for it once, through Stripe Checkout, and it never renews. You can buy a Top-up while you have current Free access or a paid-up paid Subscription. Queued free months alone do not qualify you during an introductory Trial or while a payment is overdue. A Top-up creates no recurring payment and does not shorten free time.
+If you need more than your Allowance, you can buy a Top-up: a one-off purchase of extra Generations and X posts, of which only a few may contain a link. Pumpkit shows what a Top-up holds and its price before checkout. You pay for it once, through Stripe Checkout, and it never renews. For a Top-up identified as "Sold through Link", Sold through Link, LLC is the seller, as clause 1 describes. You can buy a Top-up while you have current Free access or a paid-up paid Subscription. Queued free months alone do not qualify you during an introductory Trial or while a payment is overdue. A Top-up creates no recurring payment and does not shorten free time.
 
 A Top-up:
 
@@ -112,7 +116,7 @@ A Top-up:
 - is spent only after the Allowance of the Allowance period in question is used up;
 - can be spent only while a Subscription or current Free access gives you access to Pumpkit. When access ends, whatever is left waits until access resumes within those 12 months.
 
-Once you have spent any part of a Top-up, it is not refundable (clause 14). If a payment for a Top-up is refunded or disputed through Stripe, whatever is left of that Top-up is removed.
+Once you have spent any part of a Top-up, it is not refundable except as clause 14 provides. If a payment for a Top-up is refunded or disputed through Stripe, whatever is left of that Top-up is removed.
 
 ## 12. Automatic renewal and cancellation {#renewal}
 
@@ -126,27 +130,33 @@ If you are a consumer, you may withdraw from the contract within 14 days of the 
 
 To withdraw, send the Operator a clear statement of your decision by email to support@pumpkit.io, or to the PEC address in clause 1. You may use the model form in the [Annex](#withdrawal-form), but you do not have to. It is enough to send your statement before the 14 days run out.
 
-If you withdraw, your Subscription ends and the Operator refunds every payment received under it within 14 days of receiving your statement, using the payment method you used, at no cost to you.
+If you withdraw, your Subscription ends and every payment received under it is refunded within 14 days of receiving your statement, using the payment method you used, at no cost to you. For a purchase sold by the Operator, the Operator makes the refund. For a purchase sold through Link, the Operator arranges the refund through Stripe. You may also contact [Link support](https://support.link.com/topics/sold-through-link) directly about that purchase; contacting the Operator remains sufficient to exercise the right described here.
 
-At checkout, you ask for the service to start immediately, and acknowledge that you lose the right of withdrawal once the paid period starts. If your Subscription starts with a Trial, nothing is charged during the Trial, so withdrawing during it costs you nothing. Once the paid period has started, you can no longer withdraw, but you can still cancel as clause 12 describes.
+For a purchase sold by the Operator, at checkout you ask for the service to start immediately, and acknowledge that you lose the right of withdrawal once the paid period starts. If your Subscription starts with a Trial, nothing is charged during the Trial, so withdrawing during it costs you nothing. Once the paid period has started, you can no longer withdraw, but you can still cancel as clause 12 describes.
 
-The same right applies to each Top-up you buy: you may withdraw from its purchase within 14 days of the day you buy it, in the way described above, and the Operator refunds its price. At its checkout, you ask for the Top-up to be available immediately, and acknowledge that you lose the right of withdrawal from its purchase once you spend any part of it.
+The same right applies to each Top-up you buy: you may withdraw from its purchase within 14 days of the day you buy it, in the way described above, and its price is refunded through the seller in the way described above. For a Top-up sold by the Operator, at checkout you ask for it to be available immediately, and acknowledge that you lose the right of withdrawal from its purchase once you spend any part of it.
+
+For purchases sold through Link, any cooling-off right provided by the Sold through Link terms also applies. EU and UK consumers may contact Link support within 14 days of receiving access, stating "cooling off period" as the reason. The immediate-start acknowledgements above do not exclude that right or any mandatory consumer right.
 
 ## 14. No refunds {#refunds}
 
-Payments are not refundable, including for a partly used billing period, for a period in which you did not use Pumpkit, or for a Top-up any part of which you have spent or which has expired, except where the law requires a refund, such as after a withdrawal under clause 13 or under your rights as a consumer in clause 17.
+The Operator offers no discretionary refund for a partly used billing period, a period in which you did not use Pumpkit, or a Top-up any part of which you have spent or which has expired. This does not exclude a refund required by law, including withdrawal under clause 13 and consumer rights under clause 17.
+
+For a purchase sold through Link, the [Sold through Link refund policy](https://support.link.com/questions/requesting-a-refund-for-a-sold-through-link-payment) also applies and takes precedence over a more restrictive provision of these Terms. You can request a refund from Link support or contact support@pumpkit.io for help. Stripe may refund an eligible purchase under that policy. Any statement in these Terms that a payment is not refundable is subject to this clause and your mandatory rights.
 
 ## 15. Prices and VAT {#vat}
 
 For consumers, prices include VAT at the rate that applies in your country.
 
-If you are a business established in an EU country other than Italy and give a valid VAT ID at checkout, you are invoiced without VAT under the reverse charge mechanism, and you account for the VAT yourself. Businesses established in Italy pay Italian VAT.
+For purchases sold through Link, Stripe calculates and collects applicable VAT and issues receipts and invoices through Sold through Link. You may provide your VAT ID at checkout; Stripe determines the applicable VAT treatment, including any reverse charge, from the seller, your location and your tax status. Italian VAT does not apply merely because the Operator is established in Italy. Checkout shows the final amount and any currency conversion before you pay.
+
+For purchases sold by the Operator, an EU business outside Italy that gives a valid VAT ID is invoiced without VAT under the reverse charge mechanism and accounts for VAT itself; businesses established in Italy pay Italian VAT.
 
 ## 16. Limitation of liability {#liability}
 
 This clause applies only if you are a business.
 
-The Operator's total liability to you for all claims arising out of or in connection with these Terms or Pumpkit is limited to the fees you paid the Operator in the 12 months before the event that gave rise to the claim.
+The Operator's total liability to you for all claims arising out of or in connection with these Terms or Pumpkit is limited to the fees you paid for Pumpkit, including payments sold through Link, in the 12 months before the event that gave rise to the claim.
 
 The Operator is not liable for indirect or consequential damages, including lost profits, lost revenue, lost business opportunities, damage to reputation, or the loss of data or content.
 

@@ -1,5 +1,7 @@
 I presenti Termini costituiscono il contratto tra te e il Gestore, INCEPTIONAL S.R.L., per l'uso di Pumpkit su pumpkit.io. Ti chiediamo di leggerli prima di sottoscrivere un Abbonamento o riscattare un Coupon. L'[Informativa sulla privacy](/it/privacy) spiega cosa fa il Gestore con i tuoi dati personali.
 
+Per gli Utenti esistenti, le modifiche sostanziali di questa versione si applicano solo dopo il preavviso richiesto dalla clausola 19. Fino ad allora, i Termini precedenti continuano a disciplinare il servizio e gli acquisti esistenti. Le disposizioni Sold through Link descrivono gli acquisti indicati in quel modo al pagamento; la pubblicazione di questi Termini non cambia il venditore di un acquisto esistente.
+
 ## 1. Il Gestore e i presenti Termini {#operator}
 
 Pumpkit è gestito da INCEPTIONAL S.R.L., società a responsabilità limitata a socio unico, di seguito il Gestore:
@@ -11,6 +13,8 @@ Pumpkit è gestito da INCEPTIONAL S.R.L., società a responsabilità limitata a 
 - capitale sociale: €1, interamente versato
 - posta elettronica certificata (PEC): inceptional@pec.it
 - contatto: support@pumpkit.io
+
+Per un acquisto indicato al pagamento come "Sold through Link", Sold through Link, LLC, società del gruppo Stripe, è il venditore e merchant of record di quell’acquisto. All’acquisto si applicano anche i [termini Sold through Link](https://link.com/terms). Il Gestore resta responsabile della fornitura di Pumpkit e dell’assistenza sul prodotto. Per un acquisto non indicato in quel modo, il venditore resta il Gestore. Un Abbonamento esistente conserva il venditore originario; questi Termini non lo trasferiscono a un altro venditore.
 
 I presenti Termini riguardano soltanto il servizio ospitato su pumpkit.io. Il codice di Pumpkit è open source e chiunque può eseguirne una propria copia. Il Gestore non gestisce tali istanze installate in proprio e i presenti Termini non si applicano a esse.
 
@@ -84,7 +88,7 @@ In caso di violazione grave o ripetuta della clausola 8, il Gestore può risolve
 
 ## 10. Piani e Trial {#plans}
 
-Le funzionalità di Pumpkit richiedono un Abbonamento a un Piano o un Accesso gratuito attuale ottenuto con un Coupon. Pro è il nome dell’offerta su pumpkit.io; un Piano è la sua offerta ricorrente mensile o annuale. La pagina Settings mostra ciascun Piano con il relativo prezzo e periodo di fatturazione prima della sottoscrizione. Paghi tramite Stripe Checkout, e Stripe elabora il tuo pagamento.
+Le funzionalità di Pumpkit richiedono un Abbonamento a un Piano o un Accesso gratuito attuale ottenuto con un Coupon. Pro è il nome dell’offerta su pumpkit.io; un Piano è la sua offerta ricorrente mensile o annuale. La pagina Settings mostra ciascun Piano con il relativo prezzo e periodo di fatturazione prima della sottoscrizione. Paghi tramite Stripe Checkout. La pagina di pagamento e la ricevuta identificano il venditore del tuo acquisto, come descritto nella clausola 1.
 
 Il tuo primo Abbonamento può iniziare con un Trial, un periodo iniziale gratuito la cui durata è indicata nella pagina Settings prima del pagamento. Ogni account X riceve al massimo un Trial introduttivo su questa Istanza, anche dopo l'eliminazione e la ricreazione dell'account. Ricevere Accesso gratuito elimina l’idoneità a iniziare un nuovo Trial; un Trial già in corso termina con le date e l’Allowance originarie. Al momento del pagamento inserisci un metodo di pagamento, e durante il Trial non viene addebitato nulla. Al termine del Trial inizia il primo periodo di fatturazione e il prezzo del Piano viene addebitato automaticamente, salvo che tu abbia disdetto prima.
 
@@ -104,7 +108,7 @@ Un Abbonamento o l’Accesso gratuito attuale ti dà un’Allowance per ciascun 
 
 Gli Abbonamenti a pagamento hanno periodi di Allowance mensili, anche per un Piano annuale, ancorati al periodo pagato originario. Ogni mese di calendario di Accesso gratuito è un periodo di Allowance con la stessa Allowance mensile completa. Nei mesi più corti si usa l’ultimo giorno valido senza spostare i successivi giorni di riferimento mensili. Un Trial costituisce da solo un periodo di Allowance, con un'Allowance più ridotta. Quanto resta di un'Allowance alla fine del suo periodo di Allowance non si riporta al periodo successivo. La pagina Settings mostra l'Allowance prima della sottoscrizione, e quanto ne resta.
 
-Se ti serve più della tua Allowance, puoi acquistare un Top-up: un acquisto una tantum di Generazioni e X post aggiuntivi, di cui solo pochi possono contenere un link. Pumpkit mostra cosa comprende un Top-up e il suo prezzo prima del pagamento. Lo paghi una sola volta, tramite Stripe Checkout, e non si rinnova mai. Puoi acquistare un Top-up durante l’Accesso gratuito attuale o con un Abbonamento a pagamento in regola. I soli mesi gratuiti futuri non ti rendono idoneo durante un Trial introduttivo o con un pagamento scaduto. Un Top-up non crea pagamenti ricorrenti e non accorcia il tempo gratuito.
+Se ti serve più della tua Allowance, puoi acquistare un Top-up: un acquisto una tantum di Generazioni e X post aggiuntivi, di cui solo pochi possono contenere un link. Pumpkit mostra cosa comprende un Top-up e il suo prezzo prima del pagamento. Lo paghi una sola volta, tramite Stripe Checkout, e non si rinnova mai. Per un Top-up indicato come "Sold through Link", il venditore è Sold through Link, LLC, come descritto nella clausola 1. Puoi acquistare un Top-up durante l’Accesso gratuito attuale o con un Abbonamento a pagamento in regola. I soli mesi gratuiti futuri non ti rendono idoneo durante un Trial introduttivo o con un pagamento scaduto. Un Top-up non crea pagamenti ricorrenti e non accorcia il tempo gratuito.
 
 Un Top-up:
 
@@ -112,7 +116,7 @@ Un Top-up:
 - viene usato solo dopo che l'Allowance del periodo di Allowance in questione è esaurita;
 - può essere usato solo finché un Abbonamento o l’Accesso gratuito attuale ti dà accesso a Pumpkit. Quando l’accesso cessa, quanto resta attende che riprenda entro quei 12 mesi.
 
-Una volta che ne hai usato una qualsiasi parte, un Top-up non è rimborsabile (clausola 14). Se un pagamento per un Top-up viene rimborsato o contestato tramite Stripe, quanto resta di quel Top-up viene rimosso.
+Una volta che ne hai usato una qualsiasi parte, un Top-up non è rimborsabile salvo quanto previsto dalla clausola 14. Se un pagamento per un Top-up viene rimborsato o contestato tramite Stripe, quanto resta di quel Top-up viene rimosso.
 
 ## 12. Rinnovo automatico e disdetta {#renewal}
 
@@ -126,27 +130,33 @@ Se sei un consumatore, puoi recedere dal contratto entro 14 giorni dal giorno de
 
 Per esercitare il diritto di recesso, invia al Gestore una dichiarazione esplicita della tua decisione via email a support@pumpkit.io, oppure all'indirizzo PEC indicato nella clausola 1. Puoi utilizzare il modulo tipo riportato nell'[Allegato](#withdrawal-form), ma non sei obbligato a farlo. È sufficiente inviare la dichiarazione prima della scadenza dei 14 giorni.
 
-Se recedi, il tuo Abbonamento cessa e il Gestore ti rimborsa tutti i pagamenti ricevuti in base a esso entro 14 giorni dal ricevimento della tua dichiarazione, utilizzando il mezzo di pagamento che hai usato, senza alcun costo a tuo carico.
+Se recedi, il tuo Abbonamento cessa e tutti i pagamenti ricevuti in base a esso vengono rimborsati entro 14 giorni dal ricevimento della tua dichiarazione, utilizzando il mezzo di pagamento che hai usato, senza alcun costo a tuo carico. Per un acquisto venduto dal Gestore, il rimborso è effettuato dal Gestore. Per un acquisto venduto tramite Link, il Gestore dispone il rimborso tramite Stripe. Puoi anche contattare direttamente l’[assistenza Link](https://support.link.com/topics/sold-through-link) per quell’acquisto; contattare il Gestore resta sufficiente per esercitare il diritto qui descritto.
 
-Al momento del pagamento chiedi che il servizio inizi immediatamente, e prendi atto che perdi il diritto di recesso una volta iniziato il periodo a pagamento. Se il tuo Abbonamento inizia con un Trial, durante il Trial non viene addebitato nulla, quindi recedere in quel periodo non ti costa nulla. Una volta iniziato il periodo a pagamento non puoi più recedere, ma puoi comunque disdire come descritto nella clausola 12.
+Per un acquisto venduto dal Gestore, al momento del pagamento chiedi che il servizio inizi immediatamente e prendi atto che perdi il diritto di recesso una volta iniziato il periodo a pagamento. Se il tuo Abbonamento inizia con un Trial, durante il Trial non viene addebitato nulla, quindi recedere in quel periodo non ti costa nulla. Una volta iniziato il periodo a pagamento non puoi più recedere, ma puoi comunque disdire come descritto nella clausola 12.
 
-Lo stesso diritto si applica a ogni Top-up che acquisti: puoi recedere dal suo acquisto entro 14 giorni dal giorno in cui lo acquisti, con le modalità descritte sopra, e il Gestore ti rimborsa il suo prezzo. Al momento del suo pagamento chiedi che il Top-up sia disponibile immediatamente, e prendi atto che perdi il diritto di recesso dal suo acquisto una volta che ne usi una qualsiasi parte.
+Lo stesso diritto si applica a ogni Top-up che acquisti: puoi recedere dal suo acquisto entro 14 giorni dal giorno in cui lo acquisti, con le modalità descritte sopra, e il suo prezzo viene rimborsato tramite il venditore con le modalità sopra descritte. Per un Top-up venduto dal Gestore, al momento del pagamento chiedi che sia disponibile immediatamente e prendi atto che perdi il diritto di recesso dal suo acquisto una volta che ne usi una qualsiasi parte.
+
+Per gli acquisti venduti tramite Link si applica anche l’eventuale diritto di ripensamento previsto dai termini Sold through Link. I consumatori dell’UE e del Regno Unito possono contattare l’assistenza Link entro 14 giorni da quando ricevono accesso, indicando "cooling off period" come motivo. Le dichiarazioni di prestazione immediata sopra riportate non escludono tale diritto né alcun diritto inderogabile del consumatore.
 
 ## 14. Esclusione dei rimborsi {#refunds}
 
-I pagamenti non sono rimborsabili, neppure per un periodo di fatturazione utilizzato in parte, per un periodo in cui non hai usato Pumpkit o per un Top-up di cui hai usato una qualsiasi parte o che è scaduto, salvo i casi in cui la legge preveda un rimborso, come dopo un recesso ai sensi della clausola 13 o in forza dei tuoi diritti di consumatore di cui alla clausola 17.
+Il Gestore non offre rimborsi discrezionali per un periodo di fatturazione utilizzato in parte, per un periodo in cui non hai usato Pumpkit o per un Top-up di cui hai usato una qualsiasi parte o che è scaduto. Questo non esclude i rimborsi richiesti dalla legge, compresi il recesso ai sensi della clausola 13 e i diritti di consumatore di cui alla clausola 17.
+
+Per un acquisto venduto tramite Link si applica anche la [politica di rimborso Sold through Link](https://support.link.com/questions/requesting-a-refund-for-a-sold-through-link-payment), che prevale sulle disposizioni più restrittive di questi Termini. Puoi chiedere un rimborso all’assistenza Link o scrivere a support@pumpkit.io per ricevere aiuto. Stripe può rimborsare un acquisto idoneo secondo tale politica. Ogni disposizione di questi Termini che esclude un rimborso resta soggetta a questa clausola e ai tuoi diritti inderogabili.
 
 ## 15. Prezzi e IVA {#vat}
 
 Per i consumatori, i prezzi includono l'IVA all'aliquota applicabile nel tuo paese.
 
-Se sei un'impresa stabilita in un paese dell'UE diverso dall'Italia e indichi una partita IVA valida al momento del pagamento, ricevi fattura senza IVA in regime di inversione contabile (reverse charge) e assolvi tu stesso l'IVA. Le imprese stabilite in Italia pagano l'IVA italiana.
+Per gli acquisti venduti tramite Link, Stripe calcola e riscuote l’IVA applicabile ed emette ricevute e fatture tramite Sold through Link. Puoi indicare la tua partita IVA al pagamento; Stripe determina il trattamento IVA applicabile, compresa l’eventuale inversione contabile (reverse charge), in base al venditore, alla tua localizzazione e alla tua posizione fiscale. L’IVA italiana non si applica per il solo fatto che il Gestore è stabilito in Italia. La pagina di pagamento mostra l’importo finale e l’eventuale conversione valutaria prima che tu paghi.
+
+Per gli acquisti venduti dal Gestore, un’impresa dell’UE fuori dall’Italia che indica una partita IVA valida riceve fattura senza IVA in regime di inversione contabile e assolve l’IVA autonomamente; le imprese stabilite in Italia pagano l’IVA italiana.
 
 ## 16. Limitazione di responsabilità {#liability}
 
 La presente clausola si applica solo se sei un'impresa.
 
-La responsabilità complessiva del Gestore nei tuoi confronti per tutte le pretese derivanti dai presenti Termini o da Pumpkit, o comunque connesse a essi, è limitata ai corrispettivi che hai pagato al Gestore nei 12 mesi precedenti il fatto che ha dato origine alla pretesa.
+La responsabilità complessiva del Gestore nei tuoi confronti per tutte le pretese derivanti dai presenti Termini o da Pumpkit, o comunque connesse a essi, è limitata ai corrispettivi che hai pagato per Pumpkit, compresi i pagamenti venduti tramite Link, nei 12 mesi precedenti il fatto che ha dato origine alla pretesa.
 
 Il Gestore non risponde dei danni indiretti o consequenziali, compresi il mancato guadagno, la perdita di ricavi, la perdita di opportunità commerciali, il danno alla reputazione o la perdita di dati o contenuti.
 
