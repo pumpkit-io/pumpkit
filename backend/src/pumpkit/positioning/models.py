@@ -1,7 +1,8 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Optional, get_args
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import Enum as PgEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from pumpkit.core.db.base import Base
@@ -26,6 +27,30 @@ class Positioning(Base):
     saved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     user: Mapped["User"] = relationship()
+
+
+DraftState = Literal["running", "ready", "failed"]
+
+
+class PositioningDraftRecord(Base):
+    """
+    The draft of a User's Positioning, kept unsaved until they save a Positioning, which removes
+    it (ADR 0030). A User has at most one.
+    """
+
+    __tablename__ = "positioning_drafts"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    state: Mapped[DraftState] = mapped_column(
+        PgEnum(*get_args(DraftState), name="positioning_draft_state_enum")
+    )
+    # Set once the draft is ready.
+    text: Mapped[Optional[str]] = mapped_column(Text)
+    # Why there is no draft, in words for the User, once it failed.
+    reason: Mapped[Optional[str]] = mapped_column(Text)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
 class PositioningDraftRequest(Base):

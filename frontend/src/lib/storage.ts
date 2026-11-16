@@ -9,7 +9,6 @@ export type StorageKey =
   | 'session'
   | 'analytics-consent'
   | 'recent-drafts'
-  | 'positioning-draft'
   | 'return-to'
   | 'x-connection-return';
 

@@ -76,10 +76,15 @@ test('a User deletes their account with a running subscription, which ends, and 
   page,
 }) => {
   runSeedScript('leaver.py');
-  // The stack's model is real and costs money, so the draft is answered here.
-  await page.route('**/api/v1/positioning/draft', (route) =>
-    route.fulfill({ json: { text: 'I post about leaving.', reason: null, can_draft: true } }),
+  // The stack's model is real and costs money, so the draft the server keeps is answered here.
+  await page.route('**/api/v1/positioning/draft/start', (route) =>
+    route.fulfill({ status: 202, body: '' }),
   );
+  await page.route('**/api/v1/positioning', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const draft = { state: 'ready', text: 'I post about leaving.', reason: null };
+    return route.fulfill({ json: { text: null, saved_at: null, draft } });
+  });
   await page.goto('/login');
   const emulator = await signIn(page);
   await expect(page).toHaveURL(/\/subscribe$/);
@@ -92,6 +97,7 @@ test('a User deletes their account with a running subscription, which ends, and 
   );
   await step.getByRole('button', { name: 'Continue' }).click();
   await expect(page).toHaveURL(/\/new$/);
+  await page.unroute('**/api/v1/positioning');
 
   await page.goto('/settings');
   const section = page.getByRole('region', { name: 'Delete account' });

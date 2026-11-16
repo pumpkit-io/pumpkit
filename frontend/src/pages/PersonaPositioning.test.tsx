@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
@@ -26,7 +26,7 @@ vi.mock('@/services/billingService', () => ({
 }));
 vi.mock('@/services/positioningService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/positioningService')>()),
-  positioningService: { get: vi.fn(), save: vi.fn(), draft: vi.fn() },
+  positioningService: { get: vi.fn(), save: vi.fn(), startDraft: vi.fn() },
 }));
 vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/inspirationAuthorService')>()),
@@ -72,7 +72,7 @@ import {
 const SAVED =
   "I'm a solo founder. I post about bootstrapping for people starting their first SaaS.";
 /** What a User who saved no Positioning and has drafts left reads. */
-const NONE = { text: null, canDraft: true };
+const NONE = { text: null, draft: null };
 const ADVICE = 'Pumpkit plans every post around this. Two or three sentences are enough.';
 
 /** The 422 FastAPI answers when `PositioningSaveRequest` refuses the text: `detail` is a list. */
@@ -108,14 +108,14 @@ describe('Persona: the Positioning panel', () => {
   beforeEach(() => {
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
     vi.mocked(positioningService.get).mockReset().mockResolvedValue(NONE);
-    vi.mocked(positioningService.draft).mockReset();
+    vi.mocked(positioningService.startDraft).mockReset().mockResolvedValue(undefined);
     vi.mocked(positioningService.save).mockReset();
     vi.mocked(inspirationAuthorService.list).mockClear();
     vi.mocked(track).mockClear();
   });
 
   it("shows the User's saved Positioning in the textarea, and no Inspiration authors", async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, draft: null });
     renderSignedIn('/persona');
 
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
@@ -168,7 +168,7 @@ describe('Persona: the Positioning panel', () => {
   it("says the Positioning couldn't be loaded, and Try again loads it", async () => {
     vi.mocked(positioningService.get)
       .mockRejectedValueOnce(apiError(500, 'boom'))
-      .mockResolvedValue({ text: SAVED, canDraft: true });
+      .mockResolvedValue({ text: SAVED, draft: null });
     renderSignedIn('/persona');
 
     const region = await panel();
@@ -203,7 +203,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it('keeps Save disabled while the text is blank or the same as what is saved', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, draft: null });
     renderSignedIn('/persona');
 
     const textarea = await field();
@@ -299,7 +299,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it('marks the textarea invalid when the server refuses the text, until the next edit', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, draft: null });
     vi.mocked(positioningService.save).mockRejectedValue(textRefused());
     renderSignedIn('/persona');
 
@@ -353,7 +353,7 @@ describe('Persona: the Positioning panel', () => {
 
   it('counts an emoji as one character, as the backend does, and leaves room to edit', async () => {
     const emoji = '🎃'.repeat(4000);
-    vi.mocked(positioningService.get).mockResolvedValue({ text: emoji, canDraft: true });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: emoji, draft: null });
     renderSignedIn('/persona');
 
     const textarea = await field();
@@ -381,7 +381,7 @@ describe('Persona: the Positioning panel', () => {
   });
 
   it('offers no way to draft again from the X profile, and reads nothing from X', async () => {
-    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, canDraft: true });
+    vi.mocked(positioningService.get).mockResolvedValue({ text: SAVED, draft: null });
     renderSignedIn('/persona');
 
     await waitFor(async () => expect(await field()).toHaveValue(SAVED));
@@ -390,7 +390,79 @@ describe('Persona: the Positioning panel', () => {
     expect(region.getAllByRole('button').map((button) => button.textContent)).toEqual(['Save']);
     expect(region.queryByText(/draft again/i)).not.toBeInTheDocument();
     expect(region.queryByText(/Drafted from your X profile/)).not.toBeInTheDocument();
-    expect(positioningService.draft).not.toHaveBeenCalled();
+    expect(positioningService.startDraft).not.toHaveBeenCalled();
+  });
+
+  it('starts no draft for a User with no Positioning, and opens empty', async () => {
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    expect(textarea).toHaveValue('');
+    expect(positioningService.startDraft).not.toHaveBeenCalled();
+  });
+
+  it('fills the textarea with a draft the server kept, unsaved', async () => {
+    vi.mocked(positioningService.get).mockResolvedValue({
+      text: null,
+      draft: { state: 'ready', text: SAVED, reason: null },
+    });
+    renderSignedIn('/persona');
+
+    await waitFor(async () => expect(await field()).toHaveValue(SAVED));
+    expect((await panel()).getByRole('button', { name: 'Save' })).toBeEnabled();
+    expect(positioningService.save).not.toHaveBeenCalled();
+  });
+
+  it('locks the textarea while a kept draft runs, reads it every 2 seconds and fills it once ready', async () => {
+    vi.mocked(positioningService.get).mockResolvedValue({
+      text: null,
+      draft: { state: 'running', text: null, reason: null },
+    });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderSignedIn('/persona');
+
+      const textarea = await field();
+      await waitFor(() =>
+        expect(textarea).toHaveAccessibleDescription(`Reading your X profile… ${ADVICE}`),
+      );
+      expect(textarea).toBeDisabled();
+      expect(textarea).toHaveValue('');
+      const reads = vi.mocked(positioningService.get).mock.calls.length;
+
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+      expect(positioningService.get).toHaveBeenCalledTimes(reads + 1);
+      expect(textarea).toBeDisabled();
+
+      vi.mocked(positioningService.get).mockResolvedValue({
+        text: null,
+        draft: { state: 'ready', text: SAVED, reason: null },
+      });
+      await act(() => vi.advanceTimersByTimeAsync(2000));
+
+      await waitFor(() => expect(textarea).toHaveValue(SAVED));
+      expect(textarea).toBeEnabled();
+      expect(positioningService.startDraft).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says in muted text why a draft failed, under an empty textarea, without an alert', async () => {
+    const reason = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
+    vi.mocked(positioningService.get).mockResolvedValue({
+      text: null,
+      draft: { state: 'failed', text: null, reason },
+    });
+    renderSignedIn('/persona');
+
+    const textarea = await field();
+    await waitFor(() => expect(textarea).toBeEnabled());
+    expect(textarea).toHaveValue('');
+    expect(textarea).toHaveAccessibleDescription(`${reason} ${ADVICE}`);
+    expect((await panel()).queryByRole('alert')).not.toBeInTheDocument();
+    expect(positioningService.startDraft).not.toHaveBeenCalled();
   });
 
   it('puts the count first, then "Saved" and Save, in the row under the textarea', async () => {

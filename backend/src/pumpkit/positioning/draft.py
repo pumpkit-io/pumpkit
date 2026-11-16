@@ -6,6 +6,7 @@ from typing import Optional, Sequence
 
 from pydantic import BaseModel, Field
 
+from pumpkit.authors.x_reader import TWITTERAPI_IO_TIMEOUT_SECONDS
 from pumpkit.core.text import drop_unstorable
 from pumpkit.positioning.draft_prompt import DRAFT_PROMPT
 from pumpkit.positioning.schemas import POSITIONING_MAX_CHARS
@@ -23,6 +24,12 @@ DRAFT_POST_MAX_CHARS = 1000
 DRAFT_MAX_TOKENS = 4000
 # The panel stays locked while the draft is written, so the call gets this long once sent.
 DRAFT_CALL_SECONDS = 90.0
+# Post writing can hold every model slot, and a draft that waits past this fails rather than hang.
+DRAFT_SLOT_WAIT_SECONDS = 60.0
+# The X read, the wait for a slot, the call and a margin: a draft running longer was lost.
+DRAFT_STALE_AFTER = timedelta(
+    seconds=TWITTERAPI_IO_TIMEOUT_SECONDS + DRAFT_SLOT_WAIT_SECONDS + DRAFT_CALL_SECONDS + 60
+)
 
 
 @dataclass(frozen=True)

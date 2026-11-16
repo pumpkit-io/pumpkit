@@ -5,7 +5,7 @@ from dataclasses import replace
 from test_complete import begin, complete
 
 from pumpkit.x_connection.x_publisher import X_SIGN_IN_SCOPES
-from tests.positioning.positioning import DRAFT, DRAFTED
+from tests.positioning.positioning import DRAFTED, START_DRAFT
 
 
 async def _draft_reads(browser, signed_in, fake_llm) -> str:
@@ -13,10 +13,10 @@ async def _draft_reads(browser, signed_in, fake_llm) -> str:
     assert signed_in.status_code == 200, signed_in.text
     fake_llm.calls.clear()
     fake_llm.replies = [{"positioning": DRAFTED}]
-    drafted = await browser.post(
-        DRAFT, headers={"Authorization": f"Bearer {signed_in.json()['access_token']}"}
+    started = await browser.post(
+        START_DRAFT, headers={"Authorization": f"Bearer {signed_in.json()['access_token']}"}
     )
-    assert drafted.status_code == 200, drafted.text
+    assert started.status_code == 202, started.text
     return fake_llm.calls[0].messages[1]["content"]
 
 

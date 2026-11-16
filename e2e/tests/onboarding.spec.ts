@@ -36,12 +36,17 @@ test('Onboarding starts directly at Persona without a separate X task', async ({
 test('the Persona step drafts the positioning, and Continue saves the edit and opens New post for good', async ({
   page,
 }) => {
-  // The stack's model is real and costs money, so the draft is answered here.
-  let answer: () => void = () => {};
-  const answered = new Promise<void>((resolve) => (answer = resolve));
-  await page.route('**/api/v1/positioning/draft', async (route) => {
-    await answered;
-    await route.fulfill({ json: { text: DRAFTED, reason: null, can_draft: true } });
+  // The stack's model is real and costs money, so the draft the server keeps is answered here.
+  let ready = false;
+  await page.route('**/api/v1/positioning/draft/start', (route) =>
+    route.fulfill({ status: 202, body: '' }),
+  );
+  await page.route('**/api/v1/positioning', (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const draft = ready
+      ? { state: 'ready', text: DRAFTED, reason: null }
+      : { state: 'running', text: null, reason: null };
+    return route.fulfill({ json: { text: null, saved_at: null, draft } });
   });
   await page.goto('/new');
 
@@ -49,17 +54,18 @@ test('the Persona step drafts the positioning, and Continue saves the edit and o
   const step = page.getByRole('region', { name: 'Who you are on X' });
   const field = step.getByRole('textbox', { name: 'Who you are on X' });
   const continueButton = step.getByRole('button', { name: 'Continue' });
-  await expect(step.getByText(/^Reading your/)).toBeVisible();
+  await expect(field).toHaveAccessibleDescription(/^Reading your X profile…/);
   await expect(field).toBeDisabled();
   await expect(continueButton).toBeDisabled();
 
-  answer();
+  ready = true;
   await expect(field).toHaveValue(DRAFTED);
   await field.press('End');
   await field.pressSequentially(ADDED);
   await continueButton.click();
 
   await expect(page).toHaveURL(/\/new$/);
+  await page.unroute('**/api/v1/positioning');
   await expect(page.getByRole('heading', { level: 1, name: 'New post' })).toBeVisible();
   await page.goto('/persona');
   await expect(page.getByRole('textbox', { name: 'Who you are on X' })).toHaveValue(

@@ -3,10 +3,15 @@ import { isSubscriptionNeeded } from '@/features/billing/subscriptionNeeded';
 import { useOnboarding } from '@/features/onboarding/useOnboarding';
 import { track } from '@/lib/analytics';
 import { errorMessage, errorStatus } from '@/services/apiErrors';
-import { positioningService } from '@/services/positioningService';
-import { forgetDraft, keepDraft, keptDraft } from './keptDraft';
+import { positioningService, type PositioningDraft } from '@/services/positioningService';
 
 type Loading = 'loading' | 'failed' | 'loaded';
+
+/** How often the step reads a running draft. */
+const DRAFT_POLL_MS = 2000;
+
+/** Reads of a running draft that may fail in a row before the step stops waiting for it. */
+const DRAFT_READ_FAILURES_TOLERATED = 5;
 
 /** The backend's sentence for a draft it couldn't write, for a request that never got one. */
 const NOT_DRAFTED =
@@ -19,8 +24,9 @@ function isBlank(text: string): boolean {
 }
 
 /**
- * The User's Positioning as they are editing it, loaded on mount, with save. With `draftOnOpen`,
- * a User with no Positioning gets the kept draft, else a fresh one, as it loads.
+ * The User's Positioning as they are editing it, loaded on mount, with save. A User with no
+ * Positioning gets the draft the server keeps, waiting while it runs (ADR 0030). With
+ * `draftOnOpen`, a User with no draft, or a failed one, starts one.
  */
 export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean } = {}) {
   const { refresh: refreshOnboarding } = useOnboarding();
@@ -32,64 +38,102 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
   /** The text as of the last edit, which a save in flight can't see in its closure. */
   const latestText = useRef('');
   const [saving, setSaving] = useState(false);
-  /** Why the last save or draft failed, until the next edit or save. */
+  /** Why the last save failed, until the next edit or save. */
   const [error, setError] = useState<string | null>(null);
   /** True when that save failed because the server refused the text itself. */
   const [textRefused, setTextRefused] = useState(false);
   /** True from a save until the next edit. */
   const [justSaved, setJustSaved] = useState(false);
+  /** True while the textarea waits for a draft. */
   const [drafting, setDrafting] = useState(false);
-
-  const draft = useCallback(async () => {
-    const before = latestText.current;
-    setDrafting(true);
-    setError(null);
-    setTextRefused(false);
-    try {
-      const drafted = await positioningService.draft();
-      if (drafted.text === null) {
-        setError(drafted.reason ?? NOT_DRAFTED);
-      } else if (latestText.current === before) {
-        setText(drafted.text);
-        latestText.current = drafted.text;
-        setJustSaved(false);
-        keepDraft(drafted.text);
-      }
-    } catch (e) {
-      if (isSubscriptionNeeded(e)) void refreshOnboarding();
-      // The daily limit's "draft again tomorrow" offers a redraft the step doesn't have.
-      else if (errorStatus(e) === 429) setError(NOT_DRAFTED);
-      else setError(errorMessage(e, NOT_DRAFTED));
-    } finally {
-      setDrafting(false);
-    }
-  }, [refreshOnboarding]);
+  /** Why there is no draft, once it failed. */
+  const [draftReason, setDraftReason] = useState<string | null>(null);
+  /** True once a draft filled the textarea. */
+  const [drafted, setDrafted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+
+    const fill = (next: string) => {
+      setText(next);
+      latestText.current = next;
+    };
+
+    /** Reads the positioning, letting a few reads in a row fail: the draft runs on regardless. */
+    const read = async () => {
+      for (let failures = 1; ; failures++) {
+        try {
+          return await positioningService.get();
+        } catch (e) {
+          if (cancelled || isSubscriptionNeeded(e) || failures >= DRAFT_READ_FAILURES_TOLERATED) {
+            throw e;
+          }
+        }
+        await new Promise((resolve) => setTimeout(resolve, DRAFT_POLL_MS));
+        if (cancelled) throw new Error('cancelled');
+      }
+    };
+
+    /** Follows the draft until it is ready or failed, starting one at most once. */
+    const follow = async (first: PositioningDraft | null, mayStart: boolean) => {
+      let draft = first;
+      let started = false;
+      try {
+        for (;;) {
+          if (draft?.state === 'ready' && draft.text !== null) {
+            fill(draft.text);
+            setDrafted(true);
+            break;
+          }
+          if (draft?.state === 'running') {
+            await new Promise((resolve) => setTimeout(resolve, DRAFT_POLL_MS));
+          } else if (mayStart && !started) {
+            started = true;
+            await positioningService.startDraft();
+          } else {
+            setDraftReason(draft?.reason ?? null);
+            break;
+          }
+          if (cancelled) return;
+          const positioning = await read();
+          if (cancelled) return;
+          // Saved meanwhile, in another tab or on another device.
+          if (positioning.text !== null) {
+            setSaved(positioning.text);
+            fill(positioning.text);
+            break;
+          }
+          draft = positioning.draft;
+        }
+      } catch (e) {
+        if (cancelled) return;
+        if (isSubscriptionNeeded(e)) void refreshOnboarding();
+        setDraftReason(NOT_DRAFTED);
+      }
+      if (!cancelled) setDrafting(false);
+    };
+
     positioningService
       .get()
       .then((positioning) => {
         if (cancelled) return;
         setSaved(positioning.text ?? '');
-        setText(positioning.text ?? '');
-        latestText.current = positioning.text ?? '';
+        fill(positioning.text ?? '');
+        setDraftReason(null);
+        setDrafted(false);
         setLoading('loaded');
-        if (!draftOnOpen || positioning.text !== null) return;
-        const kept = keptDraft();
-        if (kept !== null) {
-          setText(kept);
-          latestText.current = kept;
-        } else if (positioning.canDraft) {
-          // Same tick as the load, so the textarea never renders editable before the draft starts.
-          void draft();
-        }
+        if (positioning.text !== null) return;
+        const draft = positioning.draft;
+        const mayStart = draftOnOpen && (draft === null || draft.state === 'failed');
+        // Same tick as the load, so the textarea never renders editable before the draft starts.
+        setDrafting(draft?.state === 'running' || mayStart);
+        void follow(draft, mayStart);
       })
       .catch(() => !cancelled && setLoading('failed'));
     return () => {
       cancelled = true;
     };
-  }, [attempt, draftOnOpen, draft]);
+  }, [attempt, draftOnOpen, refreshOnboarding]);
 
   const reload = useCallback(() => {
     setLoading('loading');
@@ -100,6 +144,7 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
     setText(next);
     latestText.current = next;
     setJustSaved(false);
+    setDrafted(false);
     setError(null);
     setTextRefused(false);
   }, []);
@@ -119,7 +164,6 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
         setJustSaved(true);
       }
       track('positioning_saved');
-      if (draftOnOpen) forgetDraft();
       return latestText.current === positioning.text;
     } catch (e) {
       // A refusal for want of a Subscription sends the User to the Paywall, not to an error.
@@ -141,7 +185,7 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
     } finally {
       setSaving(false);
     }
-  }, [text, draftOnOpen, refreshOnboarding]);
+  }, [text, refreshOnboarding]);
 
   /** Shows `message` where a failed save's reason goes. */
   const fail = useCallback((message: string) => setError(message), []);
@@ -168,5 +212,7 @@ export function usePositioning({ draftOnOpen = false }: { draftOnOpen?: boolean 
     textRefused,
     justSaved,
     drafting,
+    draftReason,
+    drafted,
   };
 }

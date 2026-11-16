@@ -36,7 +36,7 @@ vi.mock('@/services/inspirationAuthorService', async (importOriginal) => ({
 vi.mock('@/services/positioningService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/positioningService')>()),
   positioningService: {
-    get: vi.fn().mockResolvedValue({ text: null, canDraft: true }),
+    get: vi.fn().mockResolvedValue({ text: null, draft: null }),
     save: vi.fn(),
     draft: vi.fn(),
   },

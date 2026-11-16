@@ -4,8 +4,9 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from pumpkit.core.text import drop_unstorable
+from pumpkit.positioning.models import DraftState
 
-# Per caller, for the route and the MCP tool that save a Positioning.
+# Per caller, for saving a Positioning (route and MCP tool) and starting its draft.
 WRITE_RATE = "20/minute"
 
 # A Positioning is a few sentences; this leaves room for a User who writes several paragraphs.
@@ -43,16 +44,16 @@ class PositioningResponse(BaseModel):
     saved_at: Optional[datetime]
 
 
+class PositioningDraftResponse(BaseModel):
+    """The User's Positioning draft: `text` once it is ready, `reason` in words once it failed."""
+
+    state: DraftState
+    text: Optional[str]
+    reason: Optional[str]
+
+
 class PositioningPageResponse(PositioningResponse):
     """The User's Positioning as the web app's panel reads it."""
 
-    # False once the User has used up today's drafts.
-    can_draft: bool
-
-
-class PositioningDraftResponse(BaseModel):
-    """A draft of the User's Positioning, or `reason`: why none could be made, in words for them."""
-
-    text: Optional[str]
-    reason: Optional[str]
-    can_draft: bool
+    # Null once the User has a Positioning, and until a draft starts.
+    draft: Optional[PositioningDraftResponse]

@@ -1,5 +1,5 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/services/userService', () => ({
   userService: {
@@ -21,7 +21,7 @@ vi.mock('@/services/billingService', () => ({
 }));
 vi.mock('@/services/positioningService', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/services/positioningService')>()),
-  positioningService: { get: vi.fn(), save: vi.fn(), draft: vi.fn() },
+  positioningService: { get: vi.fn(), save: vi.fn(), startDraft: vi.fn() },
 }));
 vi.mock('@/services/xConnectionService', () => ({
   xConnectionService: { get: vi.fn().mockResolvedValue(null), startAuthorization: vi.fn() },
@@ -51,13 +51,23 @@ import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
 import { billingService } from '@/services/billingService';
 import { onboardingService } from '@/services/onboardingService';
-import { positioningService } from '@/services/positioningService';
+import { positioningService, type PositioningDraft } from '@/services/positioningService';
 import { xConnectionService } from '@/services/xConnectionService';
 import { SUBSCRIBED, apiError, currentPath, renderSignedIn } from './testing/signedInApp';
 
 const DRAFTED = "I'm a solo founder building a pricing tool. I post about pricing for founders.";
 const EDITED = `${DRAFTED} I post to earn sign-ups.`;
 const NOT_READ = "We couldn't read your X profile. Write it yourself, a few sentences is enough.";
+const NOT_DRAFTED =
+  "We couldn't draft your positioning. Write it yourself, a few sentences is enough.";
+const READY: PositioningDraft = { state: 'ready', text: DRAFTED, reason: null };
+const RUNNING: PositioningDraft = { state: 'running', text: null, reason: null };
+const FAILED: PositioningDraft = { state: 'failed', text: null, reason: NOT_READ };
+
+/** The draft the mocked server keeps for the User, which `get` reads. */
+let kept: PositioningDraft | null;
+/** What the mocked server's draft becomes when a start runs one. */
+let started: PositioningDraft | null;
 const ADVICE = 'Pumpkit plans every post around this. Two or three sentences are enough.';
 
 function renderOnboarding(path = '/onboarding') {
@@ -87,10 +97,16 @@ describe('Onboarding', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.mocked(billingService.fetchBillingMe).mockReset().mockResolvedValue(SUBSCRIBED);
-    vi.mocked(positioningService.get).mockReset().mockResolvedValue({ text: null, canDraft: true });
-    vi.mocked(positioningService.draft)
+    kept = null;
+    started = READY;
+    vi.mocked(positioningService.get)
       .mockReset()
-      .mockResolvedValue({ text: DRAFTED, reason: null, canDraft: true });
+      .mockImplementation(async () => ({ text: null, draft: kept }));
+    vi.mocked(positioningService.startDraft)
+      .mockReset()
+      .mockImplementation(async () => {
+        kept = started;
+      });
     vi.mocked(positioningService.save)
       .mockReset()
       .mockImplementation(async (text) => ({ text }));
@@ -122,7 +138,7 @@ describe('Onboarding', () => {
       renderSignedIn('/onboarding', { nextStep: 'paywall' });
 
       await waitFor(() => expect(currentPath()).toBe('/subscribe'));
-      expect(positioningService.draft).not.toHaveBeenCalled();
+      expect(positioningService.startDraft).not.toHaveBeenCalled();
     });
   });
 
@@ -147,23 +163,7 @@ describe('Onboarding', () => {
       ]);
     });
 
-    it('shows "Reading your X profile…" with the textarea and Continue disabled while the draft is on its way', async () => {
-      vi.mocked(positioningService.draft).mockReturnValue(new Promise(() => {}));
-      renderOnboarding();
-
-      const textarea = await field();
-      await waitFor(() =>
-        expect(textarea).toHaveAccessibleDescription(`Reading your X profile… ${ADVICE}`),
-      );
-      expect((await step()).getByText(/^Reading your/).querySelector('svg')).not.toBeNull();
-      expect(textarea).not.toHaveAttribute('placeholder', 'Reading your X profile…');
-      expect(textarea).toBeDisabled();
-      expect(textarea).toHaveValue('');
-      expect(continueButton()).toBeDisabled();
-      expect(positioningService.draft).toHaveBeenCalledTimes(1);
-    });
-
-    it('fills the textarea with the draft, which the User can edit, and saves nothing yet', async () => {
+    it('starts a draft once on opening, and fills the textarea with it, saving nothing yet', async () => {
       await drafted();
 
       const textarea = await field();
@@ -171,8 +171,195 @@ describe('Onboarding', () => {
       fireEvent.change(textarea, { target: { value: EDITED } });
       expect(textarea).toHaveValue(EDITED);
       expect(continueButton()).toBeEnabled();
-      expect(positioningService.draft).toHaveBeenCalledTimes(1);
+      expect(positioningService.startDraft).toHaveBeenCalledTimes(1);
       expect(positioningService.save).not.toHaveBeenCalled();
+    });
+
+    it('fills the textarea with a draft already ready, starting none', async () => {
+      kept = READY;
+
+      await drafted();
+
+      expect(positioningService.startDraft).not.toHaveBeenCalled();
+    });
+
+    describe('while the draft runs', () => {
+      beforeEach(() => vi.useFakeTimers({ shouldAdvanceTime: true }));
+      afterEach(() => vi.useRealTimers());
+
+      it('shows "Reading your X profile…" with the textarea and Continue disabled', async () => {
+        started = RUNNING;
+        renderOnboarding();
+
+        const textarea = await field();
+        await waitFor(() =>
+          expect(textarea).toHaveAccessibleDescription(`Reading your X profile… ${ADVICE}`),
+        );
+        // The words over the textarea, which describe it first, show X's logo.
+        const [overlayId] = (textarea.getAttribute('aria-describedby') ?? '').split(' ');
+        expect(document.getElementById(overlayId)?.querySelector('svg')).not.toBeNull();
+        expect(textarea).not.toHaveAttribute('placeholder', 'Reading your X profile…');
+        expect(textarea).toBeDisabled();
+        expect(textarea).toHaveValue('');
+        expect(continueButton()).toBeDisabled();
+        expect(positioningService.startDraft).toHaveBeenCalledTimes(1);
+      });
+
+      it('reads the draft every 2 seconds and fills the textarea once it is ready', async () => {
+        kept = RUNNING;
+        renderOnboarding();
+        const textarea = await field();
+        await waitFor(() => expect(positioningService.get).toHaveBeenCalledTimes(1));
+
+        await act(() => vi.advanceTimersByTimeAsync(2000));
+        expect(positioningService.get).toHaveBeenCalledTimes(2);
+        expect(textarea).toBeDisabled();
+
+        kept = READY;
+        await act(() => vi.advanceTimersByTimeAsync(2000));
+
+        await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
+        expect(textarea).toBeEnabled();
+        expect(positioningService.startDraft).not.toHaveBeenCalled();
+      });
+
+      it('tells a screen reader when the draft starts and when it fills the textarea', async () => {
+        kept = RUNNING;
+        renderOnboarding();
+        await field();
+
+        const status = (await step()).getByRole('status');
+        await waitFor(() => expect(status).toHaveTextContent('Reading your X profile…'));
+
+        kept = READY;
+        await act(() => vi.advanceTimersByTimeAsync(2000));
+
+        await waitFor(() => expect(status).toHaveTextContent('Your draft is ready to edit.'));
+      });
+    });
+
+    it.each([
+      ['no draft could be made', null, FAILED, NOT_READ],
+      [
+        'the draft from sign-in failed and so does the one the step starts',
+        FAILED,
+        FAILED,
+        NOT_READ,
+      ],
+      // An Instance that can't draft, or a User with no draft request left today, starts none.
+      ['the start runs no draft', FAILED, undefined, NOT_READ],
+    ])(
+      'opens an empty textarea with the reason in muted text when %s, and Continue waits for text',
+      async (_case, before, after, reason) => {
+        kept = before;
+        started = after === undefined ? before : after;
+        renderOnboarding();
+
+        const textarea = await field();
+        await waitFor(() => expect(textarea).toBeEnabled());
+        expect(textarea).toHaveValue('');
+        expect(textarea).toHaveAccessibleDescription(`${reason} ${ADVICE}`);
+        expect((await step()).getByRole('status')).toHaveTextContent(reason);
+        expect((await step()).queryByRole('alert')).not.toBeInTheDocument();
+        expect(positioningService.startDraft).toHaveBeenCalledTimes(1);
+        expect(continueButton()).toBeDisabled();
+
+        fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
+        expect(continueButton()).toBeEnabled();
+      },
+    );
+
+    it('starts a draft again when the one from sign-in failed, and fills it', async () => {
+      kept = FAILED;
+
+      await drafted();
+
+      expect(positioningService.startDraft).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ['the server fails', apiError(500, 'Something went wrong.')],
+      ['the network is down', Object.assign(new Error('Network Error'), { isAxiosError: true })],
+    ])(
+      'opens an empty textarea with the reason when starting the draft fails: %s',
+      async (_case, failure) => {
+        vi.mocked(positioningService.startDraft).mockRejectedValue(failure);
+        renderOnboarding();
+
+        const textarea = await field();
+        await waitFor(() => expect(textarea).toBeEnabled());
+        expect(textarea).toHaveValue('');
+        expect((await step()).getByRole('status')).toHaveTextContent(NOT_DRAFTED);
+        expect((await step()).queryByRole('alert')).not.toBeInTheDocument();
+      },
+    );
+
+    it('keeps waiting through a failed read of the running draft, and fills it once ready', async () => {
+      vi.mocked(positioningService.get)
+        .mockResolvedValueOnce({ text: null, draft: RUNNING })
+        .mockRejectedValueOnce(apiError(502, 'Bad gateway.'))
+        .mockResolvedValue({ text: null, draft: READY });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        renderOnboarding();
+        const textarea = await field();
+
+        await act(() => vi.advanceTimersByTimeAsync(2000));
+        expect(textarea).toBeDisabled();
+        await act(() => vi.advanceTimersByTimeAsync(2000));
+
+        await waitFor(() => expect(textarea).toHaveValue(DRAFTED));
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('opens an empty textarea with the reason when reading the running draft keeps failing', async () => {
+      vi.mocked(positioningService.get)
+        .mockResolvedValueOnce({ text: null, draft: RUNNING })
+        .mockRejectedValue(apiError(502, 'Bad gateway.'));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        renderOnboarding();
+        const textarea = await field();
+
+        for (let read = 1; read < 5; read++) {
+          await act(() => vi.advanceTimersByTimeAsync(2000));
+        }
+        expect(textarea).toBeDisabled();
+        await act(() => vi.advanceTimersByTimeAsync(2000));
+
+        await waitFor(() => expect(textarea).toBeEnabled());
+        expect((await step()).getByRole('status')).toHaveTextContent(NOT_DRAFTED);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('sends the User to the Paywall when reading the draft is refused for want of a Subscription', async () => {
+      vi.mocked(positioningService.get)
+        .mockResolvedValueOnce({ text: null, draft: null })
+        .mockRejectedValue(
+          apiError(403, 'This needs a subscription. Subscribe to continue.', {
+            code: 'subscription_required',
+          }),
+        );
+      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue('paywall');
+
+      renderOnboarding();
+
+      await waitFor(() => expect(currentPath()).toBe('/subscribe'));
+    });
+
+    it('shows the same draft when the step reopens, without starting another', async () => {
+      const { unmount } = await drafted();
+      unmount();
+
+      renderOnboarding();
+
+      await waitFor(async () => expect(await field()).toHaveValue(DRAFTED));
+      expect(await field()).toBeEnabled();
+      expect(positioningService.startDraft).toHaveBeenCalledTimes(1);
     });
 
     it('gives one line of advice under the heading, and no checklist', async () => {
@@ -193,11 +380,7 @@ describe('Onboarding', () => {
     });
 
     it('puts a full-width Continue under the textarea, with the count between them near the limit', async () => {
-      vi.mocked(positioningService.draft).mockResolvedValue({
-        text: 'a'.repeat(3712),
-        reason: null,
-        canDraft: true,
-      });
+      started = { state: 'ready', text: 'a'.repeat(3712), reason: null };
       renderOnboarding();
 
       const textarea = await field();
@@ -208,88 +391,6 @@ describe('Onboarding', () => {
         Node.DOCUMENT_POSITION_FOLLOWING,
       );
       expect(continueButton()).toHaveClass('w-full');
-    });
-
-    it('opens an empty textarea with the note when no draft can be made, and Continue waits for text', async () => {
-      vi.mocked(positioningService.draft).mockResolvedValue({
-        text: null,
-        reason: NOT_READ,
-        canDraft: true,
-      });
-      renderOnboarding();
-
-      const region = await step();
-      expect(await region.findByText(NOT_READ)).toBeInTheDocument();
-      const textarea = await field();
-      expect(textarea).toBeEnabled();
-      expect(textarea).toHaveValue('');
-      expect(textarea).toHaveAccessibleDescription(`${NOT_READ} ${ADVICE}`);
-      expect(continueButton()).toBeDisabled();
-
-      fireEvent.change(textarea, { target: { value: 'I post about pricing.' } });
-      expect(continueButton()).toBeEnabled();
-    });
-
-    it('opens an empty textarea with the note when the draft request fails', async () => {
-      vi.mocked(positioningService.draft).mockRejectedValue(
-        Object.assign(new Error('Network Error'), { isAxiosError: true }),
-      );
-      renderOnboarding();
-
-      const textarea = await field();
-      await waitFor(() => expect(textarea).toBeEnabled());
-      expect(textarea).toHaveValue('');
-      expect((await step()).getByRole('alert')).toHaveTextContent(
-        "We couldn't draft your positioning. Write it yourself, a few sentences is enough.",
-      );
-    });
-
-    it('asks the User to write it themselves when the day’s drafts ran out before the draft', async () => {
-      vi.mocked(positioningService.draft).mockRejectedValue(
-        apiError(429, 'You can draft again tomorrow.'),
-      );
-      renderOnboarding();
-
-      const textarea = await field();
-      await waitFor(() => expect(textarea).toBeEnabled());
-      expect((await step()).getByRole('alert')).toHaveTextContent(
-        "We couldn't draft your positioning. Write it yourself, a few sentences is enough.",
-      );
-      expect((await step()).queryByText(/tomorrow/)).not.toBeInTheDocument();
-    });
-
-    it('shows the draft it made again when the step reopens, without drafting again', async () => {
-      const { unmount } = await drafted();
-      unmount();
-
-      renderOnboarding();
-
-      await waitFor(async () => expect(await field()).toHaveValue(DRAFTED));
-      expect(await field()).toBeEnabled();
-      expect(positioningService.draft).toHaveBeenCalledTimes(1);
-    });
-
-    it('drafts again on reopen once Continue has saved the Positioning', async () => {
-      const { unmount } = await drafted();
-      vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
-      fireEvent.click(continueButton());
-      await waitFor(() => expect(currentPath()).toBe('/new'));
-      unmount();
-
-      await drafted();
-
-      expect(positioningService.draft).toHaveBeenCalledTimes(2);
-    });
-
-    it('asks for no draft when the User has used up the day’s drafts', async () => {
-      vi.mocked(positioningService.get).mockResolvedValue({ text: null, canDraft: false });
-      renderOnboarding();
-
-      const textarea = await field();
-      await waitFor(() => expect(textarea).toBeEnabled());
-      expect(textarea).toHaveValue('');
-      expect((await step()).queryByText(/draft again/i)).not.toBeInTheDocument();
-      expect(positioningService.draft).not.toHaveBeenCalled();
     });
 
     it('saves the edited Positioning, finishes Onboarding and lands on New post when Continue is pressed', async () => {
