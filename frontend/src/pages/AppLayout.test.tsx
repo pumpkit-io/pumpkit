@@ -127,6 +127,7 @@ const POST: PostDetail = {
   scheduledPost: null,
   textMedia: [],
   reachWarnings: [],
+  oneIdeaADay: null,
 };
 
 async function sidebar() {

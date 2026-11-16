@@ -22,8 +22,21 @@ export function dateTimeOf(iso: string): DateTimeDraft {
   return { date, time };
 }
 
-/** Now, with Schedule preset to the next whole hour. */
-export function initialWhen(): WhenDraft {
+// How far ahead the day after must be to preset it, clear of the minute a schedule needs ahead.
+const ONE_IDEA_A_DAY_MARGIN_MS = 5 * 60 * 1000;
+
+/**
+ * Schedule preset to the day after `oneIdeaADay`, at the same time of day, so split Ideas go out
+ * one a day; else, or once that day is (nearly) past, Now, with Schedule preset to the next hour.
+ */
+export function initialWhen(oneIdeaADay: string | null): WhenDraft {
+  if (oneIdeaADay) {
+    const dayAfter = new Date(oneIdeaADay);
+    // Local days, so the time of day holds across a daylight saving change.
+    dayAfter.setDate(dayAfter.getDate() + 1);
+    if (dayAfter.getTime() >= Date.now() + ONE_IDEA_A_DAY_MARGIN_MS)
+      return { now: false, ...dateTimeOf(dayAfter.toISOString()) };
+  }
   const next = new Date();
   next.setMinutes(60, 0, 0);
   return { now: true, ...dateTimeOf(next.toISOString()) };
@@ -98,10 +111,13 @@ export function WhenField({
   value,
   onChange,
   disabled,
+  note,
 }: {
   value: WhenDraft;
   onChange: (value: WhenDraft) => void;
   disabled?: boolean;
+  /** One line under the date and time, such as why they were preset. */
+  note?: string | null;
 }) {
   return (
     <div className="space-y-3">
@@ -122,6 +138,7 @@ export function WhenField({
           disabled={disabled}
         />
       )}
+      {!value.now && note && <p className="font-sans text-xs text-muted-foreground">{note}</p>}
     </div>
   );
 }

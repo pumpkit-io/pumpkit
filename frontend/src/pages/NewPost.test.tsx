@@ -153,6 +153,7 @@ function postWith(final: string): PostDetail {
     scheduledPost: null,
     textMedia: [],
     reachWarnings: [],
+    oneIdeaADay: null,
   };
 }
 
@@ -205,6 +206,7 @@ function writing(brief: Brief, ideaIds: string[]): Brief {
               writingState: 'writing',
               status: null,
               publishing: false,
+              oneIdeaADay: null,
               text: null,
               textMedia: [],
             },
@@ -230,6 +232,7 @@ const STARTED: Brief = {
         writingState: 'writing',
         status: null,
         publishing: false,
+        oneIdeaADay: null,
         text: null,
         textMedia: [],
       },
@@ -944,6 +947,7 @@ describe('New post', () => {
               writingState: 'writing',
               status: null,
               publishing: false,
+              oneIdeaADay: null,
               text: null,
               textMedia: [],
             },

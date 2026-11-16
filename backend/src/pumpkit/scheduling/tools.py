@@ -318,7 +318,8 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     can be scheduled. `reach_warnings` lists what may lead X to show the post to fewer people, in
     the scheduled post's own text while it waits or once published, else in the text: each with a
     `code`, the `part` it is in, counted from 1, and a `message` to tell the user. They never stop
-    scheduling.
+    scheduling. `one_idea_a_day` is the latest time another post of its brief goes or went out,
+    or null: schedule this one for the day after, at the same time of day.
     """
     return await mediator.get_post(db=call.db, user=call.user, post_id=post_id, now=call.now)
 

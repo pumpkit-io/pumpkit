@@ -146,6 +146,9 @@ class PostDetailResponse(BaseModel):
     scheduled_post: Optional[ScheduledPostResponse]
     # For the Scheduled post's own text unless it Failed, else for the Text; worked out on each read.
     reach_warnings: list[ReachWarningResponse]
+    # The latest time another Post of the Brief goes or went out, from which "Post to…" presets the
+    # next day so split Ideas go out one a day; None when no other has a Scheduled post.
+    one_idea_a_day: Optional[datetime]
 
 
 class BriefPostDetailResponse(BriefPostResponse):
@@ -155,6 +158,8 @@ class BriefPostDetailResponse(BriefPostResponse):
     status: Optional[PostStatus]
     # Scheduled and being published now, for the "Publishing" badge.
     publishing: bool
+    # As on `PostDetailResponse`, so the card's "Post to…" presets the same day; None until written.
+    one_idea_a_day: Optional[datetime]
 
 
 class IdeaDetailResponse(IdeaFields):

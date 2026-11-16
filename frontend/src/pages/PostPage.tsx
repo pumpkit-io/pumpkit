@@ -107,6 +107,7 @@ function CardPlaceholder() {
 /** "Post to…" on a Draft, which sends the Text on screen. */
 function DraftPostTo({
   postId,
+  oneIdeaADay,
   format,
   parts,
   disabled,
@@ -115,6 +116,7 @@ function DraftPostTo({
   onScheduled,
 }: {
   postId: string;
+  oneIdeaADay: string | null;
   format: Format;
   parts: ShownPart[];
   disabled: boolean;
@@ -129,6 +131,7 @@ function DraftPostTo({
       format={format}
       parts={parts}
       sender={sender}
+      oneIdeaADay={oneIdeaADay}
       disabled={disabled}
       waitingFor={waitingFor}
       prepare={prepare}
@@ -344,6 +347,7 @@ function LoadedPost({
     postTo = (
       <DraftPostTo
         postId={post.id}
+        oneIdeaADay={post.oneIdeaADay}
         format={textVersion.format}
         parts={partsToPost}
         disabled={!can.postTo}
@@ -366,6 +370,7 @@ function LoadedPost({
     postTo = (
       <FailedPostTo
         scheduledPost={scheduledPost}
+        oneIdeaADay={post.oneIdeaADay}
         textVersion={textVersion}
         retryParts={partsToPost}
         disabled={!can.postTo}

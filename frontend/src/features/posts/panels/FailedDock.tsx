@@ -54,6 +54,7 @@ export function FailedDock({
 /** "Post to…" on a Failed Post, which retries its one Scheduled post with the Text on screen. */
 export function FailedPostTo({
   scheduledPost,
+  oneIdeaADay,
   textVersion,
   retryParts,
   disabled,
@@ -62,6 +63,7 @@ export function FailedPostTo({
   onRetried,
 }: {
   scheduledPost: ScheduledPost;
+  oneIdeaADay: string | null;
   textVersion: Version;
   /** What the retry sends, the live Parts first. */
   retryParts: ShownPart[];
@@ -78,6 +80,7 @@ export function FailedPostTo({
       parts={retryParts}
       sender={sender}
       initialWhere={destinationDraftOf(scheduledPost)}
+      oneIdeaADay={oneIdeaADay}
       disabled={disabled}
       waitingFor={waitingFor}
       prepare={prepare}

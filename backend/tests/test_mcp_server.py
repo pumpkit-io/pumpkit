@@ -79,6 +79,13 @@ async def test_the_instructions_and_give_feedback_rewrite_the_post_s_text(subscr
     assert "latest version" not in description.lower()
 
 
+async def test_the_instructions_schedule_split_ideas_from_one_brief_one_a_day(subscribed, mcp):
+    instructions = (await mcp.initialize())["instructions"]
+
+    assert "ideas from one brief go out one a day" in instructions
+    assert "`one_idea_a_day`" in instructions
+
+
 async def test_no_instruction_or_tool_description_says_final(subscribed, mcp):
     instructions = (await mcp.initialize())["instructions"]
     tools = await mcp.list_tools()

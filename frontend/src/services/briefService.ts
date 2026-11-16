@@ -23,6 +23,8 @@ export interface BriefPost {
   status: PostStatus | null;
   /** Scheduled and being published now. */
   publishing: boolean;
+  /** As on `PostDetail`; null in the answer to a write, which doesn't read it. */
+  oneIdeaADay: string | null;
   /** Null until its first Version is written. */
   text: PostText | null;
   /** Each of the Text's Parts' Media, in order, for "Post to…" to send. */
@@ -94,6 +96,7 @@ interface BriefApi {
       writing_state: WritingState | null;
       status?: PostStatus | null;
       publishing?: boolean;
+      one_idea_a_day?: string | null;
       text: PostTextApi | null;
     } | null;
   }[];
@@ -114,6 +117,7 @@ const toBrief = (data: BriefApi): Brief => ({
       writingState: idea.post.writing_state,
       status: idea.post.status ?? null,
       publishing: idea.post.publishing ?? false,
+      oneIdeaADay: idea.post.one_idea_a_day ?? null,
       text: idea.post.text ? toText(idea.post.text) : null,
       textMedia: idea.post.text ? idea.post.text.parts.map((p) => p.media.map(toMedia)) : [],
     },

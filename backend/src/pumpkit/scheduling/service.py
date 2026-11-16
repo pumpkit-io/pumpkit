@@ -28,7 +28,7 @@ from sqlalchemy.sql import Subquery
 
 from pumpkit.billing.models import TopUpCharge
 from pumpkit.core.errors import ConflictError
-from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Media, Post, VersionAttempt
+from pumpkit.posts.models import ATTEMPT_SUCCEEDED, Idea, Media, Post, VersionAttempt
 from pumpkit.scheduling.communities import Community, Destination
 from pumpkit.scheduling.models import (
     FAILED,
@@ -228,6 +228,24 @@ async def get_for_post(db: AsyncSession, *, post_id: str) -> Optional[ScheduledP
         select(ScheduledPost)
         .where(ScheduledPost.post_id == post_id)
         .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
+
+
+async def latest_publish_at_of_brief(
+    db: AsyncSession, *, brief_id: str, excluding_post_id: str
+) -> Optional[datetime]:
+    """
+    The latest time a Scheduled post of the Brief's other Posts goes or went out, or None; a Failed
+    one never went out, so it doesn't count.
+    """
+    result = await db.execute(
+        select(func.max(ScheduledPost.publish_at))
+        .join(Post, Post.id == ScheduledPost.post_id)
+        .join(Idea, Idea.id == Post.idea_id)
+        .where(
+            Idea.brief_id == brief_id, Post.id != excluding_post_id, ScheduledPost.state != FAILED
+        )
     )
     return result.scalar_one_or_none()
 

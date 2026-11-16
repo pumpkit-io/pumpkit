@@ -31,6 +31,7 @@ function draft(versions: Version[]): PostDetail {
     scheduledPost: null,
     textMedia: [],
     reachWarnings: [],
+    oneIdeaADay: null,
   };
 }
 

@@ -96,8 +96,9 @@ import { track } from '@/lib/analytics';
 import { briefService, type Brief, type BriefPost, type Idea } from '@/services/briefService';
 import { billingService } from '@/services/billingService';
 import { WRITING_POLL_MS, postService, type PostText } from '@/services/postService';
+import { scheduledPostService, type ScheduledPost } from '@/services/scheduledPostService';
 import { usageService } from '@/services/usageService';
-import { xConnectionService } from '@/services/xConnectionService';
+import { xConnectionService, type XConnection } from '@/services/xConnectionService';
 import { SUBSCRIBED, apiError, currentPath, renderSignedIn } from './testing/signedInApp';
 
 function idea(n: number, coreIdea: string, post: Idea['post']): Idea {
@@ -158,6 +159,7 @@ const written = (id: string, words: string, text: PostText = textOf(words)): Bri
   writingState: null,
   status: 'draft',
   publishing: false,
+  oneIdeaADay: null,
   text,
   textMedia: text.parts.map(() => []),
 });
@@ -166,6 +168,7 @@ const beingWritten = (id: string): BriefPost => ({
   writingState: 'writing',
   status: null,
   publishing: false,
+  oneIdeaADay: null,
   text: null,
   textMedia: [],
 });
@@ -174,6 +177,7 @@ const notWritten = (id: string): BriefPost => ({
   writingState: 'not_written',
   status: null,
   publishing: false,
+  oneIdeaADay: null,
   text: null,
   textMedia: [],
 });
@@ -312,6 +316,94 @@ describe('Brief page', () => {
 
     const reply = within((await card(PAIN)).getByRole('group', { name: 'First reply' }));
     expect(reply.getByText('The link is here.')).toBeInTheDocument();
+  });
+
+  describe('one idea a day', () => {
+    const CONNECTED: XConnection = {
+      handle: 'ada',
+      charLimit: 280,
+      premium: false,
+      needsReconnect: false,
+      needsReconnectForMedia: false,
+      scheduledPostsWaiting: 0,
+      photoUrl: null,
+      offerPhoto: false,
+    };
+    const SCHEDULED: ScheduledPost = {
+      id: 'scheduled_post_01',
+      parts: [{ text: 'Pain first.', live: false, xPostUrl: null, media: [] }],
+      firstReply: false,
+      state: 'scheduled',
+      publishAt: '2026-10-12T07:00:00Z',
+      publishedAt: null,
+      xPostUrl: null,
+      failedReason: null,
+      community: null,
+      shareWithFollowers: false,
+      createdAt: '2026-10-10T12:00:00Z',
+      posting: false,
+    };
+
+    beforeEach(() => {
+      vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
+      vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+    });
+
+    async function openPostTo(coreIdea: string) {
+      fireEvent.click((await card(coreIdea)).getByRole('button', { name: 'Post to…' }));
+      return within(await screen.findByRole('dialog', { name: 'Post to…' }));
+    }
+
+    it('presets a card’s Schedule to the day after the brief’s latest scheduled post, and says why', async () => {
+      vi.mocked(briefService.get).mockResolvedValue(
+        brief({
+          1: { ...written('post_1', 'Pain first.'), status: 'scheduled' },
+          2: { ...written('post_2', 'B2B is not B2C.'), oneIdeaADay: '2026-10-11T07:00:00Z' },
+        }),
+      );
+      renderSignedIn('/briefs/brief_01');
+
+      const dialog = await openPostTo(B2B);
+
+      expect(dialog.getByRole('radio', { name: 'Schedule' })).toBeChecked();
+      expect(dialog.getByLabelText('Date')).toHaveValue('2026-10-12');
+      expect(dialog.getByLabelText('Time')).toHaveValue('09:00');
+      expect(
+        dialog.getByText(
+          'One idea a day: your other post from this brief goes out Sun, Oct 11, 9:00 AM.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('presets the next card from the time the first card was just scheduled for', async () => {
+      vi.mocked(briefService.get)
+        .mockResolvedValueOnce(
+          brief({ 1: written('post_1', 'Pain first.'), 2: written('post_2', 'B2B is not B2C.') }),
+        )
+        .mockResolvedValue(
+          brief({
+            1: { ...written('post_1', 'Pain first.'), status: 'scheduled' },
+            2: { ...written('post_2', 'B2B is not B2C.'), oneIdeaADay: '2026-10-12T07:00:00Z' },
+          }),
+        );
+      vi.mocked(scheduledPostService.schedule).mockReset().mockResolvedValue(SCHEDULED);
+      renderSignedIn('/briefs/brief_01');
+
+      const first = await openPostTo(PAIN);
+      expect(first.getByRole('radio', { name: 'Now' })).toBeChecked();
+      fireEvent.click(first.getByRole('radio', { name: 'Schedule' }));
+      fireEvent.change(first.getByLabelText('Date'), { target: { value: '2026-10-12' } });
+      fireEvent.change(first.getByLabelText('Time'), { target: { value: '09:00' } });
+      fireEvent.click(first.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(await (await card(PAIN)).findByText('Scheduled')).toBeInTheDocument();
+
+      const second = await openPostTo(B2B);
+
+      expect(second.getByRole('radio', { name: 'Schedule' })).toBeChecked();
+      expect(second.getByLabelText('Date')).toHaveValue('2026-10-13');
+      expect(second.getByLabelText('Time')).toHaveValue('09:00');
+    });
   });
 
   it.each([

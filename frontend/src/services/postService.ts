@@ -220,6 +220,8 @@ export interface PostDetail extends Post {
   textMedia: Media[][];
   /** For the Scheduled post's own text when it has one, else for the Text, as the Post was read. */
   reachWarnings: ReachWarning[];
+  /** When the latest other Post of the Brief goes or went out, or null: "Post to…" goes a day after. */
+  oneIdeaADay: string | null;
 }
 
 /** How many Posts each status holds, for the Posts tabs and the sidebar's Failed badge. */
@@ -366,6 +368,7 @@ interface PostDetailApi extends PostApi {
   status: PostStatus | null;
   scheduled_post: ScheduledPostApi | null;
   reach_warnings: ReachWarning[];
+  one_idea_a_day: string | null;
 }
 
 export const toPlan = (p: PlanApi): Plan => ({
@@ -481,6 +484,7 @@ export const postService = {
       scheduledPost: data.scheduled_post ? toScheduledPost(data.scheduled_post) : null,
       textMedia: data.text ? data.text.parts.map((p) => p.media.map(toMedia)) : [],
       reachWarnings: data.reach_warnings,
+      oneIdeaADay: data.one_idea_a_day,
     };
   },
   /** The Post's Reach warnings as the server works them out now, for after its text changed. */

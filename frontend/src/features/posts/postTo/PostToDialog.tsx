@@ -189,6 +189,7 @@ export function PostToDialog({
   parts,
   sender,
   initialWhere = PROFILE_DRAFT,
+  oneIdeaADay,
   onClose,
   onDone,
 }: {
@@ -198,6 +199,8 @@ export function PostToDialog({
   parts: ShownPart[];
   sender: PostToSender;
   initialWhere?: DestinationDraft;
+  /** When the latest other Post of the Brief goes or went out: Schedule presets the day after. */
+  oneIdeaADay: string | null;
   onClose: () => void;
   onDone: (scheduledPost: ScheduledPost) => void;
 }) {
@@ -205,7 +208,8 @@ export function PostToDialog({
   const { sending, error, allowanceUsedUp, send } = sender;
   const [step, setStep] = useState<Step>({ kind: 'choose' });
   const [where, setWhere] = useState<DestinationDraft>(initialWhere);
-  const [when, setWhen] = useState<WhenDraft>(initialWhen);
+  const [initial] = useState(() => initialWhen(oneIdeaADay));
+  const [when, setWhen] = useState<WhenDraft>(initial);
   const publishAt = publishAtFrom(when);
   // The period the post would count against: the chosen time's, or now's for Post now.
   const { usage } = useUsage(publishAt);
@@ -233,6 +237,13 @@ export function PostToDialog({
   ) : (
     error && <ErrorBanner message={error} />
   );
+  // Only while the date is the one the default chose, so it never contradicts the User's pick.
+  const oneIdeaADayNote =
+    oneIdeaADay && !initial.now && when.date === initial.date
+      ? `One idea a day: your other post from this brief ${
+          new Date(oneIdeaADay).getTime() > Date.now() ? 'goes' : 'went'
+        } out ${formatWhen(oneIdeaADay)}.`
+      : null;
   const liveLine = live && (
     <p
       className={
@@ -349,7 +360,7 @@ export function PostToDialog({
       <>
         {liveLine}
         <WhereField value={where} onChange={setWhere} disabled={sending} />
-        <WhenField value={when} onChange={setWhen} disabled={sending} />
+        <WhenField value={when} onChange={setWhen} disabled={sending} note={oneIdeaADayNote} />
         {unpostable.map((problem) => (
           <p key={problem} className="font-sans text-sm font-medium text-destructive">
             {problem}
