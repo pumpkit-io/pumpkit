@@ -234,6 +234,10 @@ async def get_for_post(db: AsyncSession, *, post_id: str) -> Optional[ScheduledP
     return result.scalar_one_or_none()
 
 
+# When a Scheduled post goes out, or went out once Published, which may be after its time.
+_GOES_OUT_AT = func.coalesce(ScheduledPost.published_at, ScheduledPost.publish_at)
+
+
 async def latest_publish_at_of_brief(
     db: AsyncSession, *, brief_id: str, excluding_post_id: str
 ) -> Optional[datetime]:
@@ -242,7 +246,7 @@ async def latest_publish_at_of_brief(
     one never went out, so it doesn't count.
     """
     result = await db.execute(
-        select(func.max(ScheduledPost.publish_at))
+        select(func.max(_GOES_OUT_AT))
         .join(Post, Post.id == ScheduledPost.post_id)
         .join(Idea, Idea.id == Post.idea_id)
         .where(
@@ -259,7 +263,7 @@ async def others_around(
     The User's Scheduled posts of other Posts that are waiting or Published and go or went out
     within two days of `at`, which covers its calendar day in any time zone.
     """
-    goes_out_at = func.coalesce(ScheduledPost.published_at, ScheduledPost.publish_at)
+    goes_out_at = _GOES_OUT_AT
     brief_id = (
         select(Idea.brief_id).join(Post, Post.idea_id == Idea.id).where(Post.id == post_id)
     ).scalar_subquery()

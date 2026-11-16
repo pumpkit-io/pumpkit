@@ -5068,6 +5068,83 @@ describe('Post page', () => {
 
       expect(await panel('Draft').findByText(SHARE.message)).toBeInTheDocument();
     });
+
+    describe('about when it goes out', () => {
+      const NEARBY: ReachWarning = {
+        code: 'nearby_post',
+        part: null,
+        message:
+          "Your other post goes out on Mon, Oct 12, 8:00 AM, less than 2 hours away, so the two split each other's reach. Pick a time 2 hours from your other post.",
+      };
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      beforeEach(() => {
+        // Before SCHEDULED's time, so it can be scheduled and edited.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
+        vi.mocked(scheduledPostService.schedule).mockReset();
+        vi.mocked(scheduledPostService.edit).mockReset();
+        vi.mocked(scheduledPostService.cancel).mockReset();
+        vi.mocked(scheduledPostService.pastCommunities).mockReset().mockResolvedValue([]);
+      });
+
+      async function startEditing() {
+        const dock = within(await screen.findByRole('region', { name: 'Scheduled' }));
+        fireEvent.click(await dock.findByRole('button', { name: 'Edit' }));
+        return within(await screen.findByRole('region', { name: 'Edit the scheduled post' }));
+      }
+
+      it('reads them again once the Draft is scheduled with the same text', async () => {
+        vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
+        renderPost(postWith('the final text'));
+        await textCard();
+        vi.mocked(postService.reachWarnings).mockResolvedValue([NEARBY]);
+
+        fireEvent.click(await card().findByRole('button', { name: 'Post to…' }));
+        const dialog = within(await screen.findByRole('dialog', { name: 'Post to…' }));
+        scheduleAt(dialog, '2026-10-12', '09:00');
+        fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
+        await dialogClosed();
+
+        expect(await panel('Scheduled').findByText(NEARBY.message)).toBeInTheDocument();
+      });
+
+      it('reads them again once only the time of the Scheduled post is edited', async () => {
+        vi.mocked(scheduledPostService.edit).mockResolvedValue({
+          ...SCHEDULED,
+          publishAt: '2026-10-13T07:00:00Z',
+        });
+        renderPost({ ...withScheduledPost(SCHEDULED), reachWarnings: [NEARBY] });
+        await textCard();
+        expect(await screen.findByText(NEARBY.message)).toBeInTheDocument();
+
+        const editor = await startEditing();
+        fireEvent.change(editor.getByLabelText('Date'), { target: { value: '2026-10-13' } });
+        fireEvent.click(editor.getByRole('button', { name: 'Save changes' }));
+
+        expect(await screen.findByText('Scheduled for Tue, Oct 13, 9:00 AM')).toBeInTheDocument();
+        await waitFor(() => expect(screen.queryByText(NEARBY.message)).not.toBeInTheDocument());
+      });
+
+      it('reads them again once the Scheduled post is unscheduled back to a Draft', async () => {
+        vi.mocked(scheduledPostService.cancel).mockResolvedValue(undefined);
+        // The Scheduled post was copied from the Text and left as it was.
+        const unedited = {
+          ...SCHEDULED,
+          parts: [{ ...SCHEDULED.parts[0]!, text: 'the second text' }],
+        };
+        renderPost({ ...withScheduledPost(unedited), reachWarnings: [NEARBY] });
+        await textCard();
+
+        fireEvent.click((await startEditing()).getByRole('button', { name: 'Unschedule' }));
+
+        await screen.findByRole('region', { name: 'Draft' });
+        await waitFor(() => expect(screen.queryByText(NEARBY.message)).not.toBeInTheDocument());
+      });
+    });
   });
 
   describe('Draft: Post to…', () => {
@@ -5243,7 +5320,7 @@ describe('Post page', () => {
           code: 'nearby_post',
           part: null,
           message:
-            "Your other post goes out on Mon 12 Oct at 08:00 CEST, less than 2 hours away, so the two split each other's reach. Pick a time 2 hours from your other post.",
+            "Your other post goes out on Mon, Oct 12, 8:00 AM, less than 2 hours away, so the two split each other's reach. Pick a time 2 hours from your other post.",
         };
         vi.mocked(postService.reachWarningsAt).mockImplementation(async (_postId, publishAt) =>
           publishAt === '2026-10-12T07:00:00.000Z' ? [NEARBY] : [],

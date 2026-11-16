@@ -4,12 +4,14 @@ the same Brief has a Scheduled post that goes or went out, the latest of their t
 "Post to…" presets the next day.
 """
 
+from datetime import UTC, datetime
+
 import pytest
 from sqlalchemy import update
 
 from pumpkit.core.db.session import get_session_maker
 from pumpkit.main import app
-from pumpkit.scheduling.models import FAILED, ScheduledPost
+from pumpkit.scheduling.models import FAILED, PUBLISHED, ScheduledPost
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import HUMANIZED_POST, POST_IDEAS, ideas, planned_post
 
@@ -96,7 +98,20 @@ async def test_a_published_post_counts(client, ready):
     first, second, _ = await _split_posts(client)
     await _schedule(client, first, publish_now=True)
 
-    assert await _one_idea_a_day(client, second) == "2026-10-10T12:00:00Z"
+    assert await _one_idea_a_day(client, second) == "2026-10-10T12:00:30Z"
+
+
+async def test_a_post_published_late_counts_when_it_went_out(client, db, ready):
+    first, second, _ = await _split_posts(client)
+    late = await _schedule(client, first, publish_at="2026-10-11T09:00:00Z")
+    await db.execute(
+        update(ScheduledPost)
+        .where(ScheduledPost.id == late)
+        .values(state=PUBLISHED, published_at=datetime(2026, 10, 11, 9, 40, tzinfo=UTC))
+    )
+    await db.commit()
+
+    assert await _one_idea_a_day(client, second) == "2026-10-11T09:40:00Z"
 
 
 async def test_another_briefs_scheduled_post_does_not_count(client, ready):

@@ -40,10 +40,25 @@ async def test_a_waiting_post_an_hour_away_warns(
         {
             "code": "nearby_post",
             "part": None,
-            "message": "Your other post goes out on Sat 10 Oct at 15:00 UTC, less than 2 hours "
+            "message": "Your other post goes out on Sat, Oct 10, 3:00 PM UTC, less than 2 hours "
             "away, so the two split each other's reach. Pick a time 2 hours from your other post.",
         }
     ]
+
+
+async def test_a_time_zone_given_writes_the_time_in_it_without_naming_it(
+    client, subscribed, connect_x, fixed_clock, post_with
+):
+    """As "Post to…" writes a time, in the browser's time zone, which is the one it sends."""
+    await connect_x()
+    await _schedule(client, await post_with("Waiting."), publish_at="2026-10-10T15:00:00Z")
+    post_id = await post_with("Ship small things.")
+
+    [warning] = await _warnings_at(
+        client, post_id, "2026-10-10T16:00:00Z", **{"X-Time-Zone": "Europe/Rome"}
+    )
+
+    assert warning["message"].startswith("Your other post goes out on Sat, Oct 10, 5:00 PM, less")
 
 
 def _codes(warnings: list[dict]) -> list[tuple[str, None]]:
@@ -70,7 +85,7 @@ async def test_a_published_post_an_hour_before_warns(
     [warning] = await _warnings_at(client, post_id, "2026-10-10T13:00:00Z")
 
     assert warning["code"] == "nearby_post"
-    assert warning["message"].startswith("Your other post went out on Sat 10 Oct at 12:00 UTC")
+    assert warning["message"].startswith("Your other post went out on Sat, Oct 10, 12:00 PM UTC")
 
 
 async def test_post_now_counts_as_now(client, subscribed, connect_x, fixed_clock, post_with):
@@ -176,8 +191,8 @@ async def test_two_ideas_of_a_brief_on_one_day_warn(client, split_posts):
         {
             "code": "same_brief_same_day",
             "part": None,
-            "message": "Another idea from this brief goes out the same day, Sun 11 Oct, so the "
-            "two compete for the same readers.",
+            "message": "Another idea from this brief goes out the same day, Sun, Oct 11, so "
+            "the two compete for the same readers.",
         }
     ]
 

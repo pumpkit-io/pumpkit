@@ -104,14 +104,19 @@ def _goes_out(other: OtherScheduledPost) -> str:
     return "went out" if other.published else "goes out"
 
 
+# Times are written as "Post to…" writes them, "Mon, Oct 12, 9:00 AM". The web app sends the
+# browser's time zone, so the zone goes unsaid; UTC is named, since it stands in for a zone the
+# request didn't give.
 def _day(moment: datetime, zone: ZoneInfo) -> str:
     local = moment.astimezone(zone)
-    return f"{local:%a} {local.day} {local:%b}"
+    return f"{local:%a}, {local:%b} {local.day}"
 
 
 def _when(moment: datetime, zone: ZoneInfo) -> str:
     local = moment.astimezone(zone)
-    return f"{_day(moment, zone)} at {local:%H:%M %Z}"
+    clock = f"{(local.hour - 1) % 12 + 1}:{local:%M} {'AM' if local.hour < 12 else 'PM'}"
+    named = " UTC" if zone.key == "UTC" else ""
+    return f"{_day(moment, zone)}, {clock}{named}"
 
 
 def _subject(number: int, count: int, *, first_reply: bool) -> str:

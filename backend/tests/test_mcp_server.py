@@ -84,6 +84,7 @@ async def test_the_instructions_schedule_split_ideas_from_one_brief_one_a_day(su
 
     assert "ideas from one brief go out one a day" in instructions
     assert "`one_idea_a_day`" in instructions
+    assert "When that time has passed or is only minutes away" in instructions
 
 
 async def test_the_instructions_and_scheduling_tools_relay_reach_warnings(subscribed, mcp):
