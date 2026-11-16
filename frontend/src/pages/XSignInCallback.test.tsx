@@ -1,5 +1,5 @@
 import { StrictMode } from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation, useNavigationType } from 'react-router-dom';
 import { session } from '@/lib/session';
@@ -45,7 +45,9 @@ it('announces sign-in progress and starts the existing session once before repla
   const expiresAt = new Date(Date.now() + 3600_000).toISOString();
   vi.mocked(xSignInService.complete).mockResolvedValue({ accessToken: 'issued-access', expiresAt });
   callback();
-  expect(screen.getByRole('status')).toHaveTextContent('Signing you in with X');
+  const status = screen.getByRole('status');
+  expect(status).toHaveTextContent(/^Signing you in with\s*…$/);
+  expect(within(status).getByRole('img', { name: 'X' })).toBeInTheDocument();
   expect(await screen.findByText('/new via REPLACE')).toBeInTheDocument();
   expect(xSignInService.complete).toHaveBeenCalledTimes(1);
   expect(xSignInService.complete).toHaveBeenCalledWith({

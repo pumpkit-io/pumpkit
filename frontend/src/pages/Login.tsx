@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '../components/ui/button';
 import { CTA_CLASSES } from '@/components/blocks/cta-classes';
 import { cn } from '@/lib/utils';
+import { XLogo } from '@/components/XLogo';
 import { CompanyFooter } from '@/features/legal/CompanyFooter';
 import { useInstance } from '@/features/instance/useInstance';
 import { PRIVACY_PATH, TERMS_PATH } from '@/features/legal/documents';
@@ -72,10 +73,6 @@ export function Login() {
               </p>
 
               <div className="mt-8 grid gap-6">
-                <p className="text-sm leading-relaxed text-muted-foreground">
-                  Continuing with X signs you in and authorizes {app_name} to publish your posts,
-                  including media and scheduled posts.
-                </p>
                 {error && (
                   <div
                     role="alert"
@@ -86,12 +83,17 @@ export function Login() {
                 )}
                 <Button
                   variant="solid"
-                  className={cn(CTA_CLASSES, 'h-11 w-full')}
+                  className={cn(CTA_CLASSES, 'h-11 w-full gap-[0.4em]')}
                   disabled={loading}
                   aria-busy={loading}
+                  aria-label="Continue with X"
                   onClick={() => void continueWithX()}
                 >
-                  {loading ? 'Opening X…' : 'Continue with X'}
+                  {loading ? 'Opening' : 'Continue with'}
+                  <span className="inline-flex items-center">
+                    <XLogo decorative />
+                    {loading && '…'}
+                  </span>
                 </Button>
               </div>
             </div>
