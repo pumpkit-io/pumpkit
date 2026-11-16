@@ -4,6 +4,7 @@ MCP tools share. The route and tool suites keep one case of each refusal.
 """
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import pytest
 from sqlalchemy import update
@@ -62,6 +63,7 @@ def create(
             user=user,
             new=NewScheduledPost(**fields),
             clock=fixed_clock,
+            zone=ZoneInfo("UTC"),
         )
 
     return _create
@@ -79,6 +81,7 @@ def edit(db, user, fake_x_publisher, file_storage, fake_x_reader, fixed_clock):
             scheduled_post_id=scheduled_post_id,
             edit=ScheduledPostEdit(**fields),
             clock=fixed_clock,
+            zone=ZoneInfo("UTC"),
         )
 
     return _edit

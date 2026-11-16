@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -169,15 +170,43 @@ def scheduled_post_response(
     )
 
 
-def saved_response(scheduled_post: ScheduledPost, *, now: datetime) -> ScheduledPostSavedResponse:
-    """The Scheduled post with the Reach warnings for its own text, as created or edited."""
+async def saved_response(
+    db: AsyncSession, scheduled_post: ScheduledPost, *, now: datetime, zone: ZoneInfo
+) -> ScheduledPostSavedResponse:
+    """
+    The Scheduled post with the Reach warnings for its own text and time, as created or edited.
+    """
     warnings = reach_warnings.text_warnings(
         [part.text for part in scheduled_post.parts], first_reply=scheduled_post.first_reply
     )
     return ScheduledPostSavedResponse(
         **scheduled_post_response(scheduled_post, now=now).model_dump(),
-        reach_warnings=_warning_responses(warnings),
+        reach_warnings=_warning_responses(
+            warnings + await _own_timing_warnings(db, scheduled_post, zone=zone)
+        ),
     )
+
+
+async def _own_timing_warnings(
+    db: AsyncSession, scheduled_post: ScheduledPost, *, zone: ZoneInfo
+) -> list[reach_warnings.ReachWarning]:
+    """For the time it goes or went out; a Failed one has none until it is rescheduled."""
+    if scheduled_post.state == FAILED:
+        return []
+    return await _timing_warnings(
+        db,
+        user_id=scheduled_post.user_id,
+        post_id=scheduled_post.post_id,
+        at=as_utc(scheduled_post.published_at or scheduled_post.publish_at),
+        zone=zone,
+    )
+
+
+async def _timing_warnings(
+    db: AsyncSession, *, user_id: str, post_id: str, at: datetime, zone: ZoneInfo
+) -> list[reach_warnings.ReachWarning]:
+    others = await service.others_around(db, user_id=user_id, post_id=post_id, at=at)
+    return reach_warnings.timing_warnings(at, others, zone=zone)
 
 
 async def look_up_community(reader: XReader, pasted: str) -> CommunityResponse:
@@ -352,6 +381,7 @@ async def create_scheduled_post(
     user: User,
     new: NewScheduledPost,
     clock: Clock,
+    zone: ZoneInfo,
     photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostSavedResponse:
     """
@@ -414,10 +444,11 @@ async def create_scheduled_post(
             scheduled_post_id=scheduled_post.id,
             now=now,
             clock=clock,
+            zone=zone,
             photo_fetcher=photo_fetcher,
         )
     await db.commit()
-    return saved_response(scheduled_post, now=now)
+    return await saved_response(db, scheduled_post, now=now, zone=zone)
 
 
 async def _check_media(
@@ -489,6 +520,7 @@ async def _post_now(
     scheduled_post_id: str,
     now: datetime,
     clock: Clock,
+    zone: ZoneInfo,
     photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostSavedResponse:
     # No commit here: publishing commits the new row along with its claim.
@@ -502,7 +534,7 @@ async def _post_now(
         photo_fetcher=photo_fetcher,
     )
     published = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
-    return saved_response(published, now=clock())
+    return await saved_response(db, published, now=clock(), zone=zone)
 
 
 async def _owned(db: AsyncSession, *, user: User, scheduled_post_id: str) -> ScheduledPost:
@@ -525,6 +557,7 @@ async def edit_scheduled_post(
     scheduled_post_id: str,
     edit: ScheduledPostEdit,
     clock: Clock,
+    zone: ZoneInfo,
     photo_fetcher: Optional[PhotoFetcher] = None,
 ) -> ScheduledPostSavedResponse:
     """
@@ -641,10 +674,13 @@ async def edit_scheduled_post(
             scheduled_post_id=scheduled_post_id,
             now=now,
             clock=clock,
+            zone=zone,
             photo_fetcher=photo_fetcher,
         )
     await db.commit()
-    return saved_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id), now=now)
+    return await saved_response(
+        db, await _owned(db, user=user, scheduled_post_id=scheduled_post_id), now=now, zone=zone
+    )
 
 
 async def _destination_after_edit(
@@ -756,11 +792,12 @@ async def get_brief(
 
 
 async def get_post(
-    db: AsyncSession, user: User, post_id: str, *, now: datetime
+    db: AsyncSession, user: User, post_id: str, *, now: datetime, zone: ZoneInfo
 ) -> PostDetailResponse:
     """
     The User's Post with its Text, every Version in order, its writing state, and its status and
-    Scheduled post once it has a Text.
+    Scheduled post once it has a Text. Its Reach warnings are its Scheduled post's, time included,
+    once it has one; same-day warnings go by `zone`.
     """
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     char_limit = await version_writing.char_limit_for(db, user_id=user.id)
@@ -781,7 +818,10 @@ async def get_post(
         failed_feedback=version_writing.failed_feedback_response(post, now=now),
         status=post_status(scheduled_post.state if scheduled_post else None) if written else None,
         scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
-        reach_warnings=_warning_responses(reach_warnings.post_warnings(post, scheduled_post)),
+        reach_warnings=_warning_responses(
+            reach_warnings.post_warnings(post, scheduled_post)
+            + (await _own_timing_warnings(db, scheduled_post, zone=zone) if scheduled_post else [])
+        ),
         one_idea_a_day=await _one_idea_a_day(db, brief_id=post.idea.brief_id, post_id=post.id),
     )
 
@@ -798,17 +838,26 @@ def _warning_responses(warnings: list[reach_warnings.ReachWarning]) -> list[Reac
 
 
 async def get_reach_warnings(
-    db: AsyncSession, user: User, post_id: str, *, publish_at: Optional[datetime], now: datetime
+    db: AsyncSession,
+    user: User,
+    post_id: str,
+    *,
+    publish_at: Optional[datetime],
+    now: datetime,
+    zone: ZoneInfo,
 ) -> ReachWarningsResponse:
     """
     Every Reach warning for the Post's Text were it to go out at `publish_at`, or `now` for Post
-    now, as "Post to…" shows them while the User picks a time.
+    now, as "Post to…" shows them while the User picks a time; same-day warnings go by `zone`.
     """
     post = await version_writing.user_post(db, user=user, post_id=post_id)
     warnings = reach_warnings.text_warnings(
         list(post.text_parts or []), first_reply=post.text_first_reply
     )
-    return ReachWarningsResponse(reach_warnings=_warning_responses(warnings))
+    timing = await _timing_warnings(
+        db, user_id=user.id, post_id=post.id, at=as_utc(publish_at or now), zone=zone
+    )
+    return ReachWarningsResponse(reach_warnings=_warning_responses(warnings + timing))
 
 
 def _scheduled_post_summary(
@@ -911,7 +960,8 @@ async def give_feedback(
     next_version = await version_writing.prepare_next_version(
         db, user=user, post=post, feedback=feedback, format=format, sent_text=sent_text, now=now
     )
-    response = await get_post(db, user, post_id, now=now)
+    # Only a Draft or a Failed post takes Feedback, and neither has timing warnings to zone.
+    response = await get_post(db, user, post_id, now=now, zone=reach_warnings.time_zone(None))
     write = _FeedbackWrite(
         user_id=user.id,
         post_id=post_id,

@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Annotated, Optional
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, Path, Query, Request, status
+from fastapi import APIRouter, Depends, Header, Path, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pumpkit.auth.models import User
@@ -17,7 +18,7 @@ from pumpkit.core.time import Clock, get_clock
 from pumpkit.posts.media_upload import ReceivedMedia, receive_media
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
 from pumpkit.posts.schemas import AltTextRequest, MediaResponse, TextResponse
-from pumpkit.scheduling import mediator
+from pumpkit.scheduling import mediator, reach_warnings
 from pumpkit.scheduling.rules import (
     DestinationChange,
     KeepDestination,
@@ -134,6 +135,11 @@ async def list_past_communities(
     return await mediator.list_past_communities(db=db, user=current_user)
 
 
+def request_time_zone(x_time_zone: Annotated[Optional[str], Header()] = None) -> ZoneInfo:
+    """The browser's time zone, which the web app sends, for same-day Reach warnings; else UTC."""
+    return reach_warnings.time_zone(x_time_zone)
+
+
 @router.post(
     "/scheduled-posts",
     response_model=ScheduledPostSavedResponse,
@@ -150,6 +156,7 @@ async def create_scheduled_post(
     storage: FileStorage = Depends(get_file_storage),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
+    zone: ZoneInfo = Depends(request_time_zone),
 ) -> ScheduledPostSavedResponse:
     """
     With `publish_now`, publishes on X before answering: it comes back Published or Failed. With
@@ -170,6 +177,7 @@ async def create_scheduled_post(
         user=current_user,
         new=new,
         clock=clock,
+        zone=zone,
         photo_fetcher=photo_fetcher,
     )
 
@@ -198,6 +206,7 @@ async def edit_scheduled_post(
     storage: FileStorage = Depends(get_file_storage),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
+    zone: ZoneInfo = Depends(request_time_zone),
 ) -> ScheduledPostSavedResponse:
     """With `publish_now`, publishes on X before answering, as creating one does."""
     edit = ScheduledPostEdit(
@@ -217,6 +226,7 @@ async def edit_scheduled_post(
         scheduled_post_id=scheduled_post_id,
         edit=edit,
         clock=clock,
+        zone=zone,
         photo_fetcher=photo_fetcher,
     )
 
@@ -363,8 +373,11 @@ async def get_post(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
+    zone: ZoneInfo = Depends(request_time_zone),
 ) -> PostDetailResponse:
-    return await mediator.get_post(db=db, user=current_user, post_id=post_id, now=clock())
+    return await mediator.get_post(
+        db=db, user=current_user, post_id=post_id, now=clock(), zone=zone
+    )
 
 
 @posts_router.get(
@@ -378,10 +391,11 @@ async def get_reach_warnings(
     current_user: User = Depends(require_subscribed_user),
     db: AsyncSession = Depends(get_async_db),
     clock: Clock = Depends(get_clock),
+    zone: ZoneInfo = Depends(request_time_zone),
 ) -> ReachWarningsResponse:
     """The Text's Reach warnings were it to go out at `publish_at`, or now without one."""
     return await mediator.get_reach_warnings(
-        db, user=current_user, post_id=post_id, publish_at=publish_at, now=clock()
+        db, user=current_user, post_id=post_id, publish_at=publish_at, now=clock(), zone=zone
     )
 
 

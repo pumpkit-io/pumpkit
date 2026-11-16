@@ -609,8 +609,11 @@ async def test_the_scheduling_tools_give_the_warnings(
     subscribed, connect_x, fixed_clock, mcp, post_with
 ):
     await connect_x()
+    # Hours from the post published now, so no spacing warning joins the text's.
     scheduled = await mcp.call_tool(
-        "schedule_post", post_id=await post_with("Tag a friend who ships."), publish_at=LATER
+        "schedule_post",
+        post_id=await post_with("Tag a friend who ships."),
+        publish_at="2026-10-10T18:00:00Z",
     )
     edited = await mcp.call_tool(
         "edit_scheduled_post",

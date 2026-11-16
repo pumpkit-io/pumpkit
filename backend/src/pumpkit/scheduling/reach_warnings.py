@@ -1,13 +1,17 @@
 """
-Reach warnings (ADR 0032): what in a Scheduled post's or a Post's text may lead X to show it to
-fewer people, in words for the User. They warn and never refuse; nothing here is stored.
+Reach warnings (ADR 0032): what in a Scheduled post's or a Post's text, or in when it goes out, may
+lead X to show it to fewer people, in words for the User. They warn and never refuse; nothing here
+is stored.
 """
 
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from pumpkit.core.time import as_utc
 from pumpkit.posts.formats import part_name
 from pumpkit.posts.models import Post
 from pumpkit.scheduling.models import FAILED, ScheduledPost
@@ -22,15 +26,92 @@ ReachWarningCode = Literal[
     "many_mentions",
     "many_hashtags",
     "shortened_link",
+    "nearby_post",
+    "same_brief_same_day",
 ]
 
 
 @dataclass(frozen=True)
 class ReachWarning:
     code: ReachWarningCode
-    # The Part it was found in, from 1.
+    # The Part it was found in, from 1; None for a timing warning.
     part: Optional[int]
     message: str
+
+
+# Two posts closer than this split each other's reach.
+SPACING = timedelta(hours=2)
+
+
+@dataclass(frozen=True)
+class OtherScheduledPost:
+    """Another of the User's Scheduled posts that is waiting or Published."""
+
+    # Aware, in UTC.
+    goes_out_at: datetime
+    published: bool
+    # Whether it is another Idea's from the same Brief.
+    same_brief: bool
+
+
+def time_zone(name: Optional[str]) -> ZoneInfo:
+    """The named IANA time zone, or UTC when none or an unknown one is given."""
+    if name:
+        try:
+            return ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return ZoneInfo("UTC")
+
+
+def timing_warnings(
+    goes_out_at: datetime, others: list[OtherScheduledPost], *, zone: ZoneInfo
+) -> list[ReachWarning]:
+    """
+    `nearby_post` for the nearest other post less than 2 hours either side, and
+    `same_brief_same_day` for another Idea of the Brief on the same day in `zone`.
+    """
+    goes_out_at = as_utc(goes_out_at)
+    warnings: list[ReachWarning] = []
+    nearby = [o for o in others if abs(o.goes_out_at - goes_out_at) < SPACING]
+    if nearby:
+        nearest = min(nearby, key=lambda o: abs(o.goes_out_at - goes_out_at))
+        warnings.append(
+            ReachWarning(
+                "nearby_post",
+                None,
+                f"Your other post {_goes_out(nearest)} on {_when(nearest.goes_out_at, zone)}, "
+                "less than 2 hours away, so the two split each other's reach. Pick a time 2 "
+                "hours from your other post.",
+            )
+        )
+    day = goes_out_at.astimezone(zone).date()
+    same_day = [o for o in others if o.same_brief and o.goes_out_at.astimezone(zone).date() == day]
+    if same_day:
+        first = min(same_day, key=lambda o: o.goes_out_at)
+        warnings.append(
+            ReachWarning(
+                "same_brief_same_day",
+                None,
+                f"Another idea from this brief {_goes_out(first)} the same day, "
+                f"{_day(first.goes_out_at, zone)}, so the two compete for the same readers.",
+            )
+        )
+    return warnings
+
+
+def _goes_out(other: OtherScheduledPost) -> str:
+    return "went out" if other.published else "goes out"
+
+
+def _day(moment: datetime, zone: ZoneInfo) -> str:
+    local = moment.astimezone(zone)
+    return f"{local:%a} {local.day} {local:%b}"
+
+
+def _when(moment: datetime, zone: ZoneInfo) -> str:
+    local = moment.astimezone(zone)
+    return f"{_day(moment, zone)} at {local:%H:%M %Z}"
 
 
 def _subject(number: int, count: int, *, first_reply: bool) -> str:

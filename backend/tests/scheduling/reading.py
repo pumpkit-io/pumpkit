@@ -5,6 +5,7 @@ the same way through `list_posts` and `get_post`.
 """
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from httpx import AsyncClient
 
@@ -49,7 +50,7 @@ async def scheduled_posts_through_the_mediator(
     for status in STATUSES:
         listed = await mediator.list_posts(db, user, status=status, limit=50, offset=0, now=now)
         for item in listed.data:
-            post = await mediator.get_post(db, user, post_id=item.id, now=now)
+            post = await mediator.get_post(db, user, post_id=item.id, now=now, zone=ZoneInfo("UTC"))
             assert post.scheduled_post is not None
             found.append(post.scheduled_post)
     return found

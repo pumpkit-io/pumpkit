@@ -25,7 +25,7 @@ from pumpkit.posts.media_fetcher import get_media_url_fetcher
 from pumpkit.posts.media_upload_links import LIFETIME as UPLOAD_LINK_LIFETIME
 from pumpkit.posts.schemas import WRITE_RATE as VERSION_WRITE_RATE
 from pumpkit.posts.schemas import TextResponse
-from pumpkit.scheduling import mediator
+from pumpkit.scheduling import mediator, reach_warnings
 from pumpkit.scheduling.models import FAILED, PUBLISHED
 from pumpkit.scheduling.post_status import PostStatus
 from pumpkit.scheduling.publish import RETRY_WINDOW
@@ -74,6 +74,7 @@ async def _create_scheduled_post(
     publish_at: Optional[str],
     community: Optional[str],
     share_with_followers: bool,
+    time_zone: Optional[str],
 ) -> ScheduledPostToolResponse:
     """A new Scheduled post, its arguments checked by the create route's request schema."""
     create_request = ScheduledPostCreateRequest.model_validate(
@@ -100,6 +101,7 @@ async def _create_scheduled_post(
         user=call.user,
         new=new,
         clock=await call.provide(get_clock),
+        zone=reach_warnings.time_zone(time_zone),
     )
     return _tool_response(scheduled_post)
 
@@ -110,6 +112,7 @@ async def schedule_post(
     publish_at: str,
     community: Optional[str] = None,
     share_with_followers: bool = False,
+    time_zone: Optional[str] = None,
 ) -> ScheduledPostToolResponse:
     """
     Schedule the post's text on the user's connected X account for `publish_at`, an ISO 8601
@@ -120,6 +123,9 @@ async def schedule_post(
     to the community whose URL or ID is in `community`. In a community, `share_with_followers`
     also shows it to the user's followers. `reach_warnings` lists what in the scheduled text may
     lead X to show it to fewer people, each with its `part` and a `message` to tell the user.
+    It also warns when another of the user's posts goes or went out less than 2 hours from it,
+    and when another post of its brief goes out the same day in `time_zone`, the user's IANA time
+    zone such as "Europe/Rome", or UTC without one.
     """
     return await _create_scheduled_post(
         call,
@@ -127,6 +133,7 @@ async def schedule_post(
         publish_at=publish_at,
         community=community,
         share_with_followers=share_with_followers,
+        time_zone=time_zone,
     )
 
 
@@ -151,6 +158,7 @@ async def post_now(
     post_id: str,
     community: Optional[str] = None,
     share_with_followers: bool = False,
+    time_zone: Optional[str] = None,
 ) -> PostNowToolResponse:
     """
     Publish the post's text on the user's connected X account right away. Show the user the
@@ -162,7 +170,9 @@ async def post_now(
     A post with a GIF or a video comes back scheduled before its media is uploaded: Pumpkit then
     uploads it and waits while X processes it, up to an hour for a video, and `get_post` shows
     when it's published. `reach_warnings` lists what in the text may lead X to show it to fewer
-    people, each with its `part` and a `message` to tell the user.
+    people, each with its `part` and a `message` to tell the user. It also warns when another of the user's posts goes or went out less than 2 hours from it,
+    and when another post of its brief goes out the same day in `time_zone`, the user's IANA time
+    zone such as "Europe/Rome", or UTC without one.
     """
     posted = await _create_scheduled_post(
         call,
@@ -170,6 +180,7 @@ async def post_now(
         publish_at=None,
         community=community,
         share_with_followers=share_with_followers,
+        time_zone=time_zone,
     )
     return PostNowToolResponse(**posted.model_dump(), message=_post_now_message(posted))
 
@@ -201,6 +212,7 @@ async def edit_scheduled_post(
     community: Optional[str] = None,
     to_profile: bool = False,
     share_with_followers: Optional[bool] = None,
+    time_zone: Optional[str] = None,
 ) -> ScheduledPostToolResponse:
     """
     Change a waiting or failed scheduled post: its text, as `parts` listing every part in
@@ -213,7 +225,9 @@ async def edit_scheduled_post(
     live one. While a part that isn't on X yet has media, `parts` must keep the same number of
     parts: to add or remove one, change the post's text and use `copy_text`. `reach_warnings`
     lists what in the edited text may lead X to show it to fewer people, each with its `part`
-    and a `message` to tell the user.
+    and a `message` to tell the user. It also warns when another of the user's posts goes or went out less than 2 hours from it,
+    and when another post of its brief goes out the same day in `time_zone`, the user's IANA time
+    zone such as "Europe/Rome", or UTC without one.
     """
     update_request = ScheduledPostUpdateRequest.model_validate(
         {
@@ -239,6 +253,7 @@ async def edit_scheduled_post(
         scheduled_post_id=scheduled_post_id,
         edit=edit,
         clock=await call.provide(get_clock),
+        zone=reach_warnings.time_zone(time_zone),
     )
     return _tool_response(scheduled_post)
 
@@ -304,7 +319,9 @@ async def list_posts(
     )
 
 
-async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
+async def get_post(
+    call: ToolCall[User], post_id: str, time_zone: Optional[str] = None
+) -> PostDetailResponse:
     """
     Read one of the user's posts: its brief, its text (the text meant for X, with `version_number`,
     the version it came from, and `edited`, whether the user changed it by hand since) and every
@@ -322,10 +339,19 @@ async def get_post(call: ToolCall[User], post_id: str) -> PostDetailResponse:
     can be scheduled. `reach_warnings` lists what may lead X to show the post to fewer people, in
     the scheduled post's own text while it waits or once published, else in the text: each with a
     `code`, the `part` it is in, counted from 1, and a `message` to tell the user. They never stop
-    scheduling. `one_idea_a_day` is the latest time another post of its brief goes or went out,
-    or null: schedule this one for the day after, at the same time of day.
+    scheduling. A scheduled post's warnings also say when another of the user's posts goes or went
+    out less than 2 hours from it, with `part` null, and when another post of its brief goes out
+    the same day in `time_zone`, the user's IANA time zone such as "Europe/Rome", or UTC without
+    one. `one_idea_a_day` is the latest time another post of its brief goes or went out, or null:
+    schedule this one for the day after, at the same time of day.
     """
-    return await mediator.get_post(db=call.db, user=call.user, post_id=post_id, now=call.now)
+    return await mediator.get_post(
+        db=call.db,
+        user=call.user,
+        post_id=post_id,
+        now=call.now,
+        zone=reach_warnings.time_zone(time_zone),
+    )
 
 
 async def give_feedback(
