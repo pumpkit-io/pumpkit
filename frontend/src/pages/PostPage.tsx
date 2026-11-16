@@ -128,6 +128,7 @@ function DraftPostTo({
   const sender = useCreateFromText(postId);
   return (
     <PostToButton
+      postId={postId}
       format={format}
       parts={parts}
       sender={sender}
@@ -369,6 +370,7 @@ function LoadedPost({
     );
     postTo = (
       <FailedPostTo
+        postId={post.id}
         scheduledPost={scheduledPost}
         oneIdeaADay={post.oneIdeaADay}
         textVersion={textVersion}

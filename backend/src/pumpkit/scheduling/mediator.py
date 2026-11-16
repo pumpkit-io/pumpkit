@@ -90,8 +90,10 @@ from pumpkit.scheduling.schemas import (
     PostListItemResponse,
     PostsPageResponse,
     ReachWarningResponse,
+    ReachWarningsResponse,
     ScheduledPostPartResponse,
     ScheduledPostResponse,
+    ScheduledPostSavedResponse,
     ScheduledPostSummaryResponse,
     TopUpUsageResponse,
     UploadedMediaResponse,
@@ -164,6 +166,17 @@ def scheduled_post_response(
         share_with_followers=scheduled_post.share_with_followers,
         created_at=as_utc(scheduled_post.created_at),
         posting=_posting(scheduled_post, now=now),
+    )
+
+
+def saved_response(scheduled_post: ScheduledPost, *, now: datetime) -> ScheduledPostSavedResponse:
+    """The Scheduled post with the Reach warnings for its own text, as created or edited."""
+    warnings = reach_warnings.text_warnings(
+        [part.text for part in scheduled_post.parts], first_reply=scheduled_post.first_reply
+    )
+    return ScheduledPostSavedResponse(
+        **scheduled_post_response(scheduled_post, now=now).model_dump(),
+        reach_warnings=_warning_responses(warnings),
     )
 
 
@@ -340,7 +353,7 @@ async def create_scheduled_post(
     new: NewScheduledPost,
     clock: Clock,
     photo_fetcher: Optional[PhotoFetcher] = None,
-) -> ScheduledPostResponse:
+) -> ScheduledPostSavedResponse:
     """
     With `publish_now`, published within the request: Published, Failed, or back in scheduled.
     With a GIF or a video it comes back scheduled and `posting`, due now, for the publisher.
@@ -404,7 +417,7 @@ async def create_scheduled_post(
             photo_fetcher=photo_fetcher,
         )
     await db.commit()
-    return scheduled_post_response(scheduled_post, now=now)
+    return saved_response(scheduled_post, now=now)
 
 
 async def _check_media(
@@ -477,7 +490,7 @@ async def _post_now(
     now: datetime,
     clock: Clock,
     photo_fetcher: Optional[PhotoFetcher] = None,
-) -> ScheduledPostResponse:
+) -> ScheduledPostSavedResponse:
     # No commit here: publishing commits the new row along with its claim.
     await publish_scheduled_post(
         db,
@@ -489,7 +502,7 @@ async def _post_now(
         photo_fetcher=photo_fetcher,
     )
     published = await service.get_existing(db, scheduled_post_id=scheduled_post_id)
-    return scheduled_post_response(published, now=clock())
+    return saved_response(published, now=clock())
 
 
 async def _owned(db: AsyncSession, *, user: User, scheduled_post_id: str) -> ScheduledPost:
@@ -513,7 +526,7 @@ async def edit_scheduled_post(
     edit: ScheduledPostEdit,
     clock: Clock,
     photo_fetcher: Optional[PhotoFetcher] = None,
-) -> ScheduledPostResponse:
+) -> ScheduledPostSavedResponse:
     """
     New Parts or the Post's Text, time, Community or share with followers for a scheduled or Failed
     Scheduled post. A new time, or publish now, reschedules it on the X account connected now,
@@ -631,9 +644,7 @@ async def edit_scheduled_post(
             photo_fetcher=photo_fetcher,
         )
     await db.commit()
-    return scheduled_post_response(
-        await _owned(db, user=user, scheduled_post_id=scheduled_post_id), now=now
-    )
+    return saved_response(await _owned(db, user=user, scheduled_post_id=scheduled_post_id), now=now)
 
 
 async def _destination_after_edit(
@@ -770,7 +781,7 @@ async def get_post(
         failed_feedback=version_writing.failed_feedback_response(post, now=now),
         status=post_status(scheduled_post.state if scheduled_post else None) if written else None,
         scheduled_post=scheduled_post_response(scheduled_post, now=now) if scheduled_post else None,
-        reach_warnings=_reach_warnings(post, scheduled_post),
+        reach_warnings=_warning_responses(reach_warnings.post_warnings(post, scheduled_post)),
         one_idea_a_day=await _one_idea_a_day(db, brief_id=post.idea.brief_id, post_id=post.id),
     )
 
@@ -782,13 +793,22 @@ async def _one_idea_a_day(db: AsyncSession, *, brief_id: str, post_id: str) -> O
     return as_utc(latest) if latest else None
 
 
-def _reach_warnings(
-    post: Post, scheduled_post: Optional[ScheduledPost]
-) -> list[ReachWarningResponse]:
-    return [
-        ReachWarningResponse(code=w.code, part=w.part, message=w.message)
-        for w in reach_warnings.post_warnings(post, scheduled_post)
-    ]
+def _warning_responses(warnings: list[reach_warnings.ReachWarning]) -> list[ReachWarningResponse]:
+    return [ReachWarningResponse(code=w.code, part=w.part, message=w.message) for w in warnings]
+
+
+async def get_reach_warnings(
+    db: AsyncSession, user: User, post_id: str, *, publish_at: Optional[datetime], now: datetime
+) -> ReachWarningsResponse:
+    """
+    Every Reach warning for the Post's Text were it to go out at `publish_at`, or `now` for Post
+    now, as "Post to…" shows them while the User picks a time.
+    """
+    post = await version_writing.user_post(db, user=user, post_id=post_id)
+    warnings = reach_warnings.text_warnings(
+        list(post.text_parts or []), first_reply=post.text_first_reply
+    )
+    return ReachWarningsResponse(reach_warnings=_warning_responses(warnings))
 
 
 def _scheduled_post_summary(

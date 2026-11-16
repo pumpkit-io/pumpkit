@@ -18,7 +18,7 @@ from pumpkit.x_connection.x_publisher import (
 )
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import start_thread, started_post_id
-from tests.scheduling.reading import scheduled_posts
+from tests.scheduling.reading import as_read, scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 X_CONNECTION = "/api/v1/x-connection"
@@ -63,7 +63,7 @@ async def test_post_now_publishes_the_text_and_lists_it_as_published(
     assert fake_x_publisher.refreshes == []
     assert fake_x_publisher.published == [("access-1001-1", "Shipping the new onboarding today.")]
     listed = await scheduled_posts(client)
-    assert listed == [body]
+    assert listed == [as_read(body)]
 
 
 async def test_post_now_uses_a_fresh_access_token_without_refreshing_it(
@@ -219,7 +219,7 @@ async def test_a_post_x_refuses_fails_with_x_s_own_words(
         "X refused the post: You are not allowed to create a Tweet with duplicate content."
     )
     assert body["x_post_url"] is None and body["published_at"] is None
-    assert (await scheduled_posts(client)) == [body]
+    assert (await scheduled_posts(client)) == [as_read(body)]
 
 
 async def test_a_post_whose_outcome_is_unknown_fails_telling_the_user_to_check_x(
@@ -415,7 +415,7 @@ async def test_a_post_scheduled_for_later_is_listed_as_upcoming_and_not_publishe
     assert body["publish_at"] == "2026-10-10T14:00:00Z"
     assert body["published_at"] is None and body["x_post_url"] is None
     assert fake_x_publisher.published == []
-    assert (await scheduled_posts(client)) == [body]
+    assert (await scheduled_posts(client)) == [as_read(body)]
 
 
 async def test_a_publish_time_in_the_browser_s_timezone_is_stored_in_utc(
@@ -509,7 +509,7 @@ async def test_scheduling_a_post_records_its_text_and_time(
     assert body["publish_at"] == "2026-10-10T14:00:00Z"
     assert body["post_id"] == post["id"]
     assert "source_version_id" not in body
-    assert (await scheduled_posts(client)) == [body]
+    assert (await scheduled_posts(client)) == [as_read(body)]
 
 
 async def test_scheduling_a_post_copies_its_text_from_the_latest_feedback(
@@ -740,7 +740,7 @@ async def test_a_thread_scheduled_keeps_its_parts_in_order_with_none_live(
         {"text": "The first Part.", "live": False, "x_post_url": None, "media": []},
         {"text": "The second Part.", "live": False, "x_post_url": None, "media": []},
     ]
-    assert (await scheduled_posts(client)) == [response.json()]
+    assert (await scheduled_posts(client)) == [as_read(response.json())]
 
 
 async def test_post_now_makes_its_one_part_live_with_its_link_on_x(

@@ -8,7 +8,7 @@ from httpx import AsyncClient
 import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import XPostRejectedError
-from tests.scheduling.reading import scheduled_posts
+from tests.scheduling.reading import as_read, scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 PUBLISHING_STARTED = "Publishing has started, so this scheduled post can no longer change."
@@ -61,7 +61,7 @@ async def test_a_scheduled_post_moves_from_the_profile_into_a_community(
         "community": {"id": COMMUNITY_ID, "name": "Indie makers", "url": COMMUNITY_URL},
         "share_with_followers": True,
     }
-    assert await _listed(client) == [edited]
+    assert await _listed(client) == [as_read(edited)]
 
 
 async def test_clearing_the_community_moves_it_back_to_the_profile_without_sharing(
@@ -123,7 +123,7 @@ async def test_an_edit_needs_something_to_change(
     response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json=change)
 
     assert response.status_code == 422
-    assert await _listed(client) == [scheduled]
+    assert await _listed(client) == [as_read(scheduled)]
 
 
 async def test_a_failed_post_moves_into_a_community_and_is_rescheduled_there(
@@ -183,7 +183,7 @@ async def test_a_failed_post_s_community_changes_without_rescheduling_it(
 
     assert response.status_code == 200, response.text
     assert failed["state"] == "failed"
-    assert response.json() == {**failed, "community": None}
+    assert as_read(response.json()) == {**failed, "community": None}
 
 
 async def test_a_publishing_scheduled_post_s_community_cannot_change(
@@ -229,4 +229,4 @@ async def test_a_published_scheduled_post_s_community_cannot_change(
 
     assert response.status_code == 409
     assert response.json()["detail"] == PUBLISHING_STARTED
-    assert await _listed(client) == [published]
+    assert await _listed(client) == [as_read(published)]

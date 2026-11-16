@@ -20,7 +20,7 @@ from pumpkit.x_connection.x_publisher import (
 from tests.mcp_client import error_text
 from tests.positioning.positioning import save_positioning
 from tests.posts.writing_replies import start_thread, started_post_id
-from tests.scheduling.reading import scheduled_posts_through_mcp
+from tests.scheduling.reading import as_read, scheduled_posts_through_mcp
 
 POSTS_PAGE = "http://localhost:5173/posts"
 SETTINGS_PAGE = "http://localhost:5173/settings"
@@ -58,7 +58,7 @@ async def test_scheduling_a_post_answers_with_the_scheduled_page_link(
     assert scheduled["community"] is None
     assert scheduled["post_url"] == f"{POSTS_PAGE}/{scheduled['post_id']}"
     assert await scheduled_posts_through_mcp(mcp) == [
-        {key: value for key, value in scheduled.items() if key != "post_url"}
+        as_read({key: value for key, value in scheduled.items() if key != "post_url"})
     ]
 
 

@@ -9,6 +9,29 @@ function Icon() {
   return <TriangleAlert aria-hidden className="mt-px h-3.5 w-3.5 shrink-0 text-warning" />;
 }
 
+function Lines({ warnings, id }: { warnings: ReachWarning[]; id?: string }) {
+  return (
+    <ul id={id} className="space-y-1">
+      {warnings.map((warning) => (
+        <li key={`${warning.code}-${warning.part ?? ''}`} className={LINE}>
+          <Icon />
+          <span>{warning.message}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** Every Reach warning in full, one line each, as "Post to…" lists them; nothing for none. */
+export function ReachWarningList({ warnings }: { warnings: ReachWarning[] }) {
+  if (warnings.length === 0) return null;
+  return (
+    <div role="group" aria-label="Reach warnings">
+      <Lines warnings={warnings} />
+    </div>
+  );
+}
+
 /**
  * The Reach warnings under a dock: one as its line, several folded into "N reach warnings",
  * nothing for none. They never stop the User.
@@ -48,16 +71,7 @@ export function ReachWarnings({ warnings }: { warnings: ReachWarning[] }) {
           )}
         />
       </button>
-      {open && (
-        <ul id={listId} className="space-y-1">
-          {warnings.map((warning) => (
-            <li key={`${warning.code}-${warning.part ?? ''}`} className={LINE}>
-              <Icon />
-              <span>{warning.message}</span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {open && <Lines warnings={warnings} id={listId} />}
     </div>
   );
 }

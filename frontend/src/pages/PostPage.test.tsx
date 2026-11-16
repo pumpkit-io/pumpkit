@@ -51,6 +51,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     saveText: vi.fn(),
     discard: vi.fn(),
     reachWarnings: vi.fn(),
+    reachWarningsAt: vi.fn(),
   },
 }));
 vi.mock('@/services/briefService', async (importOriginal) => ({
@@ -317,6 +318,7 @@ describe('Post page', () => {
     vi.mocked(postService.dismissFailedFeedback).mockReset().mockResolvedValue();
     vi.mocked(postService.restoreVersion).mockReset();
     vi.mocked(postService.reachWarnings).mockReset().mockResolvedValue([]);
+    vi.mocked(postService.reachWarningsAt).mockReset().mockResolvedValue([]);
     vi.mocked(postService.list).mockReset().mockResolvedValue(NO_POSTS);
     vi.mocked(xConnectionService.get).mockReset().mockResolvedValue(CONNECTED);
     vi.mocked(usageService.get).mockReset().mockResolvedValue({ allowance: null });
@@ -5180,6 +5182,93 @@ describe('Post page', () => {
         await dialog.findByText('Pick a time at least a minute from now.'),
       ).toBeInTheDocument();
       expect(dialog.getByRole('button', { name: /^Schedule for/ })).toBeEnabled();
+    });
+
+    describe('Reach warnings', () => {
+      const SHARE: ReachWarning = {
+        code: 'share_ask',
+        part: 1,
+        message:
+          "This post asks readers to share it, and X hides posts that ask for shares from people who don't follow you.",
+      };
+      const HASHTAGS: ReachWarning = {
+        code: 'many_hashtags',
+        part: 1,
+        message:
+          'This post has two or more hashtags, and X may treat that as hashtag abuse and show it to fewer people.',
+      };
+
+      it('lists every warning in full under the When field and above the allowance line', async () => {
+        vi.mocked(postService.reachWarningsAt).mockResolvedValue([SHARE, HASHTAGS]);
+        vi.mocked(usageService.get).mockResolvedValue(
+          usageWith({ xPosts: { limit: 100, used: 95, left: 5 } }),
+        );
+        const dialog = await openPostTo(postWith('Share this. #a #b'));
+
+        const warnings = within(await dialog.findByRole('group', { name: 'Reach warnings' }));
+        const share = warnings.getByText(SHARE.message);
+        expect(warnings.getByText(HASHTAGS.message)).toBeInTheDocument();
+        expect(warnings.queryByRole('button')).not.toBeInTheDocument();
+        expect(postService.reachWarningsAt).toHaveBeenCalledWith('post_01', null);
+        const when = dialog.getByRole('radio', { name: 'Now' });
+        const allowance = await dialog.findByText('5 X posts left until 14 November');
+        expect(when.compareDocumentPosition(share)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+        expect(share.compareDocumentPosition(allowance)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+      });
+
+      it('reads them again for the time picked, keeping the last list until the new one comes', async () => {
+        let answer: (warnings: ReachWarning[]) => void = () => {};
+        vi.mocked(postService.reachWarningsAt)
+          .mockResolvedValueOnce([SHARE])
+          .mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+        const dialog = await openPostTo(postWith('Share this. #a #b'));
+        expect(await dialog.findByText(SHARE.message)).toBeInTheDocument();
+
+        scheduleAt(dialog, '2026-10-12', '09:00');
+
+        await vi.waitFor(() =>
+          expect(postService.reachWarningsAt).toHaveBeenLastCalledWith(
+            'post_01',
+            '2026-10-12T07:00:00.000Z',
+          ),
+        );
+        expect(dialog.getByText(SHARE.message)).toBeInTheDocument();
+        act(() => answer([HASHTAGS]));
+        expect(await dialog.findByText(HASHTAGS.message)).toBeInTheDocument();
+        expect(dialog.queryByText(SHARE.message)).not.toBeInTheDocument();
+      });
+
+      it('shows nothing when the read fails, and the dialog still schedules', async () => {
+        vi.mocked(postService.reachWarningsAt).mockRejectedValue(apiError(500, 'Boom.'));
+        vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
+        const dialog = await openPostTo();
+        await vi.waitFor(() => expect(postService.reachWarningsAt).toHaveBeenCalled());
+
+        scheduleAt(dialog, '2026-10-12', '09:00');
+        expect(dialog.queryByRole('group', { name: 'Reach warnings' })).not.toBeInTheDocument();
+        expect(dialog.queryByText('Boom.')).not.toBeInTheDocument();
+        fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
+
+        await dialogClosed();
+        expect(scheduledPostService.schedule).toHaveBeenCalled();
+      });
+
+      it('schedules with warnings showing, asking nothing more', async () => {
+        vi.mocked(postService.reachWarningsAt).mockResolvedValue([SHARE]);
+        vi.mocked(scheduledPostService.schedule).mockResolvedValue(SCHEDULED);
+        const dialog = await openPostTo(postWith('Share this with a founder.'));
+
+        scheduleAt(dialog, '2026-10-12', '09:00');
+        expect(await dialog.findByText(SHARE.message)).toBeInTheDocument();
+        fireEvent.click(dialog.getByRole('button', { name: 'Schedule for Mon, Oct 12, 9:00 AM' }));
+
+        await dialogClosed();
+        expect(scheduledPostService.schedule).toHaveBeenCalledWith(
+          { postId: 'post_01' },
+          '2026-10-12T07:00:00.000Z',
+          { community: null, shareWithFollowers: false },
+        );
+      });
     });
 
     describe('one idea a day', () => {

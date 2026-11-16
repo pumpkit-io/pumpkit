@@ -86,6 +86,16 @@ async def test_the_instructions_schedule_split_ideas_from_one_brief_one_a_day(su
     assert "`one_idea_a_day`" in instructions
 
 
+async def test_the_instructions_and_scheduling_tools_relay_reach_warnings(subscribed, mcp):
+    instructions = (await mcp.initialize())["instructions"]
+    tools = await mcp.list_tools()
+
+    assert "`reach_warnings`" in instructions
+    assert "Tell the user each warning's `message`" in instructions
+    for name in ("get_post", "schedule_post", "post_now", "edit_scheduled_post"):
+        assert "`reach_warnings`" in tools[name]["description"], name
+
+
 async def test_no_instruction_or_tool_description_says_final(subscribed, mcp):
     instructions = (await mcp.initialize())["instructions"]
     tools = await mcp.list_tools()

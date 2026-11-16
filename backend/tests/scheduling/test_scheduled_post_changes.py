@@ -9,7 +9,7 @@ import pumpkit.scheduling.service as scheduled_posts_service
 from pumpkit.core.config import settings
 from pumpkit.scheduling.publisher import run_pass
 from pumpkit.x_connection.x_publisher import XAccount, XPostRejectedError, XRateLimitedError
-from tests.scheduling.reading import scheduled_posts
+from tests.scheduling.reading import as_read, scheduled_posts
 
 SCHEDULED_POSTS = "/api/v1/scheduled-posts"
 PUBLISHING_STARTED = "Publishing has started, so this scheduled post can no longer change."
@@ -49,7 +49,7 @@ async def test_editing_the_text_of_a_scheduled_post_saves_it(
         **scheduled,
         "parts": [{"text": "Launch day.", "live": False, "x_post_url": None, "media": []}],
     }
-    assert await _listed(client) == [edited]
+    assert await _listed(client) == [as_read(edited)]
 
 
 async def test_editing_the_parts_of_a_scheduled_post_replaces_them_all_in_order(
@@ -69,7 +69,7 @@ async def test_editing_the_parts_of_a_scheduled_post_replaces_them_all_in_order(
     assert shortened.json()["parts"] == [
         {"text": "Back to one.", "live": False, "x_post_url": None, "media": []}
     ]
-    assert await _listed(client) == [shortened.json()]
+    assert await _listed(client) == [as_read(shortened.json())]
 
 
 async def _failed_after_part_one(
@@ -112,7 +112,7 @@ async def test_a_live_part_of_a_failed_thread_cannot_change(
 
     assert response.status_code == 409
     assert response.json()["detail"] == LIVE_PART_LOCKED
-    assert await _listed(client) == [failed]
+    assert await _listed(client) == [as_read(failed)]
 
 
 async def test_a_failed_thread_cannot_be_cut_down_to_its_live_parts(
@@ -128,7 +128,7 @@ async def test_a_failed_thread_cannot_be_cut_down_to_its_live_parts(
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Keep at least one part after the ones already on X."
-    assert await _listed(client) == [failed]
+    assert await _listed(client) == [as_read(failed)]
 
 
 async def test_the_parts_after_the_live_ones_can_be_edited_added_removed_and_reordered(
@@ -152,7 +152,7 @@ async def test_the_parts_after_the_live_ones_can_be_edited_added_removed_and_reo
         {"text": "New five.", "live": False, "x_post_url": None, "media": []},
     ]
     assert failed["parts"][0]["live"] is True
-    assert await _listed(client) == [response.json()]
+    assert await _listed(client) == [as_read(response.json())]
 
 
 async def test_rescheduling_a_thread_failed_partway_publishes_only_the_parts_not_live(
@@ -231,7 +231,7 @@ async def test_an_edited_part_over_the_limit_is_refused_naming_the_part(
     assert response.json()["detail"] == (
         "Part 3 is 281 characters by X's count, over the 280 limit."
     )
-    assert await _listed(client) == [scheduled]
+    assert await _listed(client) == [as_read(scheduled)]
 
 
 async def test_moving_a_scheduled_post_saves_the_new_time_in_utc_and_lists_it_in_order(
@@ -263,7 +263,7 @@ async def test_an_edit_needs_a_text_or_a_publish_time_with_a_timezone(
     response = await client.patch(f"{SCHEDULED_POSTS}/{scheduled['id']}", json=change)
 
     assert response.status_code == 422
-    assert await _listed(client) == [scheduled]
+    assert await _listed(client) == [as_read(scheduled)]
 
 
 async def test_a_publishing_scheduled_post_cannot_be_edited(
@@ -309,7 +309,7 @@ async def test_a_published_scheduled_post_cannot_be_edited(
 
     assert response.status_code == 409
     assert response.json()["detail"] == PUBLISHING_STARTED
-    assert await _listed(client) == [published]
+    assert await _listed(client) == [as_read(published)]
 
 
 async def test_rescheduling_a_failed_post_sends_it_to_the_x_account_connected_now(
@@ -393,7 +393,7 @@ async def test_cancelling_a_scheduled_post_removes_it(
     response = await client.delete(f"{SCHEDULED_POSTS}/{cancelled['id']}")
 
     assert response.status_code == 204
-    assert await _listed(client) == [kept]
+    assert await _listed(client) == [as_read(kept)]
     fixed_clock.advance(timedelta(minutes=5))
     await run_pass(db_session_maker, fake_x_publisher, file_storage, fixed_clock)
     assert [text for _, text in fake_x_publisher.published] == ["Kept"]

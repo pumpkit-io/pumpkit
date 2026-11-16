@@ -144,6 +144,7 @@ function CardPostTo({
   }));
   return (
     <PostToButton
+      postId={post.id}
       quiet
       format={text.format}
       parts={parts}

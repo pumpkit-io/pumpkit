@@ -53,6 +53,7 @@ export function FailedDock({
 
 /** "Post to…" on a Failed Post, which retries its one Scheduled post with the Text on screen. */
 export function FailedPostTo({
+  postId,
   scheduledPost,
   oneIdeaADay,
   textVersion,
@@ -62,6 +63,7 @@ export function FailedPostTo({
   prepare,
   onRetried,
 }: {
+  postId: string;
   scheduledPost: ScheduledPost;
   oneIdeaADay: string | null;
   textVersion: Version;
@@ -76,6 +78,7 @@ export function FailedPostTo({
   const sender = useRetryFailed(scheduledPost);
   return (
     <PostToButton
+      postId={postId}
       format={textVersion.format}
       parts={retryParts}
       sender={sender}

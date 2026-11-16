@@ -57,6 +57,7 @@ vi.mock('@/services/postService', async (importOriginal) => ({
     addVersion: vi.fn(),
     retry: vi.fn(),
     discard: vi.fn(),
+    reachWarningsAt: vi.fn().mockResolvedValue([]),
   },
 }));
 vi.mock('@/services/briefService', async (importOriginal) => ({

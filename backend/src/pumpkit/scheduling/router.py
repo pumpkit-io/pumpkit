@@ -36,8 +36,9 @@ from pumpkit.scheduling.schemas import (
     PostDetailResponse,
     PostsPageRequest,
     PostsPageResponse,
+    ReachWarningsResponse,
     ScheduledPostCreateRequest,
-    ScheduledPostResponse,
+    ScheduledPostSavedResponse,
     ScheduledPostUpdateRequest,
     TextEditRequest,
     UploadedMediaResponse,
@@ -135,7 +136,7 @@ async def list_past_communities(
 
 @router.post(
     "/scheduled-posts",
-    response_model=ScheduledPostResponse,
+    response_model=ScheduledPostSavedResponse,
     status_code=status.HTTP_201_CREATED,
 )
 @limiter.limit(WRITE_RATE)
@@ -149,7 +150,7 @@ async def create_scheduled_post(
     storage: FileStorage = Depends(get_file_storage),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
-) -> ScheduledPostResponse:
+) -> ScheduledPostSavedResponse:
     """
     With `publish_now`, publishes on X before answering: it comes back Published or Failed. With
     a GIF or a video it comes back scheduled and `posting`, due now, for the publisher.
@@ -184,7 +185,7 @@ def _destination_change(update_request: ScheduledPostUpdateRequest) -> Destinati
 
 @router.patch(
     "/scheduled-posts/{scheduled_post_id}",
-    response_model=ScheduledPostResponse,
+    response_model=ScheduledPostSavedResponse,
     status_code=status.HTTP_200_OK,
 )
 async def edit_scheduled_post(
@@ -197,7 +198,7 @@ async def edit_scheduled_post(
     storage: FileStorage = Depends(get_file_storage),
     reader: XReader = Depends(get_x_reader),
     clock: Clock = Depends(get_clock),
-) -> ScheduledPostResponse:
+) -> ScheduledPostSavedResponse:
     """With `publish_now`, publishes on X before answering, as creating one does."""
     edit = ScheduledPostEdit(
         parts=update_request.parts,
@@ -364,6 +365,24 @@ async def get_post(
     clock: Clock = Depends(get_clock),
 ) -> PostDetailResponse:
     return await mediator.get_post(db=db, user=current_user, post_id=post_id, now=clock())
+
+
+@posts_router.get(
+    "/posts/{post_id}/reach-warnings",
+    response_model=ReachWarningsResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def get_reach_warnings(
+    post_id: str,
+    publish_at: Annotated[Optional[datetime], Query()] = None,
+    current_user: User = Depends(require_subscribed_user),
+    db: AsyncSession = Depends(get_async_db),
+    clock: Clock = Depends(get_clock),
+) -> ReachWarningsResponse:
+    """The Text's Reach warnings were it to go out at `publish_at`, or now without one."""
+    return await mediator.get_reach_warnings(
+        db, user=current_user, post_id=post_id, publish_at=publish_at, now=clock()
+    )
 
 
 @posts_router.delete("/posts/{post_id}", status_code=status.HTTP_204_NO_CONTENT)
