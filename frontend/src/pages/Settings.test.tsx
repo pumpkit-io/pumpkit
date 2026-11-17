@@ -827,6 +827,70 @@ describe('Settings', () => {
       expect(await screen.findByRole('dialog', { name: 'Buy a top-up' })).toBeInTheDocument();
     });
 
+    it('keeps existing top-ups visible and disables buying while purchases are paused', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, topUp: TOP_UP });
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+        ...SUBSCRIBED,
+        purchasesAvailable: false,
+      });
+      vi.mocked(usageService.get).mockResolvedValue(
+        usageWith({
+          mayBuyTopUp: true,
+          topUps: [
+            {
+              generationsLeft: 250,
+              xPostsLeft: 50,
+              linkXPostsLeft: 5,
+              expiresAt: new Date('2027-10-03T08:00:00Z'),
+            },
+          ],
+        }),
+      );
+      renderSettings();
+
+      const usageCard = await card('Usage');
+      expect(await usageCard.findByRole('button', { name: 'Buy top-up, €10' })).toBeDisabled();
+      expect(
+        usageCard.getByText('Top-up purchases are temporarily unavailable. Try again later.'),
+      ).toBeVisible();
+      expect(
+        usageCard.getByText('Top-up: 250 generations and 50 X posts left, until 3 October 2027'),
+      ).toBeVisible();
+      expect(billingService.startTopUpCheckout).not.toHaveBeenCalled();
+    });
+
+    it('preserves the top-up offer and checked acceptance when a pause races payment', async () => {
+      vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, topUp: TOP_UP });
+      vi.mocked(usageService.get).mockResolvedValue(usageWith({ mayBuyTopUp: true }));
+      vi.mocked(billingService.startTopUpCheckout).mockRejectedValue(
+        apiError(503, 'Purchases are temporarily unavailable. Try again later.', {
+          code: 'BILLING_PURCHASES_PAUSED',
+        }),
+      );
+      renderSettings();
+      fireEvent.click(await screen.findByRole('button', { name: 'Buy top-up, €10' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Buy a top-up' });
+      for (const box of within(dialog).getAllByRole('checkbox')) fireEvent.click(box);
+      const pay = within(dialog).getByRole('button', { name: 'Pay €10' });
+      fireEvent.click(pay);
+
+      expect(
+        await within(dialog).findByText(
+          'Top-up purchases are temporarily unavailable. Try again later.',
+        ),
+      ).toBeVisible();
+      expect(
+        within(dialog).getByText(/^250 generations and 50 X posts, up to 5 with a link, for €10/),
+      ).toBeVisible();
+      for (const box of within(dialog).getAllByRole('checkbox')) expect(box).toBeChecked();
+      expect(pay).toBeDisabled();
+      fireEvent.click(pay);
+      expect(billingService.startTopUpCheckout).toHaveBeenCalledTimes(1);
+      expect(redirectTo).not.toHaveBeenCalled();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+      expect(screen.getByRole('button', { name: 'Buy top-up, €10' })).toBeDisabled();
+    });
+
     it('leaves a count with no limit out of a top-up and its offer', async () => {
       vi.mocked(billingService.fetchPlans).mockResolvedValue({
         ...CATALOG,

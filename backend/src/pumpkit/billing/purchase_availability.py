@@ -7,7 +7,7 @@ class PurchasesPausedError(RefusalError):
 
     def __init__(self) -> None:
         super().__init__(
-            "New subscriptions are temporarily unavailable. Try again later.",
+            "Purchases are temporarily unavailable. Try again later.",
             code="BILLING_PURCHASES_PAUSED",
         )
 
