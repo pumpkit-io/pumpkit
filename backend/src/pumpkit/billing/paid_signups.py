@@ -380,7 +380,7 @@ async def reconcile(
                 )
             if target < now + TRIAL_END_FLOOR + _CLOCK_MARGIN:
                 return refuse(operation, now=now, detail=_TOO_SOON)
-            if not purchase_availability.purchases_available():
+            if not purchase_availability.purchases_available(user):
                 operation.detail = "Purchases are temporarily unavailable. Check signup again later; your free access and agreed payment date stay unchanged."
                 return _cancellation_response(operation, cancel=cancel)
             checkout = await gateway.create_paid_signup_checkout(

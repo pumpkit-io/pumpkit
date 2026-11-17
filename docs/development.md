@@ -114,16 +114,33 @@ Checkout while paused; it preserves the original offer and payment date.
 
 All three purchase paths enforce the pause, but this flag alone does not drain calls already
 dispatched to Stripe or invalidate existing Checkout links. Production seller activation and
-general purchase reopening still require the controlled verification exception, Checkout drain
+general purchase reopening still require the controlled verification purchase, Checkout drain
 and final provider verification in #499 (see ADR 0033).
 The flag defaults to `false`; restart the configured app processes after changing it.
 
+`BILLING_VERIFICATION_USER_ID` optionally selects one existing X-linked User by their exact
+immutable Pumpkit User ID while purchases are paused. Their authenticated
+`GET /api/v1/users/me` response supplies that ID. This permits only that User's normal
+purchase journey; eligibility, current Terms, Trial and Free access rules still apply. Email,
+handle and administrator status never confer the exception. Deletion and recreation do not
+transfer it to the new account. Clear this setting before unpausing, then restart every
+Checkout-creating process. The default is no exception.
+
+
 Run `python -m pumpkit.billing.runtime_config` inside each affected installed process
 environment to read the billing runtime contract as redacted JSON. Schema 1 reports
-`purchase_pause.contract_version=1`, its three `supported_paths` and effective `paused`
+`purchase_pause.contract_version=2`, its three `supported_paths` and effective `paused`
 state, plus `billing_configured`, `top_up_configured` and `managed_payments` booleans.
 A missing optional Top-up offer reports `top_up_configured=false`; missing billing or invalid
-configuration exits nonzero. This command makes no database or provider writes. Readback
+configuration exits nonzero. The root `verification_user` object reports `selected`, `valid`
+and `fingerprint`. No selection is exactly `false`, `true`, `null`. A configured selection
+reads the database to validate the existing X-linked, unsuspended User; an invalid target or
+unavailable database exits nonzero without revealing the identity. The fingerprint is the
+lowercase SHA-256 hex digest of UTF-8 `pumpkit:billing-verification-user:v1:` followed by the
+exact User ID, so protected ops commands can compare selections across processes. Public
+billing responses expose only the caller's purchase availability. Contract 1 had no
+verification exception; consumers must validate the full versioned contract rather than
+assuming `paused=true` means nobody may purchase. This command makes no database or provider writes. Readback
 is configuration evidence, not proof of a completed Checkout drain; the ops procedure must
 also verify process recreation and every Checkout-creating service, including signup recovery.
 

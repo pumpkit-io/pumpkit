@@ -157,7 +157,7 @@ async def get_billing_me(
                 else None,
             )
         ),
-        purchases_available=purchase_availability.purchases_available(),
+        purchases_available=purchase_availability.purchases_available(user),
         subscribed=entitlement.subscribed,
         may_subscribe=offer.may_subscribe,
         trial_days=offer.trial_days,
@@ -297,7 +297,7 @@ async def create_checkout_session(
     start a Subscription. The User's row stays locked from the sync to the new Checkout, so
     concurrent Checkouts for one User run one at a time.
     """
-    purchase_availability.require_purchases_available()
+    purchase_availability.require_purchases_available(user)
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await coupon_operations.require_settled(db, user_id=user.id)
     if await service.get_free_access(db, user_id=user.id, now=clock()):
@@ -384,7 +384,7 @@ async def create_top_up_checkout(
 
     The normal webhook sync adds the pack only once paid.
     """
-    purchase_availability.require_purchases_available()
+    purchase_availability.require_purchases_available(user)
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await coupon_operations.require_settled(db, user_id=user.id)
     terms_apply = service.requires_terms_acceptance()
@@ -865,7 +865,7 @@ async def create_paid_signup(
     try:
         operation = await paid_signups.find(db, user_id=user.id, operation_id=request.operation_id)
     except NotFoundError:
-        purchase_availability.require_purchases_available()
+        purchase_availability.require_purchases_available(user)
         operation = await paid_signups.prepare(db, gateway, user=user, request=request, now=clock())
         # Accepted plan, date and paid consent must survive every subsequent provider write.
         await db.commit()

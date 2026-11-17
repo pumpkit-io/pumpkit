@@ -524,3 +524,41 @@ def test_purchase_pause_rejects_invalid_boolean(instance_env):
 def test_purchase_pause_requires_configured_billing(instance_env):
     with pytest.raises(ValidationError, match="BILLING_PURCHASES_PAUSED"):
         instance_env(BILLING_PURCHASES_PAUSED="true")
+
+
+def test_verification_user_defaults_to_none_and_accepts_one_exact_user_id(instance_env):
+    assert instance_env().BILLING_VERIFICATION_USER_ID is None
+    assert instance_env(BILLING_VERIFICATION_USER_ID="").BILLING_VERIFICATION_USER_ID is None
+    configured = instance_env(
+        **_STRIPE_ENV,
+        BILLING_PURCHASES_PAUSED="true",
+        BILLING_VERIFICATION_USER_ID="user_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    )
+    assert configured.BILLING_VERIFICATION_USER_ID == "user_01ARZ3NDEKTSV4RRFFQ69G5FAV"
+
+
+@pytest.mark.parametrize(
+    "selection",
+    [
+        "alice@example.com",
+        "@ada",
+        "user_1",
+        "user_81ARZ3NDEKTSV4RRFFQ69G5FAV",
+        "user_01arz3ndektsv4rrffq69g5fav",
+    ],
+)
+def test_verification_user_rejects_mutable_or_malformed_identity(instance_env, selection):
+    with pytest.raises(ValidationError, match="BILLING_VERIFICATION_USER_ID") as error:
+        instance_env(
+            **_STRIPE_ENV, BILLING_PURCHASES_PAUSED="true", BILLING_VERIFICATION_USER_ID=selection
+        )
+    assert selection not in str(error.value)
+
+
+@pytest.mark.parametrize("billing", [True, False])
+def test_verification_user_requires_a_configured_purchase_pause(instance_env, billing):
+    with pytest.raises(ValidationError, match="BILLING_VERIFICATION_USER_ID"):
+        instance_env(
+            **(_STRIPE_ENV if billing else {}),
+            BILLING_VERIFICATION_USER_ID="user_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+        )
