@@ -138,6 +138,7 @@ class Settings(BaseSettings):
     STRIPE_API_URL: Optional[str] = None
     # On, Stripe is the seller of every Checkout (Managed Payments); off, the Instance is.
     STRIPE_MANAGED_PAYMENTS: bool = False
+    BILLING_PURCHASES_PAUSED: bool = False
 
     # The Plans Pumpkit sells, as Stripe price lookup keys, in display order.
     # Nothing else can be listed or bought.
@@ -288,6 +289,12 @@ class Settings(BaseSettings):
                 f"STRIPE_MANAGED_PAYMENTS needs {ProviderGroup.STRIPE_BILLING}; "
                 f"missing: {', '.join(missing)}"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _purchase_pause_needs_stripe_billing(self) -> Self:
+        if self.BILLING_PURCHASES_PAUSED and not self.is_stripe_billing_configured():
+            raise ValueError("BILLING_PURCHASES_PAUSED needs configured Stripe billing")
         return self
 
     @model_validator(mode="after")

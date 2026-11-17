@@ -509,3 +509,18 @@ def test_production_still_accepts_live_billing_credentials(instance_env):
         }
     )
     assert s.is_stripe_billing_configured()
+
+
+def test_purchase_pause_defaults_off_and_accepts_a_boolean(instance_env):
+    assert instance_env().BILLING_PURCHASES_PAUSED is False
+    assert instance_env(**_STRIPE_ENV, BILLING_PURCHASES_PAUSED="true").BILLING_PURCHASES_PAUSED
+
+
+def test_purchase_pause_rejects_invalid_boolean(instance_env):
+    with pytest.raises(ValidationError, match="BILLING_PURCHASES_PAUSED"):
+        instance_env(**_STRIPE_ENV, BILLING_PURCHASES_PAUSED="sometimes")
+
+
+def test_purchase_pause_requires_configured_billing(instance_env):
+    with pytest.raises(ValidationError, match="BILLING_PURCHASES_PAUSED"):
+        instance_env(BILLING_PURCHASES_PAUSED="true")

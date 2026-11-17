@@ -14,6 +14,7 @@ from pumpkit.billing import (
     coupon_service,
     paid_signups,
     plan_changes,
+    purchase_availability,
     service,
 )
 from pumpkit.billing.allowance import (
@@ -156,6 +157,7 @@ async def get_billing_me(
                 else None,
             )
         ),
+        purchases_available=purchase_availability.purchases_available(),
         subscribed=entitlement.subscribed,
         may_subscribe=offer.may_subscribe,
         trial_days=offer.trial_days,
@@ -295,6 +297,7 @@ async def create_checkout_session(
     start a Subscription. The User's row stays locked from the sync to the new Checkout, so
     concurrent Checkouts for one User run one at a time.
     """
+    purchase_availability.require_purchases_available()
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await coupon_operations.require_settled(db, user_id=user.id)
     if await service.get_free_access(db, user_id=user.id, now=clock()):

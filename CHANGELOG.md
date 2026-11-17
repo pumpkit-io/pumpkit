@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Users see temporary unavailability on the Paywall when Self-hosters pause normal subscription purchases with `BILLING_PURCHASES_PAUSED`; existing billing and access continue. This first slice does not yet pause Top-ups or arranged paid signups.
+
 ## [0.15.0] - 2026-11-16
 
 - The English and Italian Terms (clause 19) and Privacy Policy no longer promise existing Users an email at least 30 days before a material change applies, and the Terms' opening no longer holds a version's material changes back until that notice. A changed version applies from the date the Operator states with it; a User can still cancel or end the contract before then. Earlier purchases still keep their original seller. **Upgrade notes:** Self-hosters who copied the Terms or the Privacy Policy should drop the same promise from their copies.

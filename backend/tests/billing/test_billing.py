@@ -450,7 +450,11 @@ async def test_a_gateway_failure_creating_the_customer_returns_502_and_saves_not
     assert user.stripe_customer_id is None
 
 
-async def test_the_portal_endpoint_returns_the_gateway_url(client, db, fake_billing, user):
+@pytest.mark.parametrize("purchase_paused", [False, True])
+async def test_the_portal_endpoint_returns_the_gateway_url(
+    client, db, fake_billing, user, monkeypatch, purchase_paused
+):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchase_paused)
     user.stripe_customer_id = "cus_existing"
     await db.commit()
     fake_billing.portal_url = "https://billing.test/portal/abc"
@@ -614,6 +618,7 @@ async def test_billing_me_for_a_user_with_no_subscription_offers_the_trial(
         "free_access": None,
         "subscription": None,
         "subscribed": False,
+        "purchases_available": True,
         "may_subscribe": True,
         "trial_days": 7,
     }
@@ -649,6 +654,7 @@ async def test_billing_me_reports_the_running_subscription_and_offers_nothing(
         "free_access": None,
         "subscription": _billing_subscription(status),
         "subscribed": subscribed,
+        "purchases_available": True,
         "may_subscribe": False,
         "trial_days": None,
     }
@@ -685,6 +691,7 @@ async def test_billing_me_reports_an_incomplete_subscription_and_offers_a_new_on
         "free_access": None,
         "subscription": _billing_subscription("incomplete"),
         "subscribed": False,
+        "purchases_available": True,
         "may_subscribe": True,
         "trial_days": None,
     }
@@ -713,6 +720,7 @@ async def test_billing_me_never_reports_an_ended_subscription(
         "free_access": None,
         "subscription": None,
         "subscribed": False,
+        "purchases_available": True,
         "may_subscribe": True,
         "trial_days": None,
     }
@@ -801,9 +809,20 @@ async def test_billing_routes_answer_404_where_no_plans_are_sold(
         ("incomplete_expired", False, None),
     ],
 )
+@pytest.mark.parametrize("purchase_paused", [False, True])
 async def test_billing_access_onboarding_and_usage_agree_for_each_subscription_status(
-    client, db, user, fake_billing, fixed_clock, monkeypatch, status, access, way_out
+    client,
+    db,
+    user,
+    fake_billing,
+    fixed_clock,
+    monkeypatch,
+    status,
+    access,
+    way_out,
+    purchase_paused,
 ):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchase_paused)
     monkeypatch.setattr(settings, "BILLING_TOP_UP_KEY", "top_up")
     await _hold(db, user, _subscription("sub_1", status))
 
@@ -883,3 +902,40 @@ async def test_access_ends_at_the_known_cancellation_even_before_the_provider_nu
 
     assert response.status_code == 200
     await assert_access(False)
+
+
+async def test_purchase_pause_refuses_checkout_without_provider_or_acceptance_side_effects(
+    client, db, fake_billing, user, monkeypatch
+):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True, raising=False)
+    response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
+    assert response.status_code == 503
+    assert response.json()["code"] == "BILLING_PURCHASES_PAUSED"
+    assert fake_billing.checkouts == []
+    assert fake_billing.customers_created == []
+    assert (await db.execute(select(TermsAcceptance))).scalars().all() == []
+    me = (await client.get(BILLING_ME)).json()
+    assert me["purchases_available"] is False
+    assert me["may_subscribe"] is True
+    assert me["trial_days"] == 7
+    assert me["subscribed"] is False
+    assert (await client.get(PLANS)).status_code == 200
+
+
+async def test_unpaused_billing_projects_available_purchases(client):
+    assert (await client.get(BILLING_ME)).json()["purchases_available"] is True
+
+
+async def test_cancellation_keeps_access_while_purchases_are_paused(
+    client, db, fake_billing, user, monkeypatch, fixed_clock
+):
+    await _with_customer(db, user)
+    fake_billing.set_subscription(CUSTOMER, _subscription("sub_1", "active"))
+    await _hold(db, user, _subscription("sub_1", "active"))
+    monkeypatch.setattr(settings, "COUPONS_ENABLED", True)
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+    response = await client.post("/api/v1/billing/cancel-renewal")
+    assert response.status_code == 200, response.text
+    assert response.json()["subscription"]["cancel_at"] is not None
+    assert response.json()["subscribed"] is True
+    assert response.json()["purchases_available"] is False
