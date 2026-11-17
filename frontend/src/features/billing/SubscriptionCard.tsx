@@ -67,7 +67,7 @@ export function SubscriptionCard({
   loadError: string | null;
   onRedeemed?: () => void;
 }) {
-  const { openPortal, error } = useOpenPortal();
+  const { openPortal, error, isOpeningPortal } = useOpenPortal();
   const { load } = useBilling();
   const [canceling, setCanceling] = useState(false);
   const [localPending, setLocalPending] = useState(false);
@@ -222,7 +222,8 @@ export function SubscriptionCard({
             {(!deferral || data.couponsEnabled) && (
               <Button
                 type="button"
-                disabled={billingBlocked}
+                disabled={billingBlocked || isOpeningPortal}
+                aria-busy={isOpeningPortal}
                 variant={paymentFailed ? 'default' : 'outline'}
                 className={cn(
                   'h-auto min-h-11 max-w-full shrink-0 whitespace-normal sm:ml-auto',
@@ -230,11 +231,13 @@ export function SubscriptionCard({
                 )}
                 onClick={() => void openPortal()}
               >
-                {paymentFailed
-                  ? 'Fix payment'
-                  : data.couponsEnabled
-                    ? 'Manage billing'
-                    : 'Manage subscription'}
+                {isOpeningPortal
+                  ? 'Opening billing…'
+                  : paymentFailed
+                    ? 'Fix payment'
+                    : data.couponsEnabled
+                      ? 'Manage billing'
+                      : 'Manage subscription'}
               </Button>
             )}
           </div>

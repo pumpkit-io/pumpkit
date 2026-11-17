@@ -561,13 +561,25 @@ describe('New post', () => {
           { way_out: 'update_payment' },
         ),
       );
-      vi.mocked(billingService.openBillingPortal).mockResolvedValue('https://billing.test/portal');
+      let resolvePortal!: (url: string) => void;
+      vi.mocked(billingService.openBillingPortal).mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolvePortal = resolve;
+          }),
+      );
       const area = await readyToWrite();
 
       await writeBrief(area, 'ship small things');
-      fireEvent.click(await area.findByRole('button', { name: 'Update your payment method' }));
-
+      const update = await area.findByRole('button', { name: 'Update your payment method' });
+      fireEvent.click(update);
+      expect(area.getByRole('button', { name: 'Opening billing…' })).toBeDisabled();
+      fireEvent.click(update);
+      await act(async () => {
+        resolvePortal('https://billing.test/portal');
+      });
       await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://billing.test/portal'));
+      expect(area.getByRole('button', { name: 'Update your payment method' })).toBeEnabled();
     });
 
     it('offers a paid-up User at the limit to buy a top-up, behind the Terms', async () => {

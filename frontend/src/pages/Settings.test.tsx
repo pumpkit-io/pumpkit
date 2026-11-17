@@ -483,6 +483,67 @@ describe('Settings', () => {
       },
     );
 
+    it('opens billing once across both payment actions, keeps confirmed data on failure and retries', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(holding('past_due', true));
+      vi.mocked(usageService.get).mockResolvedValue(usageWith({ wayOut: 'update_payment' }));
+      let rejectPortal!: (error: unknown) => void;
+      vi.mocked(billingService.openBillingPortal).mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            rejectPortal = reject;
+          }),
+      );
+      renderSettings();
+      const plan = await card('Plan');
+      const fix = await plan.findByRole('button', { name: 'Fix payment' });
+      const usage = await card('Usage');
+      const update = await usage.findByRole('button', {
+        name: 'Update your payment method to buy a top-up',
+      });
+      const loads = vi.mocked(billingService.fetchBillingMe).mock.calls.length;
+      act(() => {
+        fix.click();
+        update.click();
+        fix.click();
+      });
+      expect(billingService.openBillingPortal).toHaveBeenCalledTimes(1);
+      expect(plan.getByRole('button', { name: 'Opening billing…' })).toBeDisabled();
+      expect(usage.getByRole('button', { name: 'Opening billing…' })).toBeDisabled();
+      expect(plan.getByText('Past due')).toBeVisible();
+      await act(async () => {
+        rejectPortal(apiError(502, 'Stripe is down.'));
+      });
+      expect(await plan.findByRole('alert')).toHaveTextContent('Stripe is down.');
+      expect(plan.getByText('Past due')).toBeVisible();
+      expect(billingService.fetchBillingMe).toHaveBeenCalledTimes(loads);
+      expect(plan.getByRole('button', { name: 'Fix payment' })).toBeEnabled();
+      fireEvent.click(plan.getByRole('button', { name: 'Fix payment' }));
+      await waitFor(() => expect(redirectTo).toHaveBeenCalledWith('https://portal.stripe.test/x'));
+      expect(billingService.openBillingPortal).toHaveBeenCalledTimes(2);
+      expect(plan.queryByRole('alert')).not.toBeInTheDocument();
+      expect(plan.getByRole('button', { name: 'Fix payment' })).toBeEnabled();
+    });
+
+    it('refreshes confirmed billing after a persisted browser return without claiming a card update', async () => {
+      renderSettings();
+      const plan = await card('Plan');
+      fireEvent.click(await plan.findByRole('button', { name: 'Manage subscription' }));
+      await waitFor(() => expect(redirectTo).toHaveBeenCalledTimes(1));
+      const loads = vi.mocked(billingService.fetchBillingMe).mock.calls.length;
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue(
+        holding('active', true, '2029-06-15T00:00:00Z'),
+      );
+      fireEvent(window, new PageTransitionEvent('pageshow', { persisted: false }));
+      expect(billingService.fetchBillingMe).toHaveBeenCalledTimes(loads);
+      fireEvent(window, new PageTransitionEvent('pageshow', { persisted: true }));
+      expect(await plan.findByText('Ends on June 15, 2029')).toBeVisible();
+      expect(billingService.fetchBillingMe).toHaveBeenCalledTimes(loads + 1);
+      expect(plan.getByRole('button', { name: 'Manage subscription' })).toBeEnabled();
+      expect(
+        screen.queryByText(/card (updated|changed)|payment method (updated|changed)/i),
+      ).not.toBeInTheDocument();
+    });
+
     it('shows why the billing portal could not open', async () => {
       vi.mocked(billingService.openBillingPortal).mockRejectedValue(
         apiError(502, 'Stripe is down.'),

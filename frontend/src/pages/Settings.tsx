@@ -61,6 +61,15 @@ function useBillingOnArrival(topUpBought: boolean) {
     greeted.current = true;
     track('top_up_bought');
   }, [sells_plans, load, topUpBought]);
+
+  useEffect(() => {
+    if (!sells_plans) return;
+    const refreshOnRestore = (event: PageTransitionEvent) => {
+      if (event.persisted) void load();
+    };
+    window.addEventListener('pageshow', refreshOnRestore);
+    return () => window.removeEventListener('pageshow', refreshOnRestore);
+  }, [sells_plans, load]);
 }
 
 /** Back from buying a Top-up, says what it added once billing has loaded the pack, once. */
