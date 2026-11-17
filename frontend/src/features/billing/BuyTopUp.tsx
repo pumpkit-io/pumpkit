@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Notice } from '@/components/Notice';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -11,7 +12,7 @@ import {
 import { track } from '@/lib/analytics';
 import { formatPrice } from '@/lib/money';
 import { redirectTo } from '@/lib/navigation';
-import { errorMessage } from '@/services/apiErrors';
+import { errorCode, errorMessage, errorStatus } from '@/services/apiErrors';
 import { billingService, type TermsAcceptance, type TopUpOffer } from '@/services/billingService';
 import { generationsAndXPosts } from './counts';
 import { acceptsAll, NOTHING_ACCEPTED } from './termsAcceptance';
@@ -28,11 +29,15 @@ function packLine({ generations, xPosts, linkXPosts }: TopUpOffer): string {
 function BuyTopUpDialog({
   offer,
   termsVersion,
+  purchasesAvailable,
+  onPaused,
   onClose,
 }: {
   offer: TopUpOffer;
   /** Null where the Instance has no Terms to accept (ADR 0011). */
   termsVersion: string | null;
+  purchasesAvailable: boolean;
+  onPaused: () => void;
   onClose: () => void;
 }) {
   const [acceptance, setAcceptance] = useState<TermsAcceptance>(NOTHING_ACCEPTED);
@@ -42,12 +47,18 @@ function BuyTopUpDialog({
   const accepted = termsVersion === null || acceptsAll(acceptance);
 
   const pay = async () => {
+    if (!purchasesAvailable || !accepted || paying) return;
     track('top_up_checkout_started');
     setPaying(true);
     setError(null);
     try {
       redirectTo(await billingService.startTopUpCheckout(termsVersion, acceptance));
     } catch (e) {
+      if (errorStatus(e) === 503 && errorCode(e) === 'BILLING_PURCHASES_PAUSED') {
+        onPaused();
+        setPaying(false);
+        return;
+      }
       setError(errorMessage(e, "Couldn't start checkout. Try again."));
       setPaying(false);
     }
@@ -67,6 +78,11 @@ function BuyTopUpDialog({
         {termsVersion !== null && (
           <TermsAcceptanceFields value={acceptance} onChange={setAcceptance} purchase="topUp" />
         )}
+        {!purchasesAvailable && (
+          <div className="px-6">
+            <Notice message="Top-up purchases are temporarily unavailable. Try again later." />
+          </div>
+        )}
         {error && (
           <p role="alert" className="px-6 font-sans text-sm text-destructive">
             {error}
@@ -76,7 +92,11 @@ function BuyTopUpDialog({
           <Button variant="outline" className="h-10" onClick={onClose}>
             Cancel
           </Button>
-          <Button className="h-10" disabled={!accepted || paying} onClick={() => void pay()}>
+          <Button
+            className="h-10"
+            disabled={!purchasesAvailable || !accepted || paying}
+            onClick={() => void pay()}
+          >
             {paying ? 'Redirecting…' : `Pay ${price}`}
           </Button>
         </DialogFooter>
@@ -92,9 +112,11 @@ function BuyTopUpDialog({
 export function BuyTopUpButton({ className }: { className?: string }) {
   const { data } = useLoadedBilling();
   const [open, setOpen] = useState(false);
+  const [paused, setPaused] = useState(false);
 
   const offer = data?.topUp;
   if (!data || !offer) return null;
+  const purchasesAvailable = data.me.purchasesAvailable && !paused;
   return (
     <>
       <Button
@@ -102,15 +124,21 @@ export function BuyTopUpButton({ className }: { className?: string }) {
         size="sm"
         variant="outline"
         className={className ?? 'h-8'}
+        disabled={!purchasesAvailable}
         onClick={() => setOpen(true)}
       >
         Buy top-up, {formatPrice(offer.amount, offer.currency)}
       </Button>
+      {!purchasesAvailable && !open && (
+        <Notice message="Top-up purchases are temporarily unavailable. Try again later." />
+      )}
       {/* Mounted only while open, so a reopened dialog starts with no box ticked. */}
       {open && (
         <BuyTopUpDialog
           offer={offer}
           termsVersion={data.termsVersion}
+          purchasesAvailable={purchasesAvailable}
+          onPaused={() => setPaused(true)}
           onClose={() => setOpen(false)}
         />
       )}

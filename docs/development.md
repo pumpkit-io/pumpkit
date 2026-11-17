@@ -98,18 +98,18 @@ An Instance without the Stripe billing group sells no Plans (ADR 0011): `billing
 `billing/mediator.handle_webhook` owns the webhook transaction: it records the event for deduplication, locks the customer's User row, syncs the customer's Subscriptions (`billing/service.sync_customer`) or Top-ups (`billing/service.sync_top_ups`) from Stripe, depending on the event, and commits once. The lock is held across the Stripe call, so webhooks for one customer run one after another. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it; a webhook for an unknown customer is logged and skipped.
 
 
-`BILLING_PURCHASES_PAUSED=true` temporarily stops normal Subscription Checkout creation.
+`BILLING_PURCHASES_PAUSED=true` temporarily stops normal Subscription and Top-up Checkout creation.
 Keep the Stripe credentials and `BILLING_PLAN_KEYS` configured: removing billing grants
 unrestricted access. The authenticated `/billing/me` response exposes `purchases_available`
 separately from ordinary eligibility (`may_subscribe`). A paused checkout returns HTTP 503
-with code `BILLING_PURCHASES_PAUSED` before contacting the provider. The Paywall keeps the
-offer and acceptance fields visible, disables purchasing and preserves entered acceptance
-when a stale page receives that response. It never retries a purchase automatically.
+with code `BILLING_PURCHASES_PAUSED` before contacting the provider. The Paywall and Top-up dialog keep the
+offer and acceptance fields visible, disable purchasing and preserve entered acceptance
+when a stale page receives that response. They never retry a purchase automatically.
 Reads, webhooks, cancellation, payment recovery, existing access and previously authorized
 Subscription payments, including Subscribe now, continue under their existing rules.
 
-This is the first purchase-path slice, not a complete operational purchase pause.
-Top-ups and arranged paid signups are not paused yet. Production seller activation and
+This is not yet a complete operational purchase pause.
+Arranged paid signups are not paused yet. Production seller activation and
 general purchase reopening remain gated on those paths, the controlled verification
 exception, Checkout drain and final provider verification in #499 (see ADR 0033).
 The flag defaults to `false`; restart the configured app processes after changing it.

@@ -6,7 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
-- Users see temporary unavailability on the Paywall when Self-hosters pause normal subscription purchases with `BILLING_PURCHASES_PAUSED`; existing billing and access continue. This first slice does not yet pause Top-ups or arranged paid signups.
+- Users see temporary unavailability for Top-up purchases during `BILLING_PURCHASES_PAUSED`; existing balances, spending and payment reconciliation continue, and a stale dialog keeps its offer and checked acceptance.
+- Users see temporary unavailability on the Paywall when Self-hosters pause normal subscription purchases with `BILLING_PURCHASES_PAUSED`; existing billing and access continue. Arranged paid signups are not paused yet.
 
 ## [0.15.0] - 2026-11-16
 

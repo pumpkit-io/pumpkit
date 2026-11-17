@@ -384,6 +384,7 @@ async def create_top_up_checkout(
 
     The normal webhook sync adds the pack only once paid.
     """
+    purchase_availability.require_purchases_available()
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     await coupon_operations.require_settled(db, user_id=user.id)
     terms_apply = service.requires_terms_acceptance()

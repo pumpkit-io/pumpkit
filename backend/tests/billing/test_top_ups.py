@@ -103,6 +103,32 @@ async def test_a_paid_up_user_buys_a_top_up_through_a_payment_checkout(
     ]
 
 
+@pytest.mark.parametrize("preview_before_pause", [False, True])
+async def test_paused_top_up_purchases_preserve_the_offer_and_existing_access(
+    client, subscribed, fake_billing, sells_top_ups, monkeypatch, preview_before_pause
+):
+    if preview_before_pause:
+        assert (await client.get(PLANS)).json()["top_up"]["amount"] == 1000
+        assert (await client.get("/api/v1/billing/me")).json()["purchases_available"] is True
+    before = (await client.get(USAGE)).json()
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+
+    for _ in range(2):
+        response = await client.post(TOP_UP_CHECKOUT, json=ACCEPTANCE)
+        assert response.status_code == 503
+        assert response.json()["code"] == "BILLING_PURCHASES_PAUSED"
+    assert fake_billing.top_up_checkouts == []
+    assert fake_billing.customers_created == []
+    assert (await client.get(USAGE)).json() == before
+    assert (await client.get("/api/v1/billing/me")).json()["purchases_available"] is False
+    assert (await client.get(PLANS)).json()["top_up"]["amount"] == 1000
+
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", False)
+    assert (await client.post(TOP_UP_CHECKOUT, json=ACCEPTANCE)).status_code == 200
+    assert len(fake_billing.top_up_checkouts) == 1
+    assert (await client.get(USAGE)).json() == before
+
+
 async def test_a_top_up_checkout_records_the_acceptance_of_the_terms_before_stripe(
     client, db, user, subscribed, fake_billing, sells_top_ups
 ):
@@ -234,9 +260,19 @@ async def test_a_top_up_adds_none_of_a_small_cap_and_no_number_for_a_count_with_
     )
 
 
+@pytest.mark.parametrize("purchase_paused", [False, True])
 async def test_a_replayed_sync_adds_each_top_up_once(
-    client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock
+    client,
+    db,
+    subscribed,
+    stripe_customer,
+    fake_billing,
+    sells_top_ups,
+    fixed_clock,
+    monkeypatch,
+    purchase_paused,
 ):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchase_paused)
     fake_billing.set_top_up(stripe_customer, _purchase())
     for event_id in ("evt_1", "evt_2"):
         await _send(
@@ -246,9 +282,19 @@ async def test_a_replayed_sync_adds_each_top_up_once(
     assert len(await _top_ups(client)) == 1
 
 
+@pytest.mark.parametrize("purchase_paused", [False, True])
 async def test_a_refund_removes_what_is_left_of_the_top_up(
-    client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock
+    client,
+    db,
+    subscribed,
+    stripe_customer,
+    fake_billing,
+    sells_top_ups,
+    fixed_clock,
+    monkeypatch,
+    purchase_paused,
 ):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchase_paused)
     fake_billing.set_top_up(stripe_customer, _purchase())
     await _send(client, fake_billing, "evt_1", "checkout.session.completed", {"customer": "cus_1"})
     fake_billing.set_top_up(stripe_customer, _purchase(reversed=True))
@@ -261,9 +307,19 @@ async def test_a_refund_removes_what_is_left_of_the_top_up(
     assert await _top_ups(client) == []
 
 
+@pytest.mark.parametrize("purchase_paused", [False, True])
 async def test_a_dispute_removes_what_is_left_of_the_top_up(
-    client, db, subscribed, stripe_customer, fake_billing, sells_top_ups, fixed_clock
+    client,
+    db,
+    subscribed,
+    stripe_customer,
+    fake_billing,
+    sells_top_ups,
+    fixed_clock,
+    monkeypatch,
+    purchase_paused,
 ):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchase_paused)
     fake_billing.set_top_up(stripe_customer, _purchase())
     await _send(client, fake_billing, "evt_1", "checkout.session.completed", {"customer": "cus_1"})
     fake_billing.set_top_up(stripe_customer, _purchase(reversed=True))

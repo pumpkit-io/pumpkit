@@ -138,6 +138,7 @@ async def test_current_free_time_allows_top_up_when_provider_reports_trialing(
     assert usage["generations"]["limit"] == 500
 
 
+@pytest.mark.parametrize("purchase_paused", [False, True])
 @pytest.mark.parametrize("event", ["charge.refunded", "charge.dispute.created"])
 async def test_free_access_spends_existing_packs_allowance_first_and_keeps_reversal_rules(
     client,
@@ -151,7 +152,9 @@ async def test_free_access_spends_existing_packs_allowance_first_and_keeps_rever
     fake_x_reader,
     fake_llm,
     event,
+    purchase_paused,
 ):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchase_paused)
     monkeypatch.setattr(settings, "GENERATIONS_MONTHLY_CAP", 2)
     user.stripe_customer_id = "cus_saved"
     await db.commit()
