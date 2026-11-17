@@ -24,7 +24,7 @@ The ops approach is a small, backed-up configuration operation for the seller se
 
 ## Activation evidence
 
-The existing-user notice population and effective date must be explicit. An absence of paying subscribers or checkout acceptances does not establish an empty notice population. Publication alone does not establish delivery. Notice evidence belongs in protected operational records, with a rule for failed delivery, changed contact addresses and Users joining during the notice period. The existing Terms' advance notice is preserved.
+Activation has no existing-user notice gate. Release 0.15.0 removed the Terms' advance email notice: a changed version applies from the date the Operator states with it.
 
 Confirm the refund policy, support contact and payment-update email destination against the verified customer journey. Adding payment methods is outside this activation; standard Stripe Dashboard switches are not evidence of Managed Payments method availability.
 

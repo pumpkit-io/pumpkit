@@ -1,6 +1,6 @@
 I presenti Termini costituiscono il contratto tra te e il Gestore, INCEPTIONAL S.R.L., per l'uso di Pumpkit su pumpkit.io. Ti chiediamo di leggerli prima di sottoscrivere un Abbonamento o riscattare un Coupon. L'[Informativa sulla privacy](/it/privacy) spiega cosa fa il Gestore con i tuoi dati personali.
 
-Per gli Utenti esistenti, le modifiche sostanziali di questa versione si applicano solo dopo il preavviso richiesto dalla clausola 19. Fino ad allora, i Termini precedenti continuano a disciplinare il servizio e gli acquisti esistenti. Le disposizioni Sold through Link descrivono gli acquisti indicati in quel modo al pagamento; la pubblicazione di questi Termini non cambia il venditore di un acquisto esistente.
+Le disposizioni Sold through Link descrivono gli acquisti indicati in quel modo al pagamento; la pubblicazione di questi Termini non cambia il venditore di un acquisto esistente.
 
 ## 1. Il Gestore e i presenti Termini {#operator}
 
@@ -178,7 +178,7 @@ Alla cessazione del contratto, il Gestore elimina il tuo account e i tuoi conten
 
 Il Gestore può modificare i presenti Termini, ad esempio quando Pumpkit cambia o la legge lo richiede. La data "Ultimo aggiornamento" in alto indica quando sono stati modificati l'ultima volta.
 
-In caso di modifica sostanziale, il Gestore ti invia un'email almeno 30 giorni prima che si applichi. Se non sei d'accordo, puoi disdire il tuo Abbonamento o porre fine al contratto prima che la modifica si applichi. Se continui a usare Pumpkit dopo quella data, i Termini modificati si applicano a te.
+Una versione modificata si applica dalla data indicata dal Gestore insieme a essa. Se non sei d'accordo, puoi disdire il tuo Abbonamento o porre fine al contratto prima che la modifica si applichi. Se continui a usare Pumpkit dopo quella data, i Termini modificati si applicano a te.
 
 ## 20. Legge applicabile {#law}
 

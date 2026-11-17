@@ -6,6 +6,10 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-16
+
+- The English and Italian Terms (clause 19) and Privacy Policy no longer promise existing Users an email at least 30 days before a material change applies, and the Terms' opening no longer holds a version's material changes back until that notice. A changed version applies from the date the Operator states with it; a User can still cancel or end the contract before then. Earlier purchases still keep their original seller. **Upgrade notes:** Self-hosters who copied the Terms or the Privacy Policy should drop the same promise from their copies.
+
 ## [0.14.0] - 2026-11-16
 
 - The English and Italian Terms and Privacy Policy identify Sold through Link, LLC as the seller for purchases marked "Sold through Link", explain its refund, withdrawal and VAT handling, and distinguish its billing-data responsibilities from the Operator’s. Earlier purchases keep their original seller. Checkout’s immediate-start acknowledgement preserves consumer rights and seller protections. **Upgrade notes:** before applying material changes to existing Users, send the notices promised by the current legal documents; the Terms require at least 30 days. Publishing these documents does not enable Managed Payments.
