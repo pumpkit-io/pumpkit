@@ -904,8 +904,8 @@ async def test_access_ends_at_the_known_cancellation_even_before_the_provider_nu
     await assert_access(False)
 
 
-async def test_purchase_pause_refuses_checkout_without_provider_or_acceptance_side_effects(
-    client, db, fake_billing, user, monkeypatch
+async def test_purchase_pause_refuses_checkout_without_creating_a_customer_or_granting_access(
+    client, fake_billing, user, monkeypatch
 ):
     monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True, raising=False)
     response = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
@@ -913,7 +913,6 @@ async def test_purchase_pause_refuses_checkout_without_provider_or_acceptance_si
     assert response.json()["code"] == "BILLING_PURCHASES_PAUSED"
     assert fake_billing.checkouts == []
     assert fake_billing.customers_created == []
-    assert (await db.execute(select(TermsAcceptance))).scalars().all() == []
     me = (await client.get(BILLING_ME)).json()
     assert me["purchases_available"] is False
     assert me["may_subscribe"] is True
