@@ -11,6 +11,7 @@ webhook that fails verification is a `WebhookSignatureError`, the sender's fault
 `StripeBillingGateway` is the only Stripe SDK user; tests swap in `FakeBillingGateway`.
 """
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -19,6 +20,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Callable, Optional, Protocol, Sequence, TypeVar, cast, get_args
+from urllib.parse import urlsplit
 
 import stripe
 from starlette.concurrency import run_in_threadpool
@@ -28,7 +30,7 @@ from stripe.params.checkout import SessionCreateParams as CheckoutSessionCreateP
 
 from pumpkit.billing.allowance import months_after
 from pumpkit.billing.subscription_status import SubscriptionStatus
-from pumpkit.core.config import settings
+from pumpkit.core.config import BILLING_PAGE, settings
 from pumpkit.core.errors import AppError
 from pumpkit.core.logging import logger
 from pumpkit.core.time import Clock, system_clock
@@ -40,6 +42,14 @@ class BillingProviderError(AppError):
     status_code = 502
     public_detail = "Billing is unavailable right now. Please try again later."
     reported = True
+
+
+class CheckoutNotCreated(BillingProviderError):
+    """This CREATE invocation was rejected before endpoint execution."""
+
+
+class CheckoutOutcomeUnknown(BillingProviderError):
+    """A provider incident requires positive request resolution, not another CREATE."""
 
 
 class DeferralRefused(BillingProviderError):
@@ -56,6 +66,153 @@ class CheckoutSession:
 
     id: str
     url: str
+
+
+@dataclass(frozen=True)
+class HostedCheckout:
+    id: str
+    status: str
+    customer_id: Optional[str]
+    user_id: Optional[str]
+    mode: str
+    payment_status: str
+    success_url: str
+    cancel_url: str
+    metadata: dict[str, str]
+    managed_payments: bool
+    url: Optional[str] = None
+    subscription_id: Optional[str] = None
+    livemode: bool = False
+
+
+def checkout_parameters(
+    *,
+    kind: str,
+    customer_id: str,
+    user_id: str,
+    price_id: str,
+    trial_days: Optional[int] = None,
+    operation_id: Optional[str] = None,
+    first_payment_at: Optional[datetime] = None,
+    expires_at: Optional[datetime] = None,
+    seller_managed: Optional[bool] = None,
+    billing_return_url: Optional[str] = None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "mode": "payment" if kind == "top_up" else "subscription",
+        "customer": customer_id,
+        "client_reference_id": user_id,
+        "line_items": [{"price": price_id, "quantity": 1}],
+        **_seller_params(seller_managed),
+    }
+    if kind == "subscription":
+        params.update(
+            success_url=settings.stripe_checkout_success_url(),
+            cancel_url=settings.stripe_checkout_cancel_url(),
+            allow_promotion_codes=True,
+        )
+        if trial_days is not None:
+            params["subscription_data"] = {"trial_period_days": trial_days}
+    elif kind == "top_up":
+        params.update(
+            metadata=dict(_TOP_UP_METADATA),
+            success_url=settings.stripe_top_up_success_url(),
+            cancel_url=settings.billing_page_url(),
+        )
+    else:
+        if first_payment_at is None or expires_at is None or operation_id is None:
+            raise ValueError("Paid signup parameters are incomplete")
+        metadata = {"pumpkit_paid_signup": operation_id}
+        params.update(
+            metadata=metadata,
+            subscription_data={
+                "trial_end": int(first_payment_at.timestamp()),
+                "metadata": metadata,
+            },
+            expires_at=int(expires_at.timestamp()),
+            success_url=billing_return_url or settings.billing_page_url(),
+            cancel_url=billing_return_url or settings.billing_page_url(),
+        )
+    return params
+
+
+def legacy_paid_signup_parameters_match(
+    parameters: dict[str, Any],
+    *,
+    user_id: str,
+    customer_id: str,
+    operation_id: str,
+    offer: dict,
+) -> bool:
+    try:
+        managed = parameters["managed_payments"]["enabled"]
+        destination = parameters["success_url"]
+        if not isinstance(managed, bool) or not isinstance(destination, str):
+            return False
+        parsed = urlsplit(destination)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or parsed.username
+            or parsed.password
+            or parsed.path != BILLING_PAGE
+            or parsed.query
+            or parsed.fragment
+        ):
+            return False
+        expected = checkout_parameters(
+            kind="arranged_paid_signup",
+            customer_id=customer_id,
+            user_id=user_id,
+            operation_id=operation_id,
+            price_id=offer["price_id"],
+            first_payment_at=datetime.fromisoformat(offer["first_payment_at"]),
+            expires_at=datetime.fromisoformat(offer["checkout_expires_at"]),
+            seller_managed=managed,
+            billing_return_url=destination,
+        )
+        return parameters == expected
+    except (KeyError, TypeError, ValueError):
+        return False
+
+
+def _hosted_checkout(data: dict[str, Any]) -> HostedCheckout:
+    if not all(
+        isinstance(data.get(key), str) for key in ["id", "status", "mode", "payment_status"]
+    ):
+        raise BillingProviderError("Checkout response is incomplete")
+    if not isinstance(data.get("livemode"), bool):
+        raise BillingProviderError("Checkout account mode could not be established")
+    if data.get("client_reference_id") is not None and not isinstance(
+        data["client_reference_id"], str
+    ):
+        raise BillingProviderError("Checkout reference is invalid")
+    metadata = data.get("metadata") or {}
+    if not isinstance(metadata, dict) or not all(
+        isinstance(key, str) and isinstance(value, str) for key, value in metadata.items()
+    ):
+        raise BillingProviderError("Checkout attribution is invalid")
+    for key in ["success_url", "cancel_url", "url"]:
+        if data.get(key) is not None and not isinstance(data[key], str):
+            raise BillingProviderError("Checkout destination is invalid")
+    managed = data.get("managed_payments")
+    if not isinstance(managed, dict) or not isinstance(managed.get("enabled"), bool):
+        raise BillingProviderError("Checkout seller could not be established")
+    return HostedCheckout(
+        id=data["id"],
+        status=data["status"],
+        customer_id=_object_id(data.get("customer")),
+        user_id=data.get("client_reference_id"),
+        mode=data["mode"],
+        payment_status=data["payment_status"],
+        success_url=data.get("success_url") or "",
+        cancel_url=data.get("cancel_url") or "",
+        metadata=data.get("metadata") or {},
+        managed_payments=managed["enabled"],
+        url=data.get("url"),
+        subscription_id=_object_id(data.get("subscription")),
+        livemode=data["livemode"],
+    )
 
 
 # Stripe refuses a Checkout whose trial ends less than 48 hours after the Checkout opens.
@@ -165,6 +322,18 @@ class WebhookEvent:
 
 
 class BillingGateway(Protocol):
+    async def dispatch_checkout(
+        self, *, parameters: dict[str, Any], idempotency_key: str
+    ) -> CheckoutSession: ...
+
+    async def list_open_checkouts(self) -> list[HostedCheckout]: ...
+
+    async def read_checkout(self, *, session_id: str) -> HostedCheckout: ...
+
+    async def expire_checkout(self, *, session_id: str) -> None: ...
+
+    async def account_identity(self) -> tuple[str, bool]: ...
+
     async def create_customer(
         self, *, email: str, name: str, user_id: str, idempotency_key: str
     ) -> str:
@@ -485,9 +654,10 @@ def _webhook_event(event: dict[str, Any]) -> WebhookEvent:
         raise WebhookSignatureError("Webhook payload is not an event") from error
 
 
-def _seller_params() -> CheckoutSessionCreateParams:
-    """Checkout settings for the seller `STRIPE_MANAGED_PAYMENTS` chooses: Stripe or the Instance."""
-    if settings.STRIPE_MANAGED_PAYMENTS:
+def _seller_params(managed: Optional[bool] = None) -> CheckoutSessionCreateParams:
+    """Seller-specific Checkout parameters, including frozen historical inputs."""
+    managed_payments = settings.STRIPE_MANAGED_PAYMENTS if managed is None else managed
+    if managed_payments:
         # Stripe collects tax, VAT IDs and the address itself, and refuses the settings below.
         return {"managed_payments": {"enabled": True}}
     return {
@@ -510,6 +680,28 @@ def stripe_client(**options: Any) -> stripe.StripeClient:
     return stripe.StripeClient(settings.STRIPE_SECRET_KEY or "", **options)
 
 
+def _checkout_rejected_before_execution(error: stripe.StripeError) -> bool:
+    headers = {key.lower(): value for key, value in (error.headers or {}).items()}
+    if str(headers.get("idempotent-replayed", "")).lower() == "true":
+        return False
+    if isinstance(error, stripe.AuthenticationError) and error.http_status == 401:
+        return True
+    if isinstance(error, stripe.InvalidRequestError) and error.http_status == 400:
+        return error.code in {"parameter_missing", "parameter_unknown"}
+    return (
+        isinstance(error, stripe.RateLimitError)
+        and error.http_status == 429
+        and headers.get("stripe-rate-limited-reason")
+        in {
+            "global-rate",
+            "endpoint-rate",
+            "global-concurrency",
+            "endpoint-concurrency",
+            "resource-specific",
+        }
+    )
+
+
 class StripeBillingGateway:
     """Calls Stripe with its own client and API key, off the event loop, and returns plain data."""
 
@@ -517,10 +709,73 @@ class StripeBillingGateway:
         self._client = client or stripe_client()
 
     async def _call(self, what: str, call: Callable[[], _T]) -> _T:
+        task = asyncio.create_task(run_in_threadpool(call))
+        cancelled = False
         try:
-            return await run_in_threadpool(call)
+            while True:
+                try:
+                    result = await asyncio.shield(task)
+                    break
+                except asyncio.CancelledError:
+                    cancelled = True
+                    if task.cancelled():
+                        raise
+            if cancelled:
+                raise asyncio.CancelledError
+            return result
         except stripe.StripeError as error:
             raise BillingProviderError(f"Stripe failed to {what}") from error
+
+    async def dispatch_checkout(
+        self, *, parameters: dict[str, Any], idempotency_key: str
+    ) -> CheckoutSession:
+        try:
+            session = await self._call(
+                "create a journaled Checkout",
+                lambda: self._client.v1.checkout.sessions.create(
+                    cast(CheckoutSessionCreateParams, parameters),
+                    {"idempotency_key": idempotency_key, "max_network_retries": 0},
+                ),
+            )
+        except BillingProviderError as error:
+            cause = error.__cause__
+            if isinstance(cause, stripe.StripeError) and _checkout_rejected_before_execution(cause):
+                raise CheckoutNotCreated("Checkout was rejected before execution") from error
+            raise CheckoutOutcomeUnknown(
+                "Checkout execution needs provider-supported resolution"
+            ) from error
+        if not session.url:
+            raise BillingProviderError("Checkout has no usable URL")
+        return CheckoutSession(id=session.id, url=session.url)
+
+    async def list_open_checkouts(self) -> list[HostedCheckout]:
+        def read() -> list[HostedCheckout]:
+            sessions = self._client.v1.checkout.sessions.list({"status": "open", "limit": 100})
+            return [_hosted_checkout(s.to_dict()) for s in sessions.auto_paging_iter()]
+
+        return await self._call("inventory open Checkouts", read)
+
+    async def read_checkout(self, *, session_id: str) -> HostedCheckout:
+        session = await self._call(
+            "read a Checkout", lambda: self._client.v1.checkout.sessions.retrieve(session_id)
+        )
+        return _hosted_checkout(session.to_dict())
+
+    async def expire_checkout(self, *, session_id: str) -> None:
+        await self._call(
+            "expire a Checkout", lambda: self._client.v1.checkout.sessions.expire(session_id)
+        )
+
+    async def account_identity(self) -> tuple[str, bool]:
+        account = await self._call(
+            "identify the billing account", lambda: self._client.v1.accounts.retrieve_current()
+        )
+        key = settings.STRIPE_SECRET_KEY or ""
+        if key.startswith(("sk_test_", "rk_test_")):
+            return account.id, False
+        if key.startswith(("sk_live_", "rk_live_")):
+            return account.id, True
+        raise BillingProviderError("Billing account mode cannot be established")
 
     async def create_customer(
         self, *, email: str, name: str, user_id: str, idempotency_key: str
@@ -1024,6 +1279,96 @@ class FakeBillingGateway:
     )
     _customers_by_idempotency_key: dict[str, str] = field(default_factory=dict, init=False)
     _top_ups: dict[str, dict[str, TopUpPurchase]] = field(default_factory=dict, init=False)
+
+    hosted_checkouts: dict[str, HostedCheckout] = field(default_factory=dict)
+    checkout_dispatches: dict[str, dict[str, Any]] = field(default_factory=dict)
+    expired_hosted_checkouts: list[str] = field(default_factory=list)
+    _dispatch_results: dict[str, CheckoutSession] = field(default_factory=dict, init=False)
+
+    async def account_identity(self) -> tuple[str, bool]:
+        return "acct_fake", False
+
+    async def dispatch_checkout(
+        self, *, parameters: dict[str, Any], idempotency_key: str
+    ) -> CheckoutSession:
+        self.checkout_dispatches[idempotency_key] = parameters
+        if idempotency_key in self._dispatch_results:
+            return self._dispatch_results[idempotency_key]
+        user_id, customer_id = parameters["client_reference_id"], parameters["customer"]
+        price_id = parameters["line_items"][0]["price"]
+        kind = parameters["metadata"]["pumpkit_kind"]
+        if kind == "subscription":
+            result = await self.create_subscription_checkout(
+                customer_id=customer_id,
+                user_id=user_id,
+                price_id=price_id,
+                quantity=1,
+                trial_period_days=parameters.get("subscription_data", {}).get("trial_period_days"),
+            )
+        elif kind == "top_up":
+            result = await self.create_top_up_checkout(
+                customer_id=customer_id, user_id=user_id, price_id=price_id
+            )
+        else:
+            checkout = await self.create_paid_signup_checkout(
+                customer_id=customer_id,
+                user_id=user_id,
+                operation_id=parameters["metadata"]["pumpkit_paid_signup"],
+                price_id=price_id,
+                first_payment_at=datetime.fromtimestamp(
+                    parameters["subscription_data"]["trial_end"], timezone.utc
+                ),
+                expires_at=datetime.fromtimestamp(parameters["expires_at"], timezone.utc),
+            )
+            result = CheckoutSession(id=checkout.id, url=checkout.url or self.checkout_url)
+        self._dispatch_results[idempotency_key] = result
+        self.hosted_checkouts[result.id] = HostedCheckout(
+            id=result.id,
+            status="open",
+            customer_id=customer_id,
+            user_id=user_id,
+            mode=parameters["mode"],
+            payment_status="unpaid",
+            success_url=parameters["success_url"],
+            cancel_url=parameters["cancel_url"],
+            metadata=parameters["metadata"],
+            managed_payments=parameters["managed_payments"]["enabled"],
+            url=result.url,
+        )
+        self._maybe_fail("after_dispatch_checkout")
+        return result
+
+    async def read_checkout(self, *, session_id: str) -> HostedCheckout:
+        self._maybe_fail("read_checkout")
+        result = self.hosted_checkouts[session_id]
+        if signup := self.paid_signup_checkouts.get(session_id):
+            result = replace(
+                result,
+                status=signup.status,
+                subscription_id=signup.subscription_id,
+                payment_status="no_payment_required" if signup.status == "complete" else "unpaid",
+            )
+        elif session_id in self._top_ups.get(result.customer_id or "", {}):
+            result = replace(result, status="complete", payment_status="paid")
+        self.hosted_checkouts[session_id] = result
+        return result
+
+    async def list_open_checkouts(self) -> list[HostedCheckout]:
+        self._maybe_fail("list_open_checkouts")
+        results = [await self.read_checkout(session_id=id) for id in self.hosted_checkouts]
+        return [s for s in results if s.status == "open"]
+
+    async def expire_checkout(self, *, session_id: str) -> None:
+        self._maybe_fail("expire_checkout")
+        session = await self.read_checkout(session_id=session_id)
+        if session.status != "open":
+            raise BillingProviderError("Only open Checkouts can expire")
+        self.hosted_checkouts[session_id] = replace(session, status="expired", url=None)
+        self.expired_hosted_checkouts.append(session_id)
+        self._open_checkouts.pop(session_id, None)
+        self._payment_checkouts.pop(session_id, None)
+        if session_id in self.paid_signup_checkouts:
+            await self.expire_paid_signup_checkout(session_id=session_id)
 
     def _maybe_fail(self, method: str) -> None:
         if method in self.fail_on:

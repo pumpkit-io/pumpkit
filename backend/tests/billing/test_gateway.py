@@ -17,6 +17,7 @@ import stripe
 from pumpkit.billing.gateway import (
     BillingGateway,
     BillingProviderError,
+    CheckoutOutcomeUnknown,
     DeferralRefused,
     FakeBillingGateway,
     OneOffPrice,
@@ -1144,3 +1145,116 @@ async def test_owed_invoices_leave_out_a_draft(invoice_status, owed):
     gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
     assert await gateway.has_owed_invoices(customer_id="cus_Contract") is owed
     assert parse_qs(urlsplit(http.urls[0]).query)["customer"] == ["cus_Contract"]
+
+
+async def test_drain_inventory_paginates_account_wide_and_reads_current_exact_session():
+    def session(index):
+        return {
+            "id": f"cs_owned_{index}",
+            "object": "checkout.session",
+            "status": "open",
+            "mode": "subscription",
+            "payment_status": "unpaid",
+            "customer": "cus_Contract",
+            "client_reference_id": "user_Contract",
+            "metadata": {"pumpkit_instance": "instance"},
+            "success_url": "https://app.test/billing/success",
+            "cancel_url": "https://app.test/billing/cancelled",
+            "managed_payments": {"enabled": False},
+            "livemode": False,
+        }
+
+    pages = [
+        json.dumps(
+            {
+                "object": "list",
+                "url": "/v1/checkout/sessions",
+                "has_more": True,
+                "data": [session(i) for i in range(100)],
+            }
+        ),
+        json.dumps(
+            {
+                "object": "list",
+                "url": "/v1/checkout/sessions",
+                "has_more": False,
+                "data": [session(100)],
+            }
+        ),
+        json.dumps({**session(0), "status": "expired"}),
+    ]
+    http = _RecordedStripe(*pages)
+    gateway = StripeBillingGateway(stripe.StripeClient("sk_test_contract", http_client=http))
+    inventory = await gateway.list_open_checkouts()
+    assert len(inventory) == 101
+    assert inventory[-1].id == "cs_owned_100"
+    assert "customer" not in parse_qs(urlsplit(http.urls[0]).query)
+    assert parse_qs(urlsplit(http.urls[1]).query)["starting_after"] == ["cs_owned_99"]
+    current = await gateway.read_checkout(session_id="cs_owned_0")
+    assert current.status == "expired"
+    assert http.urls[-1].endswith("/v1/checkout/sessions/cs_owned_0")
+
+
+@pytest.mark.parametrize(
+    "key,mode",
+    [
+        ("sk_test_contract", False),
+        ("rk_test_contract", False),
+        ("sk_live_contract", True),
+        ("rk_live_contract", True),
+        ("unrecognized-key", None),
+    ],
+)
+async def test_drain_account_mode_requires_a_positive_known_key_mode(monkeypatch, key, mode):
+    monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", key)
+    gateway, _ = _recorded_gateway('{"id":"acct_contract","object":"account"}')
+    if mode is None:
+        with pytest.raises(BillingProviderError):
+            await gateway.account_identity()
+    else:
+        assert await gateway.account_identity() == ("acct_contract", mode)
+
+
+@pytest.mark.parametrize(
+    "status,error_type,code,headers,definite",
+    [
+        (400, "invalid_request_error", "parameter_missing", {}, True),
+        (400, "invalid_request_error", "parameter_unknown", {}, True),
+        (401, "invalid_request_error", None, {}, True),
+        (429, "rate_limit_error", None, {"Stripe-Rate-Limited-Reason": "global-rate"}, True),
+        (400, "invalid_request_error", "parameter_missing", {"Idempotent-Replayed": "true"}, False),
+        (400, "invalid_request_error", "resource_missing", {}, False),
+        (400, "invalid_request_error", None, {}, False),
+        (402, "card_error", "card_declined", {}, False),
+        (409, "invalid_request_error", "idempotency_key_in_use", {}, False),
+        (424, "api_error", None, {}, False),
+        (429, "rate_limit_error", "lock_timeout", {}, False),
+        (500, "api_error", None, {"Stripe-Should-Retry": "false"}, False),
+    ],
+)
+async def test_journaled_create_only_proves_structured_preexecution_rejections(
+    status, error_type, code, headers, definite
+):
+    response_headers = headers
+
+    class RejectedStripe(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            self.methods.append(method)
+            return (
+                json.dumps(
+                    {"error": {"type": error_type, "code": code, "message": "Controlled rejection"}}
+                ),
+                status,
+                response_headers,
+            )
+
+    http = RejectedStripe("{}")
+    gateway = StripeBillingGateway(
+        stripe.StripeClient("sk_test_contract", http_client=http, max_network_retries=2)
+    )
+    with pytest.raises(BillingProviderError) as caught:
+        await gateway.dispatch_checkout(
+            parameters={"mode": "subscription"}, idempotency_key="fresh-controlled-key"
+        )
+    assert isinstance(caught.value, CheckoutOutcomeUnknown) is not definite
+    assert http.methods == ["post"]

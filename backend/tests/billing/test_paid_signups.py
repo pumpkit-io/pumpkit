@@ -1200,7 +1200,7 @@ async def test_purchase_pause_keeps_accepted_signup_recoverable_without_new_chec
         assert response.json()["status"] == "pending"
         assert response.json()["url"] is None
         assert response.json()["first_payment_at"] == free["ends_at"]
-        assert "temporarily unavailable" in response.json()["detail"]
+        assert "result is being confirmed" in response.json()["detail"]
     out = StringIO()
     assert (
         await run_cli(
@@ -1223,13 +1223,14 @@ async def test_purchase_pause_keeps_accepted_signup_recoverable_without_new_chec
     assert (await authed_client.get("/api/v1/usage")).json() == before
     monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", False)
     recovered = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
-    assert recovered.json()["url"]
+    assert recovered.json()["status"] == "pending"
+    assert recovered.json()["url"] is None
     assert recovered.json()["first_payment_at"] == free["ends_at"]
-    assert len(fake_billing.paid_signup_checkouts) == 1
+    assert fake_billing.paid_signup_checkouts == {}
 
 
 @pytest.mark.parametrize("resolution", ["cancel", "expire"])
-async def test_paused_signup_without_checkout_can_end_without_losing_free_access(
+async def test_unknown_signup_dispatch_cannot_end_from_absence_or_elapsed_time(
     authed_client, coupons, fake_billing, monkeypatch, fixed_clock, resolution
 ):
     fake_billing.fail_on.add("create_paid_signup_checkout")
@@ -1242,9 +1243,9 @@ async def test_paused_signup_without_checkout_can_end_without_losing_free_access
         fixed_clock.advance(timedelta(hours=24))
         result = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
     assert result.status_code == 200
-    assert result.json()["status"] == "refused"
+    assert result.json()["status"] == "pending"
     assert result.json()["first_payment_at"] == free["ends_at"]
     assert fake_billing.paid_signup_checkouts == {}
     me = (await authed_client.get("/api/v1/billing/me")).json()
     assert me["free_access"]["ends_at"] == free["ends_at"]
-    assert me["pending_paid_signup_id"] is None
+    assert me["pending_paid_signup_id"] == request["operation_id"]
