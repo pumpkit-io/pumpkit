@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { Notice } from '@/components/Notice';
 import { redirectTo } from '@/lib/navigation';
 import { errorMessage } from '@/services/apiErrors';
 import {
@@ -50,7 +51,7 @@ export function PaidSignup({
         ? `${signup.answer.operationId}:${signup.answer.status}`
         : null;
     if (
-      (wasPending.current && !signup.pending) ||
+      (wasPending.current && !signup.pending && !signup.paused) ||
       (outcome && refreshedOutcome.current !== outcome)
     ) {
       refreshedOutcome.current = outcome;
@@ -58,7 +59,7 @@ export function PaidSignup({
       afterArranged.current?.();
     }
     wasPending.current = signup.pending;
-  }, [signup.pending, signup.answer, onPendingChange, load]);
+  }, [signup.pending, signup.answer, signup.paused, onPendingChange, load]);
   useEffect(() => {
     if (offer) review.current?.focus();
   }, [offer]);
@@ -85,7 +86,13 @@ export function PaidSignup({
   }
 
   async function confirm() {
-    if (!offer || (offer.termsVersion && !acceptsAll(acceptance))) return;
+    if (
+      !data.me.purchasesAvailable ||
+      signup.paused ||
+      !offer ||
+      (offer.termsVersion && !acceptsAll(acceptance))
+    )
+      return;
     const result = await signup.submit({
       ...acceptance,
       operationId: crypto.randomUUID(),
@@ -93,6 +100,7 @@ export function PaidSignup({
       termsVersion: offer.termsVersion,
       language: 'en',
     });
+    if (result === 'paused') return;
     if (result?.status === 'pending' && result.url) redirectTo(result.url);
     if (!result || result.status === 'refused') {
       setOffer(null);
@@ -104,10 +112,14 @@ export function PaidSignup({
   const plans = data.plans.filter(
     (plan) => plan.intervalCount === 1 && ['month', 'year'].includes(plan.interval),
   );
-  if (!eligible && !signup.pending && !signup.answer && !signup.error) return null;
+  if (!eligible && !signup.pending && !signup.answer && !signup.error && !signup.paused)
+    return null;
 
   return (
     <div className="space-y-3 border-t border-border pt-4 font-sans text-sm text-foreground">
+      {(!data.me.purchasesAvailable || signup.paused) && (
+        <Notice message="New subscriptions are temporarily unavailable. Try again later." />
+      )}
       {(error || signup.error) && <ErrorBanner message={error ?? signup.error ?? ''} />}
       {(signup.pending || signup.answer) && (
         <div
@@ -247,7 +259,12 @@ export function PaidSignup({
                   <Button
                     type="button"
                     className="h-auto min-h-11 max-w-full whitespace-normal"
-                    disabled={signup.busy || Boolean(offer.termsVersion && !acceptsAll(acceptance))}
+                    disabled={
+                      !data.me.purchasesAvailable ||
+                      signup.paused ||
+                      signup.busy ||
+                      Boolean(offer.termsVersion && !acceptsAll(acceptance))
+                    }
                     onClick={() => void confirm()}
                   >
                     {signup.busy ? 'Starting checkout…' : 'Agree and continue to checkout'}

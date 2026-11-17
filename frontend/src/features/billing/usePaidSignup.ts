@@ -30,6 +30,7 @@ export function usePaidSignup(accountOperationId?: string | null) {
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [paused, setPaused] = useState(false);
   const running = useRef(false);
   const clear = useCallback(() => {
     setRequest(null);
@@ -96,6 +97,16 @@ export function usePaidSignup(accountOperationId?: string | null) {
         return result;
       } catch (cause) {
         if (
+          confirming &&
+          errorStatus(cause) === 503 &&
+          errorCode(cause) === 'BILLING_PURCHASES_PAUSED'
+        ) {
+          clear();
+          setAnswer(null);
+          setPaused(true);
+          return 'paused' as const;
+        }
+        if (
           (confirming && [400, 409, 422].includes(errorStatus(cause) ?? 0)) ||
           (action === 'cancel' &&
             (errorStatus(cause) === 404 || errorCode(cause) === 'PAID_SIGNUP_CANCEL_CONFLICT'))
@@ -134,6 +145,7 @@ export function usePaidSignup(accountOperationId?: string | null) {
   return {
     pending: Boolean(pendingId),
     busy,
+    paused,
     error,
     answer,
     submit: (next: PaidSignupRequest) => execute(next.operationId, next, 'create'),

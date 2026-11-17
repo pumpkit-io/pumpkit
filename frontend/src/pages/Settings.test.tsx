@@ -1895,51 +1895,71 @@ it('requires a fresh reviewed offer after a changed date and omits legal boxes w
   expect(billingService.createPaidSignup).toHaveBeenCalledTimes(1);
 });
 
-it('replays the original accepted signup after reload only when its status is absent', async () => {
-  sessionStorage.clear();
-  const original = {
-    operationId: '550e8400-e29b-41d4-a716-446655440000',
-    revision: 'accepted-once',
-    termsVersion: null,
-    acceptedTerms: false,
-    requestedImmediateStart: false,
-    approvedSpecificClauses: false,
-    language: 'en',
-  };
-  sessionStorage.setItem(storageKey('paid-signup'), JSON.stringify(original));
-  vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
-  vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
-  vi.mocked(appConnectionService.list).mockResolvedValue([]);
-  vi.mocked(usageService.get).mockResolvedValue(usageWith());
-  vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
-  vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
-    ...SUBSCRIBED,
-    subscription: null,
-    freeAccess: { startsAt: '2028-01-31T12:00:00Z', endsAt: '2028-03-31T12:00:00Z', months: 2 },
-  });
-  vi.mocked(billingService.fetchPaidSignup)
-    .mockReset()
-    .mockRejectedValue(apiError(404, 'Not found'));
-  vi.mocked(billingService.createPaidSignup).mockReset().mockResolvedValue({
-    operationId: original.operationId,
-    status: 'pending',
-    detail: null,
-    url: 'https://checkout.test/existing-setup',
-    sessionId: 'cs_existing',
-    firstPaymentAt: '2028-03-31T12:00:00Z',
-    planKey: 'pumpkit_pro_monthly',
-  });
-  vi.mocked(redirectTo).mockClear();
-  renderSettings();
-  const plan = await card('Plan');
-  const resume = await plan.findByRole('button', { name: 'Continue checkout' });
-  expect(billingService.createPaidSignup).toHaveBeenCalledTimes(1);
-  expect(billingService.createPaidSignup).toHaveBeenCalledWith(original);
-  expect(redirectTo).not.toHaveBeenCalled();
-  fireEvent.click(resume);
-  expect(redirectTo).toHaveBeenCalledWith('https://checkout.test/existing-setup');
-  expect(sessionStorage.getItem(storageKey('paid-signup'))).toContain(original.operationId);
-});
+it.each([false, true])(
+  'handles a saved signup with absent status while purchase pause is %s',
+  async (purchasesPaused) => {
+    sessionStorage.clear();
+    const original = {
+      operationId: '550e8400-e29b-41d4-a716-446655440000',
+      revision: 'accepted-once',
+      termsVersion: null,
+      acceptedTerms: false,
+      requestedImmediateStart: false,
+      approvedSpecificClauses: false,
+      language: 'en',
+    };
+    sessionStorage.setItem(storageKey('paid-signup'), JSON.stringify(original));
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+    vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+    vi.mocked(appConnectionService.list).mockResolvedValue([]);
+    vi.mocked(usageService.get).mockResolvedValue(usageWith());
+    vi.mocked(billingService.fetchPlans).mockResolvedValue(CATALOG);
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...SUBSCRIBED,
+      subscription: null,
+      freeAccess: { startsAt: '2028-01-31T12:00:00Z', endsAt: '2028-03-31T12:00:00Z', months: 2 },
+    });
+    vi.mocked(billingService.fetchPaidSignup)
+      .mockReset()
+      .mockRejectedValue(apiError(404, 'Not found'));
+    vi.mocked(billingService.createPaidSignup).mockReset().mockResolvedValue({
+      operationId: original.operationId,
+      status: 'pending',
+      detail: null,
+      url: 'https://checkout.test/existing-setup',
+      sessionId: 'cs_existing',
+      firstPaymentAt: '2028-03-31T12:00:00Z',
+      planKey: 'pumpkit_pro_monthly',
+    });
+    if (purchasesPaused) {
+      vi.mocked(billingService.createPaidSignup).mockRejectedValue(
+        apiError(503, 'Purchases are temporarily unavailable.', {
+          code: 'BILLING_PURCHASES_PAUSED',
+        }),
+      );
+    }
+    vi.mocked(redirectTo).mockClear();
+    renderSettings();
+    const plan = await card('Plan');
+    if (purchasesPaused) {
+      expect(
+        await plan.findByText('New subscriptions are temporarily unavailable. Try again later.'),
+      ).toBeInTheDocument();
+      expect(plan.queryByRole('button', { name: 'Check signup' })).not.toBeInTheDocument();
+      expect(sessionStorage.getItem(storageKey('paid-signup'))).toBeNull();
+      expect(billingService.createPaidSignup).toHaveBeenCalledTimes(1);
+      expect(redirectTo).not.toHaveBeenCalled();
+      return;
+    }
+    const resume = await plan.findByRole('button', { name: 'Continue checkout' });
+    expect(billingService.createPaidSignup).toHaveBeenCalledTimes(1);
+    expect(billingService.createPaidSignup).toHaveBeenCalledWith(original);
+    expect(redirectTo).not.toHaveBeenCalled();
+    fireEvent.click(resume);
+    expect(redirectTo).toHaveBeenCalledWith('https://checkout.test/existing-setup');
+    expect(sessionStorage.getItem(storageKey('paid-signup'))).toContain(original.operationId);
+  },
+);
 
 it.each(['http-conflict', 'completed-with-detail', 'unknown-conflict'])(
   'handles signup cancellation %s without false success',
@@ -2290,3 +2310,79 @@ describe('future billing frequency', () => {
     expect(billingService.previewPlanChange).not.toHaveBeenCalled();
   });
 });
+
+it.each(['initial', 'stale', 'uncertain'])(
+  'handles an %s purchase-availability result without losing signup state',
+  async (pause) => {
+    sessionStorage.clear();
+    vi.mocked(xConnectionService.get).mockResolvedValue(CONNECTED);
+    vi.mocked(onboardingService.fetchNextStep).mockResolvedValue(null);
+    vi.mocked(userService.fetchProfile).mockResolvedValue(ADA);
+    vi.mocked(appConnectionService.list).mockResolvedValue([]);
+    vi.mocked(usageService.get).mockResolvedValue(usageWith());
+    vi.mocked(billingService.fetchPlans).mockResolvedValue({ ...CATALOG, couponsEnabled: true });
+    vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+      ...SUBSCRIBED,
+      subscription: null,
+      mayArrangePaidSignup: true,
+      purchasesAvailable: pause !== 'initial',
+      freeAccess: { startsAt: '2028-01-31T12:00:00Z', endsAt: '2028-03-31T12:00:00Z', months: 2 },
+    });
+    vi.mocked(billingService.previewPaidSignup).mockReset().mockResolvedValue({
+      planKey: 'pumpkit_pro_monthly',
+      productName: 'Pro',
+      amount: 900,
+      currency: 'eur',
+      interval: 'month',
+      intervalCount: 1,
+      firstPaymentAt: '2028-03-31T12:00:00Z',
+      termsVersion: '2026-11-08',
+      revision: 'retained-future-offer',
+    });
+    vi.mocked(billingService.createPaidSignup)
+      .mockReset()
+      .mockRejectedValue(
+        apiError(
+          503,
+          'Purchases are temporarily unavailable.',
+          pause === 'uncertain' ? {} : { code: 'BILLING_PURCHASES_PAUSED' },
+        ),
+      );
+    vi.mocked(redirectTo).mockClear();
+    renderSettings();
+    const plan = await card('Plan');
+    fireEvent.click(await plan.findByRole('button', { name: 'Arrange subscription' }));
+    fireEvent.click(plan.getByRole('button', { name: 'Review monthly plan' }));
+    const offer = await plan.findByRole('region', { name: 'Review future subscription' });
+    for (const box of within(offer).getAllByRole('checkbox')) fireEvent.click(box);
+    const confirm = within(offer).getByRole('button', { name: 'Agree and continue to checkout' });
+    if (pause !== 'initial') fireEvent.click(confirm);
+    if (pause === 'uncertain') {
+      expect(
+        await plan.findByText(/Check signup to retrieve its result safely/),
+      ).toBeInTheDocument();
+      expect(plan.getByRole('button', { name: 'Check signup' })).toBeEnabled();
+      expect(sessionStorage.getItem(storageKey('paid-signup'))).toContain('retained-future-offer');
+      expect(billingService.createPaidSignup).toHaveBeenCalledTimes(1);
+      expect(redirectTo).not.toHaveBeenCalled();
+      return;
+    }
+    expect(
+      await plan.findByText('New subscriptions are temporarily unavailable. Try again later.'),
+    ).toBeInTheDocument();
+    const retainedOffer = plan.getByRole('region', { name: 'Review future subscription' });
+    expect(retainedOffer).toHaveTextContent('March 31, 2028');
+    expect(retainedOffer).toHaveTextContent('€9');
+    for (const box of within(retainedOffer).getAllByRole('checkbox')) expect(box).toBeChecked();
+    const retainedConfirm = within(retainedOffer).getByRole('button', {
+      name: 'Agree and continue to checkout',
+    });
+    expect(retainedConfirm).toBeDisabled();
+    fireEvent.click(retainedConfirm);
+    expect(billingService.createPaidSignup).toHaveBeenCalledTimes(pause === 'stale' ? 1 : 0);
+    expect(plan.queryByRole('button', { name: 'Check signup' })).not.toBeInTheDocument();
+    expect(plan.getByText('No automatic payment')).toBeInTheDocument();
+    expect(sessionStorage.getItem(storageKey('paid-signup'))).toBeNull();
+    expect(redirectTo).not.toHaveBeenCalled();
+  },
+);
