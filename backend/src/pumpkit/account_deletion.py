@@ -17,7 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 import pumpkit.models  # noqa: F401
 from pumpkit.auth.models import User
 from pumpkit.auth.service import users
-from pumpkit.billing import coupon_operations, coupon_redemption, paid_signups, prelaunch_reset
+from pumpkit.billing import (
+    checkout_coordination,
+    coupon_operations,
+    coupon_redemption,
+    paid_signups,
+    prelaunch_reset,
+)
 from pumpkit.billing import service as billing
 from pumpkit.billing.gateway import BillingGateway, BillingProviderError, get_billing_gateway
 from pumpkit.billing.models import FreeAccess, Subscription
@@ -113,6 +119,7 @@ async def _delete(
         return
     user = locked
     try:
+        await checkout_coordination.require_settled(db, user_id=user.id)
         # Ending billing expires a pending paid signup's Checkout, so it can't start a Subscription.
         await coupon_operations.require_settled(
             db, user_id=user.id, include_paid_signups=not end_billing
