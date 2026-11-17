@@ -31,9 +31,10 @@ def billing_clock(fake_billing, fixed_clock):
     fake_billing.clock = fixed_clock
 
 
+@pytest.mark.parametrize("purchases_paused", [False, True])
 @pytest.mark.parametrize("plan_key", ["pumpkit_pro_monthly", "pumpkit_pro_yearly"])
 async def test_explicit_future_signup_preserves_free_allowance_and_exact_payment_date(
-    authed_client, coupons, fake_billing, fixed_clock, plan_key, monkeypatch
+    authed_client, coupons, fake_billing, fixed_clock, plan_key, monkeypatch, purchases_paused
 ):
     monkeypatch.setattr(
         settings, "BILLING_PLAN_KEYS", ["pumpkit_pro_monthly", "pumpkit_pro_yearly"]
@@ -64,6 +65,7 @@ async def test_explicit_future_signup_preserves_free_allowance_and_exact_payment
     assert opened.json()["url"]
     assert fake_billing.checkouts == []
     assert (await authed_client.get("/api/v1/usage")).json() == before
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchases_paused)
     fake_billing.complete_paid_signup_checkout(opened.json()["session_id"])
     await _send(
         authed_client,
@@ -177,9 +179,10 @@ async def test_a_checkout_delayed_past_the_two_day_floor_is_refused_before_it_op
 
 
 async def test_an_unfinished_checkout_expires_without_a_subscription_or_lost_free_access(
-    authed_client, coupons, fake_billing, fixed_clock
+    authed_client, coupons, fake_billing, fixed_clock, monkeypatch
 ):
     free, request, opened = await open_paid_signup(authed_client, coupons)
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
     fixed_clock.advance(timedelta(hours=24))
     with pytest.raises(BillingProviderError):
         fake_billing.complete_paid_signup_checkout(opened["session_id"])
@@ -193,11 +196,12 @@ async def test_an_unfinished_checkout_expires_without_a_subscription_or_lost_fre
 
 
 async def test_a_checkout_lost_on_the_way_back_is_recovered_without_a_browser(
-    authed_client, coupons, fake_billing, fixed_clock, db_session_maker
+    authed_client, coupons, fake_billing, fixed_clock, db_session_maker, monkeypatch
 ):
     fake_billing.fail_on.add("after_create_paid_signup_checkout")
     free, request, opened = await open_paid_signup(authed_client, coupons)
     assert opened["status"] == "pending" and opened["url"] is None
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
     fake_billing.fail_on.clear()
     [checkout] = fake_billing.paid_signup_checkouts.values()
     fake_billing.complete_paid_signup_checkout(checkout.id)
@@ -246,6 +250,7 @@ async def test_open_signup_blocks_billing_coupon_and_deletion_until_cancelled_wi
     authed_client, coupons, fake_billing, monkeypatch, db_session_maker, user
 ):
     free, request, opened = await open_paid_signup(authed_client, coupons)
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
     coupon = await coupons("--months", "1")
     assert (await authed_client.post(PREVIEW, json={"code": coupon["code"]})).status_code == 409
     for route in ["/api/v1/billing/portal", "/api/v1/billing/subscribe-now"]:
@@ -1141,3 +1146,105 @@ async def test_unknown_cancel_and_failed_final_commit_keep_the_committed_paid_ch
         "status"
     ] == "refused"
     assert len(fake_billing.cancelled_subscriptions) == 1
+
+
+async def test_purchase_pause_refuses_new_signup_without_accepting_it(
+    authed_client, coupons, fake_billing, monkeypatch
+):
+    free = await redeem_coupon(authed_client, coupons)
+    preview = (
+        await authed_client.post(SIGNUPS + "/preview", json={"plan_key": "pumpkit_pro_monthly"})
+    ).json()
+    request = {
+        "operation_id": "11111111-1111-4111-8111-111111111111",
+        "revision": preview["revision"],
+        "terms_version": preview["terms_version"],
+        "accepted_terms": True,
+        "requested_immediate_start": True,
+        "approved_specific_clauses": True,
+        "language": "en",
+    }
+    before = (await authed_client.get("/api/v1/usage")).json()
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+    for _ in range(2):
+        result = await authed_client.post(SIGNUPS, json=request)
+        assert result.status_code == 503
+        assert result.json()["code"] == "BILLING_PURCHASES_PAUSED"
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).status_code == 404
+    assert fake_billing.paid_signup_checkouts == {}
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["pending_paid_signup_id"] is None
+    assert me["free_access"]["ends_at"] == free["ends_at"]
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", False)
+    opened = await authed_client.post(SIGNUPS, json=request)
+    assert opened.status_code == 200
+    assert opened.json()["first_payment_at"] == free["ends_at"]
+    assert len(fake_billing.paid_signup_checkouts) == 1
+
+
+async def test_purchase_pause_keeps_accepted_signup_recoverable_without_new_checkout(
+    authed_client, coupons, fake_billing, monkeypatch, db_session_maker, fixed_clock
+):
+    fake_billing.fail_on.add("create_paid_signup_checkout")
+    free, request, opened = await open_paid_signup(authed_client, coupons)
+    assert opened["status"] == "pending" and opened["url"] is None
+    fake_billing.fail_on.clear()
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+    before = (await authed_client.get("/api/v1/usage")).json()
+    for response in [
+        await authed_client.get(SIGNUPS + "/" + request["operation_id"]),
+        await authed_client.post(SIGNUPS, json=request),
+    ]:
+        assert response.status_code == 200
+        assert response.json()["status"] == "pending"
+        assert response.json()["url"] is None
+        assert response.json()["first_payment_at"] == free["ends_at"]
+        assert "temporarily unavailable" in response.json()["detail"]
+    out = StringIO()
+    assert (
+        await run_cli(
+            ["recover"],
+            sessions=db_session_maker,
+            gateway=fake_billing,
+            clock=fixed_clock,
+            stdout=out,
+        )
+        == 1
+    )
+    await _send(
+        authed_client,
+        fake_billing,
+        "evt_paused",
+        "customer.subscription.updated",
+        {"customer": "cus_fake_1"},
+    )
+    assert fake_billing.paid_signup_checkouts == {}
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", False)
+    recovered = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
+    assert recovered.json()["url"]
+    assert recovered.json()["first_payment_at"] == free["ends_at"]
+    assert len(fake_billing.paid_signup_checkouts) == 1
+
+
+@pytest.mark.parametrize("resolution", ["cancel", "expire"])
+async def test_paused_signup_without_checkout_can_end_without_losing_free_access(
+    authed_client, coupons, fake_billing, monkeypatch, fixed_clock, resolution
+):
+    fake_billing.fail_on.add("create_paid_signup_checkout")
+    free, request, _ = await open_paid_signup(authed_client, coupons)
+    fake_billing.fail_on.clear()
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+    if resolution == "cancel":
+        result = await authed_client.post(SIGNUPS + "/" + request["operation_id"] + "/cancel")
+    else:
+        fixed_clock.advance(timedelta(hours=24))
+        result = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
+    assert result.status_code == 200
+    assert result.json()["status"] == "refused"
+    assert result.json()["first_payment_at"] == free["ends_at"]
+    assert fake_billing.paid_signup_checkouts == {}
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["free_access"]["ends_at"] == free["ends_at"]
+    assert me["pending_paid_signup_id"] is None

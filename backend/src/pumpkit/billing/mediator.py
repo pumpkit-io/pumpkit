@@ -865,6 +865,7 @@ async def create_paid_signup(
     try:
         operation = await paid_signups.find(db, user_id=user.id, operation_id=request.operation_id)
     except NotFoundError:
+        purchase_availability.require_purchases_available()
         operation = await paid_signups.prepare(db, gateway, user=user, request=request, now=clock())
         # Accepted plan, date and paid consent must survive every subsequent provider write.
         await db.commit()

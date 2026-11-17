@@ -6,8 +6,9 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Self-hosters can pause arranged paid signups as well as other new purchases; Settings preserves the reviewed offer and acceptance, while existing signup recovery, cancellation, Free access and agreed payment dates continue. A redacted billing runtime command reports the installed pause contract.
 - Users see temporary unavailability for Top-up purchases during `BILLING_PURCHASES_PAUSED`; existing balances, spending and payment reconciliation continue, and a stale dialog keeps its offer and checked acceptance.
-- Users see temporary unavailability on the Paywall when Self-hosters pause normal subscription purchases with `BILLING_PURCHASES_PAUSED`; existing billing and access continue. Arranged paid signups are not paused yet.
+- Users see temporary unavailability on the Paywall when Self-hosters pause normal subscription purchases with `BILLING_PURCHASES_PAUSED`; existing billing and access continue.
 
 ## [0.15.0] - 2026-11-16
 

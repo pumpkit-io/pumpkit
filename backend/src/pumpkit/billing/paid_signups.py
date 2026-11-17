@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.billing import coupon_service, service
+from pumpkit.billing import coupon_service, purchase_availability, service
 from pumpkit.billing.allowance import limits
 from pumpkit.billing.gateway import (
     TRIAL_END_FLOOR,
@@ -380,6 +380,9 @@ async def reconcile(
                 )
             if target < now + TRIAL_END_FLOOR + _CLOCK_MARGIN:
                 return refuse(operation, now=now, detail=_TOO_SOON)
+            if not purchase_availability.purchases_available():
+                operation.detail = "Purchases are temporarily unavailable. Check signup again later; your free access and agreed payment date stay unchanged."
+                return _cancellation_response(operation, cancel=cancel)
             checkout = await gateway.create_paid_signup_checkout(
                 customer_id=customer_id,
                 user_id=user.id,

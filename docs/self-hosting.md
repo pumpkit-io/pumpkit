@@ -286,20 +286,24 @@ The mode applies to Subscriptions started after you set it. A Subscription keeps
 
 Use Stripe's test mode keys first, buy a Plan with a [test card](https://docs.stripe.com/testing), and check that the Plan card in Settings shows the Subscription.
 
-`BILLING_PURCHASES_PAUSED=true` temporarily stops normal Subscription and Top-up Checkout creation.
+`BILLING_PURCHASES_PAUSED=true` temporarily stops normal Subscription, Top-up and arranged-paid-signup Checkout creation.
 Keep the Stripe credentials and `BILLING_PLAN_KEYS` configured: removing billing grants
 unrestricted access. The authenticated `/billing/me` response exposes `purchases_available`
 separately from ordinary eligibility (`may_subscribe`). A paused checkout returns HTTP 503
-with code `BILLING_PURCHASES_PAUSED` before contacting the provider. The Paywall and Top-up dialog keep the
+with code `BILLING_PURCHASES_PAUSED` before contacting the provider. The Paywall, Top-up dialog and arranged-signup controls keep the
 offer and acceptance fields visible, disable purchasing and preserve entered acceptance
 when a stale page receives that response. They never retry a purchase automatically.
 Reads, webhooks, cancellation, payment recovery, existing access and previously authorized
 Subscription payments, including Subscribe now, continue under their existing rules.
 
-This is not yet a complete operational purchase pause.
-Arranged paid signups are not paused yet. Production seller activation and
-general purchase reopening remain gated on those paths, the controlled verification
-exception, Checkout drain and final provider verification in #499 (see ADR 0033).
+Accepted signup operations remain recoverable: reads find existing Checkouts and confirmed
+Subscriptions, and cancellation and expiry continue. Recovery waits before creating a missing
+Checkout while paused; it preserves the original offer and payment date.
+
+All three purchase paths enforce the pause, but this flag alone does not drain calls already
+dispatched to Stripe or invalidate existing Checkout links. Production seller activation and
+general purchase reopening still require the controlled verification exception, Checkout drain
+and final provider verification in #499 (see ADR 0033).
 The flag defaults to `false`; restart the configured app processes after changing it.
 
 ### Replace the legal documents

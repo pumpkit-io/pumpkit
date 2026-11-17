@@ -98,21 +98,34 @@ An Instance without the Stripe billing group sells no Plans (ADR 0011): `billing
 `billing/mediator.handle_webhook` owns the webhook transaction: it records the event for deduplication, locks the customer's User row, syncs the customer's Subscriptions (`billing/service.sync_customer`) or Top-ups (`billing/service.sync_top_ups`) from Stripe, depending on the event, and commits once. The lock is held across the Stripe call, so webhooks for one customer run one after another. Webhook handlers use the session they are given, never commit, and raise to roll back the whole event so Stripe retries it; a webhook for an unknown customer is logged and skipped.
 
 
-`BILLING_PURCHASES_PAUSED=true` temporarily stops normal Subscription and Top-up Checkout creation.
+`BILLING_PURCHASES_PAUSED=true` temporarily stops normal Subscription, Top-up and arranged-paid-signup Checkout creation.
 Keep the Stripe credentials and `BILLING_PLAN_KEYS` configured: removing billing grants
 unrestricted access. The authenticated `/billing/me` response exposes `purchases_available`
 separately from ordinary eligibility (`may_subscribe`). A paused checkout returns HTTP 503
-with code `BILLING_PURCHASES_PAUSED` before contacting the provider. The Paywall and Top-up dialog keep the
+with code `BILLING_PURCHASES_PAUSED` before contacting the provider. The Paywall, Top-up dialog and arranged-signup controls keep the
 offer and acceptance fields visible, disable purchasing and preserve entered acceptance
 when a stale page receives that response. They never retry a purchase automatically.
 Reads, webhooks, cancellation, payment recovery, existing access and previously authorized
 Subscription payments, including Subscribe now, continue under their existing rules.
 
-This is not yet a complete operational purchase pause.
-Arranged paid signups are not paused yet. Production seller activation and
-general purchase reopening remain gated on those paths, the controlled verification
-exception, Checkout drain and final provider verification in #499 (see ADR 0033).
+Accepted signup operations remain recoverable: reads find existing Checkouts and confirmed
+Subscriptions, and cancellation and expiry continue. Recovery waits before creating a missing
+Checkout while paused; it preserves the original offer and payment date.
+
+All three purchase paths enforce the pause, but this flag alone does not drain calls already
+dispatched to Stripe or invalidate existing Checkout links. Production seller activation and
+general purchase reopening still require the controlled verification exception, Checkout drain
+and final provider verification in #499 (see ADR 0033).
 The flag defaults to `false`; restart the configured app processes after changing it.
+
+Run `python -m pumpkit.billing.runtime_config` inside each affected installed process
+environment to read the billing runtime contract as redacted JSON. Schema 1 reports
+`purchase_pause.contract_version=1`, its three `supported_paths` and effective `paused`
+state, plus `billing_configured`, `top_up_configured` and `managed_payments` booleans.
+A missing optional Top-up offer reports `top_up_configured=false`; missing billing or invalid
+configuration exits nonzero. This command makes no database or provider writes. Readback
+is configuration evidence, not proof of a completed Checkout drain; the ops procedure must
+also verify process recreation and every Checkout-creating service, including signup recovery.
 
 ### Write a Post
 
