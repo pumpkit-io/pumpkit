@@ -1,6 +1,7 @@
 import base64
 import binascii
 import json
+import re
 from enum import StrEnum
 from typing import Annotated, Literal, Optional, Self
 from urllib.parse import urlsplit
@@ -139,6 +140,7 @@ class Settings(BaseSettings):
     # On, Stripe is the seller of every Checkout (Managed Payments); off, the Instance is.
     STRIPE_MANAGED_PAYMENTS: bool = False
     BILLING_PURCHASES_PAUSED: bool = False
+    BILLING_VERIFICATION_USER_ID: Optional[str] = None
 
     # The Plans Pumpkit sells, as Stripe price lookup keys, in display order.
     # Nothing else can be listed or bought.
@@ -295,6 +297,27 @@ class Settings(BaseSettings):
     def _purchase_pause_needs_stripe_billing(self) -> Self:
         if self.BILLING_PURCHASES_PAUSED and not self.is_stripe_billing_configured():
             raise ValueError("BILLING_PURCHASES_PAUSED needs configured Stripe billing")
+        return self
+
+    @field_validator("BILLING_VERIFICATION_USER_ID", mode="before")
+    @classmethod
+    def _verification_user_id(cls, value: object) -> object:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return None
+        if not isinstance(value, str) or not re.fullmatch(
+            r"user_[0-7][0-9A-HJKMNP-TV-Z]{25}", value
+        ):
+            raise ValueError("BILLING_VERIFICATION_USER_ID needs an exact User ID")
+        return value
+
+    @model_validator(mode="after")
+    def _verification_user_needs_purchase_pause(self) -> Self:
+        if self.BILLING_VERIFICATION_USER_ID and (
+            not self.BILLING_PURCHASES_PAUSED or not self.is_stripe_billing_configured()
+        ):
+            raise ValueError(
+                "BILLING_VERIFICATION_USER_ID needs a purchase pause and configured billing"
+            )
         return self
 
     @model_validator(mode="after")

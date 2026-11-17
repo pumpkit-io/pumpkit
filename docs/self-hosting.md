@@ -302,9 +302,18 @@ Checkout while paused; it preserves the original offer and payment date.
 
 All three purchase paths enforce the pause, but this flag alone does not drain calls already
 dispatched to Stripe or invalidate existing Checkout links. Production seller activation and
-general purchase reopening still require the controlled verification exception, Checkout drain
+general purchase reopening still require the controlled verification purchase, Checkout drain
 and final provider verification in #499 (see ADR 0033).
 The flag defaults to `false`; restart the configured app processes after changing it.
+
+`BILLING_VERIFICATION_USER_ID` optionally selects one existing X-linked User by their exact
+immutable Pumpkit User ID while purchases are paused. Their authenticated
+`GET /api/v1/users/me` response supplies that ID. This permits only that User's normal
+purchase journey; eligibility, current Terms, Trial and Free access rules still apply. Email,
+handle and administrator status never confer the exception. Deletion and recreation do not
+transfer it to the new account. Clear this setting before unpausing, then restart every
+Checkout-creating process. The default is no exception.
+
 
 ### Replace the legal documents
 
