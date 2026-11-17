@@ -4,7 +4,7 @@ This is the provider and application evidence for [#558](https://github.com/pump
 
 ## Execution status
 
-On November 17, 2026, 19 sandbox portal/application scenarios were verified: six completed monthly cases, 12 remaining cases after correcting a seller-mode browser completion signal, and one separate uncertain-Coupon case. The 25-case portal-transition suite passed in 10.5 minutes. Link order management remains unverified. Ticket #558 remains incomplete under its current acceptance criteria until that gate is verified or the Operator approves a revised verification order. No production purchase or provider setting change is authorized by this evidence.
+The intermediate sandbox scope of [#558](https://github.com/pumpkit-io/pumpkit/issues/558) is complete. On November 17, 2026, 19 sandbox portal/application scenarios were verified: six completed monthly cases, 12 remaining cases after correcting a seller-mode browser completion signal, and one separate uncertain-Coupon case. The 25-case portal-transition suite passed in 10.5 minutes. The maintainer approved postponing the blocking Link and independent provider-race verification to final activation task [#499](https://github.com/pumpkit-io/pumpkit/issues/499), allowing the remaining implementation work under #556 to proceed. Link order management remains unverified. General purchases must stay closed until the deferred verification passes; this evidence authorizes no production purchase or provider setting change.
 
 The [sanitized outcome record](stripe-customer-action-results.json) preserves the split-run provenance, anonymous provider dates/amounts, application Allowance limits and transition outcomes. The first run stopped at a browser wait after its six completed cases; it is not reported as a successful consolidated 18-case run. The subsequent 12-case run passed in 801.91 seconds, and the separate Coupon case passed in 87.22 seconds.
 
@@ -18,7 +18,7 @@ A synthetic paid sandbox purchase was completed through Pumpkit's gateway and ho
 
 This establishes the receipt-originated route and the unattended authentication boundary. It does not prove that receipt-originated sandbox order tools are absent after authentication. The direct Link app and guest receipt route must remain distinct in the evidence.
 
-Restricted Stripe portal settings do not establish restrictions on Link. The Link gate remains open for account and guest journeys, card replacement, cancellation, price changes, old receipts/links, and effects on paid/free coverage, cancellation intent and agreed payment dates. Checkout login or a success redirect cannot close that gate.
+Restricted Stripe portal settings do not establish restrictions on Link. The final #499 Link gate remains open for account and guest journeys, card replacement, cancellation, price changes, old receipts/links, and effects on paid/free coverage, cancellation intent and agreed payment dates. Checkout login or a success redirect cannot close that gate.
 
 ## Restricted portal and application seam
 
@@ -47,6 +47,16 @@ This tests the installed Managed Payments path. It does not claim that every Lin
 A real-Stripe Coupon case persists an uncertain operation after its provider deferral succeeds but the gateway loses the response. An already-issued restricted portal remains usable for card replacement while issuing a new portal returns 409. A test-signed current-state nudge recovers that operation once: one deferral call, one free month, unchanged paid Allowance and the agreed later replacement-card payment. Repeated nudge/recovery reads must not duplicate benefits.
 
 The existing deterministic HTTP/recovery regressions cover pending Coupon dispatch, paid signup and Plan-change operations, cancelled Coupon coverage and repeated recovery. On November 17, 2026, the four relevant test modules passed 131 tests. Their gateway is controlled; they prove application guards and reconciliation for those supplied provider states. They do not prove what Link exposes or which writes Link can race through an independently issued capability.
+
+## Deferred final activation verification
+
+Task [#499](https://github.com/pumpkit-io/pumpkit/issues/499) must complete the following matrix after compatible safeguards are installed and before general purchases reopen:
+
+- Authenticated Link account and guest-receipt journeys: card replacement, cancellation, available price changes and older Link links or capabilities.
+- Monthly and annual subscriptions in Trial, paid-up, past-due, cancelled renewal and current/queued Free access states, including effects on paid/free coverage, cancellation intent and agreed payment dates.
+- Independent provider-action races with pending Coupon, paid-signup and Plan-change operations where applicable, beyond the real-provider uncertain Coupon case and controlled-gateway regressions recorded here.
+
+Each action needs actual provider payment/date readback and Pumpkit access/Allowance after current-state synchronization, classified as prevented, safely reconciled or blocking. Sandbox limitations and the unattended authentication barrier remain unresolved evidence boundaries. A supported provider route or a separately authorized bounded live plan must supply the missing proof. The ordering decision selects no verification identity and authorizes no spending or irreversible provider choice. Any unverified or incompatible outcome keeps purchases closed and requires a reviewed correction without weakening ADR 0022's commitments.
 
 ## Reproduce
 
