@@ -84,6 +84,10 @@ _Avoid_: price, tier, product
 A User's ongoing paid or trialling commitment to one Plan. A User has at most one Running Subscription; a User may hold several Ended ones from the past.
 _Avoid_: membership, purchase
 
+**Seller**:
+The party identified at checkout as selling a purchase: the Operator or Self-hoster in seller mode, or Sold through Link, LLC under Managed Payments. A Subscription keeps the seller it started with; whoever runs the Instance remains responsible for providing Pumpkit in either case (ADR 0028).
+_Avoid_: Operator (as a synonym for the seller of every purchase)
+
 **Running**:
 A Subscription that has started and not Ended: trialling, paid up, behind on payment, or paused. A Subscription whose first payment is still waiting on the User is not yet Running.
 _Avoid_: live, active (for this broader sense)
