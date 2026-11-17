@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-11-17
+
 - Proven checkout rejections and failures before checkout creation no longer block future purchases or account deletion. Uncertain provider results still require reconciliation.
 
 - Self-hosters can drain retained legacy arranged paid-signup checkouts using their original billing return routes before changing seller.
