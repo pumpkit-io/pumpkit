@@ -48,6 +48,21 @@ A real-Stripe Coupon case persists an uncertain operation after its provider def
 
 The existing deterministic HTTP/recovery regressions cover pending Coupon dispatch, paid signup and Plan-change operations, cancelled Coupon coverage and repeated recovery. On November 17, 2026, the four relevant test modules passed 131 tests. Their gateway is controlled; they prove application guards and reconciliation for those supplied provider states. They do not prove what Link exposes or which writes Link can race through an independently issued capability.
 
+## Reconciliation regression evidence for #564
+
+The application already reconciles the provider states covered by this investigation. #564 adds a characterization at the authenticated HTTP and gateway seams, without changing runtime behavior: `test_external_price_change_keeps_unknown_plan_change_guarded_after_stale_webhooks` in `backend/tests/billing/test_plan_changes.py`.
+
+The case loses the response after a Plan-change dispatch has applied, then supplies a different current provider price before confirmation. Distinct delayed and repeated signed webhook nudges carry the old price and status. The operation must remain pending, retain its accepted payment date and block new management operations. Billing and usage reads must retain earned paid coverage, queued Free access and its Allowance; provider readback must retain the external price without another Plan-change or Coupon deferral. It must not advertise an unconfirmed future Plan. A temporary fault removing the provider-price equality check makes this test fail by falsely reporting completion; the fault was restored before validation.
+
+This supplements existing HTTP/recovery cases rather than repeating them:
+
+- `test_monthly_coupons.py` covers uncertain deferral with external cancellation, and delayed/repeated webhook recovery with one Coupon benefit and one provider deferral.
+- `test_coupon_dispatch_recovery.py` keeps an unknown dispatched deferral pending when the original provider state is cancelled; a late effect remains recoverable.
+- `test_plan_changes.py` covers cancelled or shortened free time between dispatch and readback, lost responses, original replay boundaries, cancellation after access expiry and paid/free Allowance retention.
+- `test_paid_signups.py` covers late provider listing, cancellation crossing first payment, final unknown outcomes and lost database commits, including recovery by webhook, HTTP and operator CLI.
+
+These are controlled provider-state regressions. Remaining pending preserves uncertainty and prevents a second application operation; it does not repair an external charge, undo an external price change or prove that Link cannot make that change. Actual independent provider actions still need the final checks below. No supported restriction or reconciliation for an untested Link action is claimed here.
+
 ## Deferred final activation verification
 
 Task [#499](https://github.com/pumpkit-io/pumpkit/issues/499) must complete the following matrix after compatible safeguards are installed and before general purchases reopen:
@@ -56,7 +71,18 @@ Task [#499](https://github.com/pumpkit-io/pumpkit/issues/499) must complete the 
 - Monthly and annual subscriptions in Trial, paid-up, past-due, cancelled renewal and current/queued Free access states, including effects on paid/free coverage, cancellation intent and agreed payment dates.
 - Independent provider-action races with pending Coupon, paid-signup and Plan-change operations where applicable, beyond the real-provider uncertain Coupon case and controlled-gateway regressions recorded here.
 
-Each action needs actual provider payment/date readback and Pumpkit access/Allowance after current-state synchronization, classified as prevented, safely reconciled or blocking. Sandbox limitations and the unattended authentication barrier remain unresolved evidence boundaries. A supported provider route or a separately authorized bounded live plan must supply the missing proof. The ordering decision selects no verification identity and authorizes no spending or irreversible provider choice. Any unverified or incompatible outcome keeps purchases closed and requires a reviewed correction without weakening ADR 0022's commitments.
+The exact outstanding matrix has status **UNVERIFIED** for every combination below, except the separately named verified controls. Use both monthly and annual subscriptions with each state: introductory Trial, paid-up, past-due, cancelled renewal, current Free access and queued Free access (including cancellation with current/queued Free access). For each state and interval:
+
+- **UNVERIFIED:** authenticated Link account actions for card replacement, cancellation and every price change the installed provider offers. Record an actually absent action as unavailable only after observing that surface.
+- **UNVERIFIED:** guest receipt-originated actions for the same card, cancellation and offered-price changes, independently of the authenticated Link account journey.
+- **UNVERIFIED:** previously issued Link receipt links and other older Link capabilities for those actions after compatible restrictions or safeguards are installed. A fresh portal result cannot stand in for an old Link capability.
+- **UNVERIFIED:** independently issued provider actions racing a pending Coupon, paid-signup or Plan-change operation wherever that operation is applicable. For each operation, exercise card replacement, cancellation and offered price changes through the actual available Link/older-capability surfaces and retain any unavailable combinations explicitly. The observed real-Stripe uncertain Coupon plus restricted-portal card update is the verified control; other independent races remain open.
+
+Verified controls remain the nineteen real-Stripe application cases and twenty-five portal transitions in the committed [outcome record](stripe-customer-action-results.json), the six [Subscription card/subsequent-payment cases](stripe-managed-payment-methods.md#verified-result-on-november-16-2026), and the controlled HTTP/recovery cases above. None changes an unverified Link or independent-race entry to passed.
+
+Each action needs actual provider payment/date readback and Pumpkit access/Allowance after current-state synchronization, classified as prevented, safely reconciled or blocking. Compare the Subscription's card and actual subsequent payment separately from Customer default; retain paid/free coverage, Allowance anchors and limits, cancellation choice, accepted payment date, and once-only operation effects. A local projection cannot undo a charge. Any observed violation is an activation blocker requiring a supported correction or an explicit ADR 0022 decision before reopening.
+
+**UNVERIFIED:** the separately authorized paid live verification in #499 must establish seller, actual paid amount, receipt/invoice, Subscription mode, signed webhook and resulting Pumpkit access/Allowance while general purchases remain paused. It requires an approved verification identity, Plan, currency and spending ceiling; none is selected or authorized by #564. Sandbox limitations and the unattended authentication barrier remain unresolved evidence boundaries. A supported provider route or a separately authorized bounded live plan must supply the missing proof. The ordering decision selects no verification identity and authorizes no spending or irreversible provider choice. Any unverified or incompatible outcome keeps purchases closed and requires a reviewed correction without weakening ADR 0022's commitments.
 
 ## Reproduce
 
