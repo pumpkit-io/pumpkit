@@ -419,7 +419,7 @@ async def test_a_gateway_failure_on_checkout_returns_502_with_error_id(
     assert_reported_502(response)
 
 
-async def test_a_failed_checkout_keeps_the_new_customer_and_a_retry_reuses_it(
+async def test_a_failed_checkout_keeps_customer_and_blocks_replacement_until_reconciled(
     client, db, fake_billing, user
 ):
     fake_billing.fail_on = {"create_subscription_checkout"}
@@ -432,9 +432,9 @@ async def test_a_failed_checkout_keeps_the_new_customer_and_a_retry_reuses_it(
     fake_billing.fail_on = set()
     retried = await client.post(CHECKOUT, json=CHECKOUT_MONTHLY)
 
-    assert retried.status_code == 200
+    assert retried.status_code == 409
     assert len(fake_billing.customers_created) == 1
-    assert [call.customer_id for call in fake_billing.checkouts] == ["cus_fake_1"]
+    assert fake_billing.checkouts == []
 
 
 async def test_a_gateway_failure_creating_the_customer_returns_502_and_saves_nothing(

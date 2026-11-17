@@ -22,9 +22,11 @@ async def test_operational_readback_distinguishes_complete_capability_from_effec
     assert json.loads(out.getvalue()) == {
         "schema_version": 1,
         "purchase_pause": {
-            "contract_version": 2,
+            "contract_version": 3,
             "supported_paths": ["subscription", "top_up", "arranged_paid_signup"],
             "paused": True,
+            "durable_checkout_dispatch": 1,
+            "checkout_drain": 1,
         },
         "verification_user": {"selected": False, "valid": True, "fingerprint": None},
         "billing_configured": True,

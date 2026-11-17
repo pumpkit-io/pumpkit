@@ -411,6 +411,8 @@ curl -s http://localhost:8080/api/v1/health
 
 Before 1.0, an upgrade may need manual steps. Each release lists them under **Upgrade notes** in [`CHANGELOG.md`](../CHANGELOG.md).
 
+The one-time upgrade from pre-journal billing code to Checkout contract 3 has an additional [stop, full-pause and legacy-review sequence](checkout-drain.md#upgrade-notes). Stop old creators before migration 0069, and set the canonical full pause with no verification user before any upgraded creator starts. Follow that sequence before the ordinary restart below; later contract-3 upgrades do not require this bootstrap pause.
+
 1. Read every CHANGELOG section between your version and the new one, and follow its **Upgrade notes**. Your version is `PUMPKIT_VERSION` in `.env`; releases are listed on [GitHub](https://github.com/pumpkit-io/pumpkit/releases).
 2. [Back up](#backups-and-restore) the database and the Media.
 3. Set `PUMPKIT_VERSION` in `.env` to the new version, without the `v` (for example `PUMPKIT_VERSION=0.2.0`).

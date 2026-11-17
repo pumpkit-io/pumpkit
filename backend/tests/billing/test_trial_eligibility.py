@@ -10,6 +10,7 @@ from pumpkit.billing.gateway import SubscriptionState, get_billing_gateway
 from pumpkit.billing.router import router as billing_router
 from pumpkit.core.config import settings
 from pumpkit.x_connection.x_publisher import X_SIGN_IN_SCOPES
+from tests.billing.checkout_drain import drain, review
 from tests.billing.test_billing import CHECKOUT, CHECKOUT_MONTHLY, MONTHLY
 from tests.billing.test_top_up_account_deletion import remove_user
 from tests.x_connection.sign_in.conftest import sign_in_app as sign_in_app
@@ -128,7 +129,15 @@ async def test_distinct_x_accounts_sharing_contact_email_keep_separate_trial_his
 
 @pytest.mark.parametrize("failed", [True, False])
 async def test_failed_or_abandoned_checkout_does_not_use_trial_eligibility(
-    trial_browser, fake_x_publisher, fake_billing, db_session_maker, file_storage, failed
+    trial_browser,
+    fake_x_publisher,
+    fake_billing,
+    db_session_maker,
+    file_storage,
+    failed,
+    monkeypatch,
+    tmp_path,
+    fixed_clock,
 ):
     original = await sign_in(trial_browser, fake_x_publisher)
     if failed:
@@ -138,6 +147,17 @@ async def test_failed_or_abandoned_checkout_does_not_use_trial_eligibility(
     fake_billing.fail_on.clear()
     if not failed:
         await fake_billing.expire_open_checkouts(customer_id=fake_billing.checkouts[-1].customer_id)
+    else:
+        status, _ = await remove_user(db_session_maker, fake_billing, file_storage, original["id"])
+        assert status == 1
+        assert (await trial_browser.get(BILLING_ME)).json()["trial_days"] == 7
+        monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+        _, closed = await drain(db_session_maker, fake_billing, ["execute"], clock=fixed_clock)
+        evidence = review(tmp_path / "review.json", closed["binding"])
+        code, resolved = await drain(
+            db_session_maker, fake_billing, ["execute", *evidence], clock=fixed_clock
+        )
+        assert code == 0, resolved
     status, error = await remove_user(db_session_maker, fake_billing, file_storage, original["id"])
     assert status == 0, error
 

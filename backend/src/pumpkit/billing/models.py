@@ -302,6 +302,7 @@ class PaidSignup(Base):
     operation_id: Mapped[str] = mapped_column(String(128))
     revision_digest: Mapped[str] = mapped_column(String(64))
     status: Mapped[Literal["pending", "completed", "refused"]] = mapped_column(String, index=True)
+    checkout_contract: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     cancel_requested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     customer_id: Mapped[Optional[str]] = mapped_column(String)
     session_id: Mapped[Optional[str]] = mapped_column(String)
@@ -334,3 +335,37 @@ class PlanChange(Base):
     dispatch_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     detail: Mapped[Optional[str]] = mapped_column(String)
+
+
+class CheckoutFence(Base):
+    __tablename__ = "billing_checkout_fence"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    instance_id: Mapped[str] = mapped_column(String)
+    generation: Mapped[int] = mapped_column(Integer, default=0)
+    closed: Mapped[bool] = mapped_column(Boolean, default=False)
+    config_fingerprint: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    stable_config_fingerprint: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    receipt: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    evidence_digest: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    source_managed: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    released_receipt: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    released_generation: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    released_fingerprint: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    released_evidence_digest: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class CheckoutDispatch(Base):
+    __tablename__ = "billing_checkout_dispatches"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String)
+    generation: Mapped[int] = mapped_column(Integer)
+    parameters: Mapped[dict] = mapped_column(JSON)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True)
+    attempted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    session_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    settled: Mapped[bool] = mapped_column(Boolean, default=False)
+    provider_finished: Mapped[bool] = mapped_column(Boolean, default=False)
+    provider_resolution_required: Mapped[bool] = mapped_column(Boolean, default=False)

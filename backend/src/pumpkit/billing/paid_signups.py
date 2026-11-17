@@ -1,20 +1,25 @@
 import hashlib
+import json
 from dataclasses import asdict
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from itsdangerous import BadData, URLSafeSerializer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pumpkit.auth.models import User
-from pumpkit.billing import coupon_service, purchase_availability, service
+from pumpkit.billing import checkout_coordination, coupon_service, purchase_availability, service
 from pumpkit.billing.allowance import limits
+from pumpkit.billing.checkout_evidence import LegacyRequest
 from pumpkit.billing.gateway import (
     TRIAL_END_FLOOR,
     BillingGateway,
     BillingProviderError,
+    CheckoutNotCreated,
+    PaidSignupCheckout,
     SubscriptionState,
+    legacy_paid_signup_parameters_match,
 )
 from pumpkit.billing.models import CouponOperation, PaidSignup, PlanChange
 from pumpkit.billing.schemas import PaidSignupPreviewResponse, PaidSignupRequest, PaidSignupResponse
@@ -69,6 +74,7 @@ def response(operation: PaidSignup, *, url: Optional[str] = None) -> PaidSignupR
 async def preview(
     db: AsyncSession, gateway: BillingGateway, *, user: User, plan_key: str, now: datetime
 ) -> PaidSignupPreviewResponse:
+    await checkout_coordination.require_settled(db, user_id=user.id)
     if not coupon_service.coupons_available(settings):
         raise RefusedError("Paid signup during free access is unavailable on this instance.")
     if await pending(db, user_id=user.id) or await db.scalar(
@@ -175,6 +181,7 @@ async def prepare(
         operation_id=request.operation_id,
         revision_digest=hashlib.sha256(request.revision.get_secret_value().encode()).hexdigest(),
         status="pending",
+        checkout_contract=1,
         customer_id=user.stripe_customer_id,
         offer={
             **offer.model_dump(mode="json", exclude={"revision"}),
@@ -233,6 +240,7 @@ async def reconcile(
     cancel: bool = False,
     mutate: bool = True,
     cancel_dispatch: bool = False,
+    create_checkout: Optional[Callable[[], Awaitable[PaidSignupCheckout]]] = None,
 ) -> PaidSignupResponse:
     now = clock()
     if operation.status != "pending" and not (
@@ -336,6 +344,15 @@ async def reconcile(
         checkout = checkouts[0] if checkouts else None
         if checkout:
             operation.session_id = checkout.id
+            await checkout_coordination.observed_paid_signup(
+                db, operation_id=operation.id, session_id=checkout.id
+            )
+        elif operation.checkout_contract != 1:
+            operation.detail = "This existing signup needs review of its original checkout request. Contact support; your free access and agreed date stay unchanged."
+            return _cancellation_response(operation, cancel=cancel)
+        elif await checkout_coordination.unresolved_paid_signup(db, operation_id=operation.id):
+            operation.detail = "Your checkout result is being confirmed. Contact support; your free access and agreed date stay unchanged."
+            return _cancellation_response(operation, cancel=cancel)
         if checkout and checkout.status == "complete":
             # Only the completed Checkout starts the Subscription, which the next read finds.
             operation.detail = "Your subscription is being confirmed. Its agreed plan and payment date stay unchanged."
@@ -383,14 +400,12 @@ async def reconcile(
             if not purchase_availability.purchases_available(user):
                 operation.detail = "Purchases are temporarily unavailable. Check signup again later; your free access and agreed payment date stay unchanged."
                 return _cancellation_response(operation, cancel=cancel)
-            checkout = await gateway.create_paid_signup_checkout(
-                customer_id=customer_id,
-                user_id=user.id,
-                operation_id=operation.id,
-                price_id=operation.offer["price_id"],
-                first_payment_at=target,
-                expires_at=expiry,
-            )
+            if create_checkout is None:
+                operation.detail = (
+                    "Checkout dispatch requires coordinated recovery. Check signup again."
+                )
+                return _cancellation_response(operation, cancel=cancel)
+            checkout = await create_checkout()
             operation.session_id = checkout.id
         if checkout.status == "expired":
             return refuse(
@@ -403,6 +418,12 @@ async def reconcile(
             return _cancellation_response(operation, cancel=cancel, url=checkout.url)
         operation.detail = "Your checkout is being confirmed. Your free access is unchanged."
         return _cancellation_response(operation, cancel=cancel)
+    except CheckoutNotCreated:
+        return refuse(
+            operation,
+            now=now,
+            detail="No future payment was arranged. Your free access is unchanged; review a fresh paid offer to subscribe.",
+        )
     except BillingProviderError as error:
         logger.error(
             "Stripe failed or refused paid signup %s: %s",
@@ -454,3 +475,67 @@ async def _preserve_settled_paid_coverage(
     subscription.paid_anchor = state.billing_cycle_anchor
     subscription.paid_allowance = asdict(limits(trial=False))
     await db.flush()
+
+
+async def legacy_review_target(db: AsyncSession, *, operation_id: str) -> Optional[PaidSignup]:
+    return await db.get(PaidSignup, operation_id, populate_existing=True)
+
+
+async def resolve_reviewed_legacy_absence(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    proof: LegacyRequest,
+    now: datetime,
+) -> bool:
+    if not proof.paid_signup_id or proof.parameters is None:
+        return False
+    operation = await legacy_review_target(db, operation_id=proof.paid_signup_id)
+    if (
+        not operation
+        or operation.checkout_contract != 0
+        or operation.status not in {"pending", "refused"}
+        or operation.session_id
+        or operation.subscription_id
+    ):
+        return False
+    params = proof.parameters
+    customer = params.get("customer")
+    if not isinstance(customer, str):
+        return False
+    if operation.customer_id:
+        if operation.customer_id != customer:
+            return False
+    elif customer not in await gateway.find_user_customers(user_id=operation.user_id):
+        return False
+    offer_digest = hashlib.sha256(json.dumps(operation.offer, sort_keys=True).encode()).hexdigest()
+    key_digest = hashlib.sha256(f"{operation.id}:checkout".encode()).hexdigest()
+    parameters_digest = hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()
+    if (
+        proof.accepted_offer_sha256 != offer_digest
+        or proof.idempotency_key_sha256 != key_digest
+        or proof.parameters_sha256 != parameters_digest
+        or not legacy_paid_signup_parameters_match(
+            params,
+            user_id=operation.user_id,
+            customer_id=customer,
+            operation_id=operation.id,
+            offer=operation.offer,
+        )
+    ):
+        return False
+    if any(
+        c.operation_id == operation.id
+        for c in await gateway.list_paid_signup_checkouts(customer_id=customer)
+    ):
+        return False
+    if any(
+        s.paid_signup_operation == operation.id
+        for s in await gateway.list_subscriptions(customer_id=customer)
+    ):
+        return False
+    operation.status = "refused"
+    operation.resolved_at = operation.resolved_at or now
+    operation.detail = "The reviewed original checkout did not arrange payment. Your free access is unchanged; review a fresh offer when purchases reopen."
+    await db.flush()
+    return True

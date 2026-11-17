@@ -139,7 +139,7 @@ async def test_selected_user_can_buy_a_top_up_without_changing_free_access_or_ba
     assert len(fake_billing.top_up_checkouts) == 1
 
 
-async def test_selected_user_can_arrange_signup_and_recover_a_missing_checkout(
+async def test_selected_user_cannot_bypass_an_unknown_accepted_signup_dispatch(
     authed_client, coupons, user, fake_billing, monkeypatch
 ):
     monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
@@ -154,9 +154,10 @@ async def test_selected_user_can_arrange_signup_and_recover_a_missing_checkout(
     assert waiting.json()["url"] is None
     monkeypatch.setattr(settings, "BILLING_VERIFICATION_USER_ID", user.id)
     recovered = await authed_client.get(SIGNUPS + "/" + request["operation_id"])
-    assert recovered.json()["url"]
+    assert recovered.json()["status"] == "pending"
+    assert recovered.json()["url"] is None
     assert recovered.json()["first_payment_at"] == free["ends_at"]
-    assert len(fake_billing.paid_signup_checkouts) == 1
+    assert fake_billing.paid_signup_checkouts == {}
     assert (await authed_client.get("/api/v1/usage")).json() == before
     assert (await authed_client.get(BILLING_ME)).json()["subscription"] is None
 

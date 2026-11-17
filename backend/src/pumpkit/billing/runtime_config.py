@@ -48,9 +48,11 @@ async def run_cli(
             {
                 "schema_version": 1,
                 "purchase_pause": {
-                    "contract_version": 2,
+                    "contract_version": 3,
                     "supported_paths": ["subscription", "top_up", "arranged_paid_signup"],
                     "paused": configuration.BILLING_PURCHASES_PAUSED,
+                    "durable_checkout_dispatch": 1,
+                    "checkout_drain": 1,
                 },
                 "verification_user": {
                     "selected": selected is not None,

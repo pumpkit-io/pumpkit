@@ -129,7 +129,8 @@ Checkout-creating process. The default is no exception.
 
 Run `python -m pumpkit.billing.runtime_config` inside each affected installed process
 environment to read the billing runtime contract as redacted JSON. Schema 1 reports
-`purchase_pause.contract_version=2`, its three `supported_paths` and effective `paused`
+`purchase_pause.contract_version=3`, `durable_checkout_dispatch=1`, `checkout_drain=1`,
+its three `supported_paths` and effective `paused`
 state, plus `billing_configured`, `top_up_configured` and `managed_payments` booleans.
 A missing optional Top-up offer reports `top_up_configured=false`; missing billing or invalid
 configuration exits nonzero. The root `verification_user` object reports `selected`, `valid`
@@ -143,6 +144,8 @@ verification exception; consumers must validate the full versioned contract rath
 assuming `paused=true` means nobody may purchase. This command makes no database or provider writes. Readback
 is configuration evidence, not proof of a completed Checkout drain; the ops procedure must
 also verify process recreation and every Checkout-creating service, including signup recovery.
+The [owned Checkout drain](checkout-drain.md) documents durable dispatch tracking, reviewed
+legacy evidence, current-state reconciliation and the source-to-target fence receipt lifecycle.
 
 ### Write a Post
 

@@ -6,6 +6,12 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Proven checkout rejections and failures before checkout creation no longer block future purchases or account deletion. Uncertain provider results still require reconciliation.
+
+- Self-hosters can drain retained legacy arranged paid-signup checkouts using their original billing return routes before changing seller.
+
+- Self-hosters can preview and reconcile owned Checkout sessions before changing seller, with durable creation tracking and a resumable readiness receipt. Uncertain purchases block replacement purchases and account deletion until reconciled. **Upgrade notes:** for the one-time pre-journal upgrade, stop all old Checkout creators before migration 0069 and set the canonical full purchase pause with no verification user before any new creator starts; keep it through independently reviewed legacy request evidence, as described in `docs/checkout-drain.md`. Absent legacy paid signups require original request resolution; migration, deployment or an empty inventory alone does not establish readiness. Later ordinary contract-3 upgrades do not require this bootstrap pause.
+
 - Opening billing now shows progress and prevents duplicate requests across billing actions. A failed attempt keeps confirmed plan information and can be retried; returning to cached Settings refreshes billing information.
 
 - Self-hosters can select one existing X-linked account for a controlled purchase during the pause, using its immutable User ID. Normal eligibility and acceptance still apply, and the redacted runtime command validates the selection without exposing it to other Users.
