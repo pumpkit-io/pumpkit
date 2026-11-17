@@ -55,3 +55,5 @@ PUMPKIT_STRIPE_TEST_KEY=<sk_test_ key> uv run --extra dev pytest tests/billing/t
 It creates its own products with an eligible tax code, refuses a live key and deletes or archives what it creates. `PUMPKIT_STRIPE_RESULTS=<file>` also writes what Stripe answered to each call and the Subscription's state after it.
 
 The additional `-k replaces` cases verify [Managed Payments Subscription card replacement](../docs/stripe-managed-payment-methods.md), including the generic Customer-default negative control and a later charge. Their card-management browser needs a display; the normal suite does not run them. Keep failure artifacts and outcome files private as the runbook describes.
+
+The [Managed Payments customer-action evidence](../docs/stripe-customer-actions.md) covers the restricted portal, existing confirmations and authenticated application reconciliation. Link order management retains its separately recorded provider gate.

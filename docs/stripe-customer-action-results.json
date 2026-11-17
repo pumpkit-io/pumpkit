@@ -1,0 +1,1149 @@
+{
+  "verified_on": "2026-11-17",
+  "stripe_python": "15.6.1",
+  "stripe_api": "2026-08-26.dahlia",
+  "application_currency": "eur",
+  "amount_units": "minor",
+  "application_scenarios_verified": 19,
+  "application_runs": [
+    {
+      "scope": "six completed monthly scenarios",
+      "passed_scenarios": 6,
+      "run_completed": false,
+      "note": "The run stopped at a seller-mode browser completion wait. The helper was corrected and that scenario is included in the remaining run.",
+      "cases": [
+        "month-paid",
+        "month-trial",
+        "month-queued-free",
+        "month-current-free",
+        "month-cancelled",
+        "month-past-due"
+      ]
+    },
+    {
+      "scope": "year or seller or free-cancelled",
+      "passed": 12,
+      "deselected": 7,
+      "duration_seconds": 801.91,
+      "exit_code": 0
+    },
+    {
+      "scope": "pending Coupon response loss",
+      "passed": 1,
+      "deselected": 18,
+      "duration_seconds": 87.22,
+      "exit_code": 0
+    }
+  ],
+  "application_observations": [
+    {
+      "case": "month-paid",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1794903128,
+        "current_period_end": 1797495128,
+        "billing_cycle_anchor": 1794903128,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1794903128,
+        "current_period_end": 1797495128,
+        "billing_cycle_anchor": 1794903128,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "month-trial",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1795507998,
+        "current_period_end": 1795507998,
+        "billing_cycle_anchor": 1795507998,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": []
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1795507998,
+        "current_period_end": 1795507998,
+        "billing_cycle_anchor": 1795507998,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": []
+      },
+      "allowance_limit_before": 125,
+      "allowance_limit_after": 125
+    },
+    {
+      "case": "month-queued-free",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800173662,
+        "current_period_end": 1800173662,
+        "billing_cycle_anchor": 1800173662,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800173662,
+        "current_period_end": 1800173662,
+        "billing_cycle_anchor": 1800173662,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "month-current-free",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800173745,
+        "current_period_end": 1800173745,
+        "billing_cycle_anchor": 1800173745,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800173745,
+        "current_period_end": 1800173745,
+        "billing_cycle_anchor": 1800173745,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "month-cancelled",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [],
+      "access_after_agreed_payment_date": false,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1794903427,
+        "current_period_end": 1797495427,
+        "billing_cycle_anchor": 1794903427,
+        "cancel_at": 1797495427,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1794903427,
+        "current_period_end": 1797495427,
+        "billing_cycle_anchor": 1794903427,
+        "cancel_at": 1797495427,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "month-past-due",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": true,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "past_due",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1794903491,
+        "current_period_end": 1797495491,
+        "billing_cycle_anchor": 1794903491,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 0,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1794903491,
+        "current_period_end": 1797495491,
+        "billing_cycle_anchor": 1794903491,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "month-seller-paid",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "active",
+        "managed_payments": false,
+        "interval": "month",
+        "trial_end": null,
+        "current_period_end": 1797495787,
+        "billing_cycle_anchor": 1794903787,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": false
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "active",
+        "managed_payments": false,
+        "interval": "month",
+        "trial_end": null,
+        "current_period_end": 1797495787,
+        "billing_cycle_anchor": 1794903787,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": false
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "month-queued-free-cancelled",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [],
+      "access_after_agreed_payment_date": false,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800174224,
+        "current_period_end": 1800174224,
+        "billing_cycle_anchor": 1800174224,
+        "cancel_at": 1800174224,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800174224,
+        "current_period_end": 1800174224,
+        "billing_cycle_anchor": 1800174224,
+        "cancel_at": 1800174224,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "month-current-free-cancelled",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [],
+      "access_after_agreed_payment_date": false,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800174295,
+        "current_period_end": 1800174295,
+        "billing_cycle_anchor": 1800174295,
+        "cancel_at": 1800174295,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800174295,
+        "current_period_end": 1800174295,
+        "billing_cycle_anchor": 1800174295,
+        "cancel_at": 1800174295,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "year-paid",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        19000
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1794903964,
+        "current_period_end": 1826439964,
+        "billing_cycle_anchor": 1794903964,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1794903964,
+        "current_period_end": 1826439964,
+        "billing_cycle_anchor": 1794903964,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "year-trial",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        19000
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1795508834,
+        "current_period_end": 1795508834,
+        "billing_cycle_anchor": 1795508834,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": []
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1795508834,
+        "current_period_end": 1795508834,
+        "billing_cycle_anchor": 1795508834,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": []
+      },
+      "allowance_limit_before": 125,
+      "allowance_limit_after": 125
+    },
+    {
+      "case": "year-queued-free",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        19000
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1829032104,
+        "current_period_end": 1829032104,
+        "billing_cycle_anchor": 1829032104,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1829032104,
+        "current_period_end": 1829032104,
+        "billing_cycle_anchor": 1829032104,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "year-current-free",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        19000
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1829032183,
+        "current_period_end": 1829032183,
+        "billing_cycle_anchor": 1829032183,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1829032183,
+        "current_period_end": 1829032183,
+        "billing_cycle_anchor": 1829032183,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "year-cancelled",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [],
+      "access_after_agreed_payment_date": false,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1794904273,
+        "current_period_end": 1826440273,
+        "billing_cycle_anchor": 1794904273,
+        "cancel_at": 1826440273,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1794904273,
+        "current_period_end": 1826440273,
+        "billing_cycle_anchor": 1794904273,
+        "cancel_at": 1826440273,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "year-past-due",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": true,
+      "replacement_paid_amounts": [
+        19000
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "past_due",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1794904335,
+        "current_period_end": 1826440335,
+        "billing_cycle_anchor": 1794904335,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 0,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "active",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1794904335,
+        "current_period_end": 1826440335,
+        "billing_cycle_anchor": 1794904335,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "year-seller-paid",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        19000
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "active",
+        "managed_payments": false,
+        "interval": "year",
+        "trial_end": null,
+        "current_period_end": 1826440402,
+        "billing_cycle_anchor": 1794904402,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": false
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "active",
+        "managed_payments": false,
+        "interval": "year",
+        "trial_end": null,
+        "current_period_end": 1826440402,
+        "billing_cycle_anchor": 1794904402,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": false
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "year-queued-free-cancelled",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [],
+      "access_after_agreed_payment_date": false,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1829032439,
+        "current_period_end": 1829032439,
+        "billing_cycle_anchor": 1829032439,
+        "cancel_at": 1829032439,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1829032439,
+        "current_period_end": 1829032439,
+        "billing_cycle_anchor": 1829032439,
+        "cancel_at": 1829032439,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "year-current-free-cancelled",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [],
+      "access_after_agreed_payment_date": false,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1829032510,
+        "current_period_end": 1829032510,
+        "billing_cycle_anchor": 1829032510,
+        "cancel_at": 1829032510,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "year",
+        "trial_end": 1829032510,
+        "current_period_end": 1829032510,
+        "billing_cycle_anchor": 1829032510,
+        "cancel_at": 1829032510,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 19000,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    },
+    {
+      "case": "month-pending-coupon-free",
+      "portal_card_update": true,
+      "portal_cancel_control_absent": true,
+      "portal_price_change_control_absent": true,
+      "provider_dates_preserved": true,
+      "unexpected_charge": false,
+      "overdue_invoice_settled": false,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "access_after_agreed_payment_date": true,
+      "billing_access_allowance_preserved": true,
+      "sync": "test-signed webhook reads current real Stripe state",
+      "webhook_replay_idempotent": true,
+      "provider_before": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800173670,
+        "current_period_end": 1800173670,
+        "billing_cycle_anchor": 1800173670,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "provider_after": {
+        "status": "trialing",
+        "managed_payments": true,
+        "interval": "month",
+        "trial_end": 1800173670,
+        "current_period_end": 1800173670,
+        "billing_cycle_anchor": 1800173670,
+        "cancel_at": null,
+        "cancel_at_period_end": false,
+        "charged": [
+          {
+            "amount_paid": 1900,
+            "tax": true
+          }
+        ]
+      },
+      "allowance_limit_before": 500,
+      "allowance_limit_after": 500
+    }
+  ],
+  "portal_transition_suite": {
+    "passed": 25,
+    "displayed_duration": "10.5m",
+    "exit_code": 0,
+    "ordinary_regressions": 18,
+    "managed_payments_observations": [
+      {
+        "control": true,
+        "action": "update",
+        "behavior": "end_trial",
+        "observed": {
+          "status": "active",
+          "managed_payments": true,
+          "price_preserved": false,
+          "trial_end_preserved": false,
+          "cancellation_preserved": true,
+          "cancellation_targets_original_end": false,
+          "nonzero_invoices": 1
+        }
+      },
+      {
+        "action": "update",
+        "behavior": "end_trial",
+        "refusals": [
+          {
+            "status": 400,
+            "code": null,
+            "kind": "inactive-config"
+          },
+          {
+            "status": 400,
+            "code": null,
+            "kind": "inactive-config"
+          }
+        ],
+        "observed": {
+          "status": "trialing",
+          "managed_payments": true,
+          "price_preserved": true,
+          "trial_end_preserved": true,
+          "cancellation_preserved": true,
+          "cancellation_targets_original_end": false,
+          "nonzero_invoices": 0
+        }
+      },
+      {
+        "control": true,
+        "action": "update",
+        "behavior": "continue_trial",
+        "observed": {
+          "status": "trialing",
+          "managed_payments": true,
+          "price_preserved": false,
+          "trial_end_preserved": true,
+          "cancellation_preserved": true,
+          "cancellation_targets_original_end": false,
+          "nonzero_invoices": 0
+        }
+      },
+      {
+        "action": "update",
+        "behavior": "continue_trial",
+        "refusals": [
+          {
+            "status": 400,
+            "code": null,
+            "kind": "inactive-config"
+          },
+          {
+            "status": 400,
+            "code": null,
+            "kind": "inactive-config"
+          }
+        ],
+        "observed": {
+          "status": "trialing",
+          "managed_payments": true,
+          "price_preserved": true,
+          "trial_end_preserved": true,
+          "cancellation_preserved": true,
+          "cancellation_targets_original_end": false,
+          "nonzero_invoices": 0
+        }
+      },
+      {
+        "control": true,
+        "action": "cancel",
+        "behavior": "end_trial",
+        "observed": {
+          "status": "trialing",
+          "managed_payments": true,
+          "price_preserved": true,
+          "trial_end_preserved": true,
+          "cancellation_preserved": false,
+          "cancellation_targets_original_end": true,
+          "nonzero_invoices": 0
+        }
+      },
+      {
+        "action": "cancel",
+        "behavior": "end_trial",
+        "refusals": [
+          {
+            "status": 400,
+            "code": null,
+            "kind": "inactive-config"
+          },
+          {
+            "status": 400,
+            "code": null,
+            "kind": "inactive-config"
+          }
+        ],
+        "observed": {
+          "status": "trialing",
+          "managed_payments": true,
+          "price_preserved": true,
+          "trial_end_preserved": true,
+          "cancellation_preserved": true,
+          "cancellation_targets_original_end": false,
+          "nonzero_invoices": 0
+        }
+      },
+      {
+        "transition": "restriction-only",
+        "refusals": [
+          {
+            "status": 400,
+            "code": null,
+            "kind": "restricted-feature"
+          },
+          {
+            "status": 400,
+            "code": null,
+            "kind": "restricted-feature"
+          }
+        ],
+        "observed": {
+          "status": "trialing",
+          "managed_payments": true,
+          "price_preserved": true,
+          "trial_end_preserved": true,
+          "cancellation_preserved": true,
+          "cancellation_targets_original_end": false,
+          "nonzero_invoices": 0
+        },
+        "action": "update",
+        "behavior": "end_trial",
+        "configuration_stayed_active": true
+      }
+    ]
+  },
+  "owned_open_checkout_cleanup": {
+    "controlled_browser_failure": true,
+    "checkout_was_open": true,
+    "checkout_final_status": "expired",
+    "clock_removed": true,
+    "cleanup_result": {
+      "cleaned_up": true
+    }
+  },
+  "fixture_guard_tests": {
+    "passed": 19,
+    "scope": "live-key/provider-mode guards and retained cleanup evidence; owned Checkout completion/expiration/uncertainty"
+  },
+  "link_order_management": {
+    "verified": false,
+    "documentation": "https://docs.stripe.com/payments/managed-payments/update-checkout#link",
+    "documented_limitation": "Sandbox purchases do not appear in the Link app. Order-management testing uses a Link account created during live-mode Checkout; the documentation does not explicitly require a paid result.",
+    "guest_receipt_observation": {
+      "purchase_context": "synthetic paid sandbox purchase",
+      "manage_subscription_route": "app.link.com/view",
+      "signup_required": true,
+      "interactive_hcaptcha_observed": true,
+      "authentication_completed": false,
+      "post_authentication_actions_verified": false
+    },
+    "remaining_scope": [
+      "Link account and guest order controls",
+      "card replacement, cancellation and price changes across relevant billing states",
+      "previously issued Link receipts/capabilities",
+      "Link races with pending Coupon, paid-signup and Plan-change operations"
+    ]
+  },
+  "cleanup_inventory_note": {
+    "scope": "read-only sandbox inventory during this session",
+    "unattributed_open_sessions_observed": 2,
+    "bound_to_available_own_ledgers": 0,
+    "mutated": 0,
+    "disposition": "Left untouched. No global historical cleanup is claimed."
+  }
+}

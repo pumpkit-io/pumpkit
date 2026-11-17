@@ -16,7 +16,7 @@ try {
     target.pathname !== '/p/session' ||
     !target.searchParams.get('secret')?.startsWith('test_') ||
     input.livemode !== false ||
-    !['generic', 'existing', 'new'].includes(action)
+    !['generic', 'existing', 'new', 'inspect'].includes(action)
   )
     throw new Error();
   url = input.url;
@@ -30,32 +30,45 @@ try {
   page = await browser.newPage({ viewport: { width: 1280, height: 1600 } });
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await page.getByText('Add payment method', { exact: true }).waitFor();
-  const subscriptionUpdate = page
-    .getByRole('button', { name: 'Update payment method', exact: true })
-    .or(page.getByRole('link', { name: 'Update payment method', exact: true }));
-  if (action !== 'generic') {
-    await subscriptionUpdate.click();
-    await page.getByText('Select a payment method', { exact: true }).waitFor();
-  }
-  if (action === 'existing') {
-    await page.getByText(/Mastercard/).click();
-    await page.getByRole('button', { name: /^(Update|Subscribe and pay)$/, exact: true }).click();
+  const control = (name) => page.getByRole('button', { name }).or(page.getByRole('link', { name }));
+  const subscriptionUpdate = control('Update payment method');
+  if (action === 'inspect') {
+    console.log(
+      JSON.stringify({
+        card_update: (await subscriptionUpdate.count()) > 0,
+        cancel: (await control(/Cancel (subscription|plan)/i).count()) > 0,
+        price_change:
+          (await control(/(?:Update|Change|Switch) (?:subscription|plan)/i).count()) > 0,
+      }),
+    );
   } else {
-    await page.getByText('Add payment method', { exact: true }).click();
-    const payment = page.frameLocator('iframe[title="Secure payment input frame"]');
-    await payment
-      .locator('#payment-numberInput')
-      .pressSequentially('5555555555554444', { delay: 30 });
-    await payment.locator('#payment-expiryInput').pressSequentially('1234', { delay: 30 });
-    await payment.locator('#payment-cvcInput').pressSequentially('123', { delay: 30 });
-    await payment.getByLabel('Country', { exact: true }).selectOption('IT');
-    await payment.locator('#payment-cvcInput').blur();
-    await page.getByTestId('confirm').click();
-  }
-  if (action === 'generic') {
-    await page.getByText('Default', { exact: true }).waitFor({ timeout: 60_000 });
-  } else {
-    await subscriptionUpdate.waitFor({ timeout: 60_000 });
+    if (action !== 'generic') {
+      await subscriptionUpdate.click();
+      await page.getByText('Select a payment method', { exact: true }).waitFor();
+    }
+    if (action === 'existing') {
+      await page.getByText(/Mastercard/).click();
+      await page.getByRole('button', { name: /^(Update|Subscribe and pay)$/, exact: true }).click();
+    } else {
+      await page.getByText('Add payment method', { exact: true }).click();
+      const payment = page.frameLocator('iframe[title="Secure payment input frame"]');
+      await payment
+        .locator('#payment-numberInput')
+        .pressSequentially('5555555555554444', { delay: 30 });
+      await payment.locator('#payment-expiryInput').pressSequentially('1234', { delay: 30 });
+      await payment.locator('#payment-cvcInput').pressSequentially('123', { delay: 30 });
+      await payment.getByLabel('Country', { exact: true }).selectOption('IT');
+      await payment.locator('#payment-cvcInput').blur();
+      await page.getByTestId('confirm').click();
+    }
+    if (action === 'generic') {
+      await page.getByText('Default', { exact: true }).waitFor({ timeout: 60_000 });
+    } else {
+      await page
+        .getByText('Select a payment method', { exact: true })
+        .waitFor({ state: 'hidden', timeout: 60_000 });
+      await page.getByText('Add payment method', { exact: true }).waitFor({ timeout: 60_000 });
+    }
   }
 } catch (error) {
   if (page && !page.isClosed()) {
