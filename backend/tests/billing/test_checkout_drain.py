@@ -784,6 +784,67 @@ async def test_reviewed_legacy_object_uses_local_customer_user_and_original_rout
 
 
 @pytest.mark.parametrize(
+    ("success_path", "cancel_path", "owned"),
+    [
+        ("/billing", "/billing", True),
+        ("/billing/cancelled", "/billing/cancelled", False),
+        ("/billing/success", "/billing", False),
+        ("/billing", "/billing/cancelled", False),
+    ],
+)
+async def test_retained_legacy_paid_signup_requires_historical_routes_and_preserves_offer(
+    authed_client,
+    coupons,
+    fake_billing,
+    fixed_clock,
+    db_session_maker,
+    monkeypatch,
+    db,
+    tmp_path,
+    success_path,
+    cancel_path,
+    owned,
+):
+    fake_billing.clock = fixed_clock
+    free, request, opened = await open_paid_signup(authed_client, coupons)
+    operation = await db.scalar(
+        select(PaidSignup).where(PaidSignup.operation_id == request["operation_id"])
+    )
+    await db.execute(delete(CheckoutDispatch).where(CheckoutDispatch.id == operation.id))
+    operation.checkout_contract = 0
+    await db.commit()
+    session_id = opened["session_id"]
+    fake_billing.hosted_checkouts[session_id] = replace(
+        fake_billing.hosted_checkouts[session_id],
+        success_url=f"{settings.PUBLIC_URL}{success_path}",
+        cancel_url=f"{settings.PUBLIC_URL}{cancel_path}",
+        metadata={"pumpkit_paid_signup": operation.id},
+    )
+    before = (await authed_client.get("/api/v1/usage")).json()
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+    _, closed = await drain(db_session_maker, fake_billing, ["execute"], clock=fixed_clock)
+    evidence = review(tmp_path / "review.json", closed["binding"])
+    code, result = await drain(
+        db_session_maker, fake_billing, ["execute", *evidence], clock=fixed_clock
+    )
+    assert code == (0 if owned else 1), result
+    assert result["ready"] is owned
+    assert fake_billing.expired_hosted_checkouts == ([session_id] if owned else [])
+    assert (await fake_billing.read_checkout(session_id=session_id)).status == (
+        "expired" if owned else "open"
+    )
+    if not owned:
+        assert session_id in result["unknown"]
+    current = (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()
+    assert current["status"] == ("refused" if owned else "pending")
+    assert current["first_payment_at"] == free["ends_at"]
+    assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"]["ends_at"] == free[
+        "ends_at"
+    ]
+    assert (await authed_client.get("/api/v1/usage")).json() == before
+
+
+@pytest.mark.parametrize(
     "entry", ["status", "cancel", "elapsed", "webhook", "recovery", "deletion"]
 )
 async def test_absent_legacy_paid_signup_never_mints_current_replay_parameters_or_guesses_no_object(

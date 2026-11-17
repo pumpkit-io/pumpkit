@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pumpkit.auth.models import User
 from pumpkit.billing.gateway import HostedCheckout, checkout_parameters
 from pumpkit.billing.models import CheckoutDispatch, PaidSignup, Subscription, TopUp
+from pumpkit.core.config import settings
 
 
 @dataclass(frozen=True)
@@ -103,7 +104,7 @@ def ownership(
                 "pumpkit_paid_signup"
             ) != relationships.paid_signups.get(session.id):
                 return "unknown", None
-            expected["success_url"] = expected["cancel_url"]
+            expected["success_url"] = expected["cancel_url"] = settings.billing_page_url()
             expected["metadata"] = {"pumpkit_paid_signup": relationships.paid_signups[session.id]}
         if (
             session.mode == expected["mode"]
