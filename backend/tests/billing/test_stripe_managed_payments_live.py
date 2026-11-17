@@ -36,7 +36,10 @@ def record():
     entries: list[dict[str, Any]] = []
     yield entries
     if RESULTS:
-        Path(RESULTS).write_text(json.dumps(entries, indent=2, default=str))
+        descriptor = os.open(RESULTS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump(entries, stream, indent=2, default=str)
 
 
 @pytest.fixture(scope="module")
@@ -44,7 +47,8 @@ def provider():
     if not KEY.startswith(("sk_test_", "rk_test_")):
         pytest.fail("Only Stripe test-mode credentials are accepted")
     client = stripe.StripeClient(KEY, max_network_retries=0)
-    assert client.v1.balance.retrieve().livemode is False
+    if client.v1.balance.retrieve().livemode is not False:
+        pytest.fail("Provider account must be in test mode")
     created: dict[str, list[str]] = {"products": [], "prices": [], "customers": []}
     try:
         plan = client.v1.products.create(
@@ -96,10 +100,24 @@ def managed(monkeypatch, provider):
     return client, prices, customers, StripeBillingGateway(client)
 
 
-def complete_checkout(client: stripe.StripeClient, session_id: str, url: str) -> dict[str, Any]:
-    subprocess.run(
-        ["node", str(CHECKOUT_SCRIPT), url], cwd=CHECKOUT_SCRIPT.parent, check=True, timeout=180
+def complete_checkout(
+    client: stripe.StripeClient, session_id: str, url: str, *, decline_after_setup: bool = False
+) -> dict[str, Any]:
+    completed = subprocess.run(
+        [
+            "node",
+            str(CHECKOUT_SCRIPT),
+            "-",
+            "decline-after-setup" if decline_after_setup else "success",
+        ],
+        input=url,
+        text=True,
+        capture_output=True,
+        cwd=CHECKOUT_SCRIPT.parent,
+        timeout=180,
     )
+    if completed.returncode:
+        pytest.fail("Synthetic hosted Checkout failed; no bearer URL is included in test output")
     for _ in range(30):
         session = client.v1.checkout.sessions.retrieve(session_id).to_dict()
         if session["status"] == "complete":
@@ -132,6 +150,7 @@ def subscription_facts(client: stripe.StripeClient, subscription_id: str) -> dic
         "trial_end": subscription.get("trial_end"),
         "billing_cycle_anchor": subscription["billing_cycle_anchor"],
         "cancel_at": subscription.get("cancel_at"),
+        "cancel_at_period_end": subscription["cancel_at_period_end"],
         "interval": item["price"]["recurring"]["interval"],
         "current_period_end": item["current_period_end"],
         "metadata": subscription.get("metadata"),
@@ -488,3 +507,187 @@ async def test_refunded_top_up_reads_as_reversed(managed, record):
     )
     assert refunded.reversed is True
     assert charge_customer == customer
+
+
+@pytest.mark.parametrize(
+    "case", ["trial", "paid-up", "past-due", "cancelled", "free-access", "trial-new"]
+)
+async def test_restricted_portal_replaces_the_subscription_payment_method(
+    managed, record, tmp_path, case
+):
+    client, prices, _, gateway = managed
+    now = int(time.time())
+    clock = client.v1.test_helpers.test_clocks.create(
+        {"frozen_time": now, "name": "pumpkit-card-proof"}
+    )
+    configuration = None
+    try:
+        customer = client.v1.customers.create(
+            {"test_clock": clock.id, "email": "managed-card-proof@example.com"}
+        ).id
+        checkout = await gateway.create_subscription_checkout(
+            customer_id=customer,
+            price_id=prices["month"],
+            quantity=1,
+            user_id="synthetic-card-proof",
+            trial_period_days=7,
+        )
+        session = complete_checkout(
+            client, checkout.id, checkout.url, decline_after_setup=case == "past-due"
+        )
+        subscription_id = session["subscription"]
+        subscription = client.v1.subscriptions.retrieve(subscription_id).to_dict()
+        assert subscription["managed_payments"]["enabled"] is True
+        original = subscription["default_payment_method"]
+        if case in {"paid-up", "past-due", "cancelled"}:
+            await gateway.end_trial(subscription_id=subscription_id)
+        if case == "free-access":
+            await gateway.defer_renewal(
+                subscription_id=subscription_id,
+                target=at(subscription["trial_end"] + 30 * 86400),
+                operation_id=f"card-proof-{subscription_id}",
+            )
+        subscription = client.v1.subscriptions.retrieve(subscription_id).to_dict()
+        if case == "cancelled":
+            await gateway.cancel_renewal(
+                subscription_id=subscription_id,
+                ends_at=at(subscription["items"]["data"][0]["current_period_end"]),
+            )
+        before = subscription_facts(client, subscription_id)
+        assert before["status"] == (
+            "past_due"
+            if case == "past-due"
+            else "active"
+            if case in {"paid-up", "cancelled"}
+            else "trialing"
+        )
+        configuration = client.v1.billing_portal.configurations.create(
+            {
+                "features": {
+                    "invoice_history": {"enabled": True},
+                    "payment_method_update": {"enabled": True},
+                    "subscription_update": {"enabled": False},
+                    "subscription_cancel": {"enabled": False},
+                },
+                "login_page": {"enabled": False},
+                "metadata": {"pumpkit_verification": "subscription-card-proof"},
+            }
+        )
+        portal = client.v1.billing_portal.sessions.create(
+            {
+                "customer": customer,
+                "configuration": configuration.id,
+                "locale": "en",
+                "return_url": "https://example.com/card-proof",
+            }
+        )
+        ledger = tmp_path / "private-portal.json"
+        descriptor = os.open(ledger, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w") as stream:
+            json.dump({"url": portal.url, "livemode": False}, stream)
+        subprocess.run(
+            [
+                "node",
+                str(CHECKOUT_SCRIPT.with_name("stripe-payment-method.mjs")),
+                str(ledger),
+                "generic",
+            ],
+            check=True,
+            timeout=120,
+        )
+        customer_default = client.v1.customers.retrieve(customer).to_dict()["invoice_settings"][
+            "default_payment_method"
+        ]
+        assert customer_default and customer_default != original
+        assert client.v1.subscriptions.retrieve(subscription_id).default_payment_method == original
+        negative_charge_uses_original = None
+        if case == "paid-up":
+            advance(client, clock.id, before["current_period_end"] + 3600)
+            negative_charges = [
+                charge.to_dict()
+                for charge in client.v1.charges.list({"customer": customer, "limit": 100})
+                if charge.paid
+            ]
+            assert len(negative_charges) == 2
+            assert all(charge["payment_method"] == original for charge in negative_charges)
+            negative_charge_uses_original = True
+            before = subscription_facts(client, subscription_id)
+        record.append(
+            {
+                "case": f"{case}: generic Customer-default negative control",
+                "subsequent_charge_uses_original": negative_charge_uses_original,
+                "customer_changed": True,
+                "subscription_changed": False,
+            }
+        )
+        subprocess.run(
+            [
+                "node",
+                str(CHECKOUT_SCRIPT.with_name("stripe-payment-method.mjs")),
+                str(ledger),
+                "new" if case == "trial-new" else "existing",
+            ],
+            check=True,
+            timeout=120,
+        )
+        after = subscription_facts(client, subscription_id)
+        replacement = client.v1.subscriptions.retrieve(subscription_id).default_payment_method
+        assert replacement and replacement != original
+        if case != "trial-new":
+            assert replacement == customer_default
+        for field in (
+            "trial_end",
+            "billing_cycle_anchor",
+            "cancel_at",
+            "cancel_at_period_end",
+            "current_period_end",
+            "interval",
+        ):
+            assert after[field] == before[field]
+        if case != "past-due":
+            assert after["charged"] == before["charged"]
+        if case == "past-due":
+            invoice = client.v1.subscriptions.retrieve(subscription_id).latest_invoice
+            if client.v1.invoices.retrieve(str(invoice)).status != "paid":
+                client.v1.invoices.pay(str(invoice))
+        else:
+            target = before["current_period_end"] + 3600
+            advance(client, clock.id, target)
+        final = subscription_facts(client, subscription_id)
+        charges = [
+            charge.to_dict()
+            for charge in client.v1.charges.list({"customer": customer, "limit": 100})
+            if charge.paid
+        ]
+        replacement_charges = [
+            charge for charge in charges if charge["payment_method"] == replacement
+        ]
+        if case == "cancelled":
+            assert final["status"] == "canceled"
+            assert replacement_charges == []
+        else:
+            assert final["status"] == "active"
+            assert len(replacement_charges) == 1
+            assert replacement_charges[0]["amount"] == MONTHLY
+        record.append(
+            {
+                "case": f"{case}: subscription-scoped card replacement",
+                "method_replaced": True,
+                "dates_and_cancellation_preserved": True,
+                "replacement_paid_amounts": [charge["amount"] for charge in replacement_charges],
+                "final_status": final["status"],
+            }
+        )
+    finally:
+        cleanup_failures = []
+        if configuration and not configuration.is_default:
+            try:
+                client.v1.billing_portal.configurations.update(configuration.id, {"active": False})
+            except stripe.StripeError:
+                cleanup_failures.append("portal configuration")
+        try:
+            client.v1.test_helpers.test_clocks.delete(clock.id)
+        except stripe.StripeError:
+            cleanup_failures.append("test clock")
+        if cleanup_failures:
+            pytest.fail(f"Owned fixture cleanup incomplete: {', '.join(cleanup_failures)}")

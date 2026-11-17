@@ -1,0 +1,101 @@
+{
+  "verified_on": "2026-11-16",
+  "stripe_python": "15.6.1",
+  "stripe_api": "2026-08-26.dahlia",
+  "command": "uv run --extra dev pytest tests/billing/test_stripe_managed_payments_live.py -k replaces -q",
+  "pytest_result": {
+    "passed": 6,
+    "deselected": 5,
+    "duration_seconds": 331.49
+  },
+  "observations": [
+    {
+      "case": "trial: generic Customer-default negative control",
+      "subsequent_charge_uses_original": null,
+      "customer_changed": true,
+      "subscription_changed": false
+    },
+    {
+      "case": "trial: subscription-scoped card replacement",
+      "method_replaced": true,
+      "dates_and_cancellation_preserved": true,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "final_status": "active"
+    },
+    {
+      "case": "paid-up: generic Customer-default negative control",
+      "subsequent_charge_uses_original": true,
+      "customer_changed": true,
+      "subscription_changed": false
+    },
+    {
+      "case": "paid-up: subscription-scoped card replacement",
+      "method_replaced": true,
+      "dates_and_cancellation_preserved": true,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "final_status": "active"
+    },
+    {
+      "case": "past-due: generic Customer-default negative control",
+      "subsequent_charge_uses_original": null,
+      "customer_changed": true,
+      "subscription_changed": false
+    },
+    {
+      "case": "past-due: subscription-scoped card replacement",
+      "method_replaced": true,
+      "dates_and_cancellation_preserved": true,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "final_status": "active"
+    },
+    {
+      "case": "cancelled: generic Customer-default negative control",
+      "subsequent_charge_uses_original": null,
+      "customer_changed": true,
+      "subscription_changed": false
+    },
+    {
+      "case": "cancelled: subscription-scoped card replacement",
+      "method_replaced": true,
+      "dates_and_cancellation_preserved": true,
+      "replacement_paid_amounts": [],
+      "final_status": "canceled"
+    },
+    {
+      "case": "free-access: generic Customer-default negative control",
+      "subsequent_charge_uses_original": null,
+      "customer_changed": true,
+      "subscription_changed": false
+    },
+    {
+      "case": "free-access: subscription-scoped card replacement",
+      "method_replaced": true,
+      "dates_and_cancellation_preserved": true,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "final_status": "active"
+    },
+    {
+      "case": "trial-new: generic Customer-default negative control",
+      "subsequent_charge_uses_original": null,
+      "customer_changed": true,
+      "subscription_changed": false
+    },
+    {
+      "case": "trial-new: subscription-scoped card replacement",
+      "method_replaced": true,
+      "dates_and_cancellation_preserved": true,
+      "replacement_paid_amounts": [
+        1900
+      ],
+      "final_status": "active"
+    }
+  ]
+}
