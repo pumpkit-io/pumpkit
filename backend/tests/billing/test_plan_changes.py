@@ -776,3 +776,56 @@ async def test_recovery_keeps_the_original_provider_anchor_policy(
     result = await authed_client.get(CHANGES + "/" + request["operation_id"])
     assert result.status_code == 200, result.text
     assert result.json()["status"] == "completed"
+
+
+async def test_external_price_change_keeps_unknown_plan_change_guarded_after_stale_webhooks(
+    authed_client, coupons, db, user, fake_billing, fixed_clock
+):
+    offer = await deferred(authed_client, coupons, db, user, fake_billing, fixed_clock)
+    before = (await authed_client.get("/api/v1/billing/me")).json()
+    usage = (await authed_client.get("/api/v1/usage")).json()
+    request = await proposed_change(authed_client)
+    fake_billing.fail_on.add("after_change_plan")
+    assert (await authed_client.post(CHANGES, json=request)).json()["status"] == "pending"
+    applied = (await fake_billing.list_subscriptions(customer_id=user.stripe_customer_id))[0]
+    external = replace(applied, price_id="price_external_annual")
+    fake_billing.set_subscription(user.stripe_customer_id, external)
+    fake_billing.fail_on.clear()
+
+    for event_id in ("evt_old_monthly", "evt_old_monthly", "evt_old_annual"):
+        response = await _send(
+            authed_client,
+            fake_billing,
+            event_id,
+            "customer.subscription.updated",
+            {
+                "customer": user.stripe_customer_id,
+                "status": "active",
+                "price_id": applied.price_id,
+                "cancel_at": None,
+            },
+        )
+        assert response.status_code == 200, response.text
+        result = await authed_client.get(CHANGES + "/" + request["operation_id"])
+        assert result.json()["status"] == "pending", result.text
+        assert result.json()["first_payment_at"] == offer["ends_at"]
+
+    me = (await authed_client.get("/api/v1/billing/me")).json()
+    assert me["pending_plan_change_id"] == request["operation_id"]
+    assert me["future_plan"] is None
+    assert me["subscribed"] is True
+    assert me["free_access"] == before["free_access"]
+    assert me["subscription"]["paid_through"] == before["subscription"]["paid_through"]
+    assert me["subscription"]["current_period_end"] == offer["ends_at"]
+    assert (await authed_client.get("/api/v1/usage")).json() == usage
+    for path in (
+        "/api/v1/billing/portal",
+        "/api/v1/billing/subscribe-now",
+        "/api/v1/billing/cancel-renewal",
+    ):
+        assert (await authed_client.post(path)).status_code == 409
+    assert len(fake_billing.plan_changes) == 1
+    assert len(fake_billing.deferrals) == 1
+    assert (await fake_billing.list_subscriptions(customer_id=user.stripe_customer_id)) == [
+        external
+    ]
