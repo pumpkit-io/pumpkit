@@ -44,6 +44,7 @@ async function withFixture(
   exercise: (fixture: Fixture, portal: Portal, directory: string) => Promise<void>,
   managed = false,
 ) {
+  if (managed) test.setTimeout(600_000);
   const directory = mkdtempSync(path.join(tmpdir(), 'pumpkit-portal-verification-'));
   const ledger = path.join(directory, 'private-resources.json');
   const fixture: Fixture = async (command, options = []) => {
@@ -60,7 +61,7 @@ async function withFixture(
         ledger,
         ...options,
       ],
-      { encoding: 'utf8', timeout: 60_000 },
+      { encoding: 'utf8', timeout: managed && command === 'create' ? 300_000 : 60_000 },
     );
     return JSON.parse(stdout) as Record<string, unknown>;
   };
