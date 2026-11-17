@@ -11,7 +11,7 @@ import { useOpenPortal } from './useOpenPortal';
  * notice goes.
  */
 export function AllowanceNotice({ refusal }: { refusal: AllowanceUsedUp }) {
-  const { openPortal, error } = useOpenPortal();
+  const { openPortal, error, isOpeningPortal } = useOpenPortal();
   const [subscribed, setSubscribed] = useState(false);
 
   if (subscribed) return null;
@@ -27,9 +27,11 @@ export function AllowanceNotice({ refusal }: { refusal: AllowanceUsedUp }) {
           size="sm"
           variant="outline"
           className="h-8"
+          disabled={isOpeningPortal}
+          aria-busy={isOpeningPortal}
           onClick={() => void openPortal()}
         >
-          Update your payment method
+          {isOpeningPortal ? 'Opening billing…' : 'Update your payment method'}
         </Button>
       )}
       {refusal.wayOut === 'top_up' && <BuyTopUpButton />}

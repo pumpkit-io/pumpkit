@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+- Opening billing now shows progress and prevents duplicate requests across billing actions. A failed attempt keeps confirmed plan information and can be retried; returning to cached Settings refreshes billing information.
+
 - Self-hosters can select one existing X-linked account for a controlled purchase during the pause, using its immutable User ID. Normal eligibility and acceptance still apply, and the redacted runtime command validates the selection without exposing it to other Users.
 
 - Self-hosters can pause arranged paid signups as well as other new purchases; Settings preserves the reviewed offer and acceptance, while existing signup recovery, cancellation, Free access and agreed payment dates continue. A redacted billing runtime command reports the installed pause contract.

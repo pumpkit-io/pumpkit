@@ -47,3 +47,11 @@ The evidence records Customer default, Subscription method and subsequent charge
 - Free access deferral: preserve the deferred payment date and charge the replacement only after that date.
 
 This harness proves provider billing behavior. It does not manufacture local Coupon benefits or prove Pumpkit's Allowance calculation, acceptance records or webhook delivery. The existing application suites and later activation gates cover those separately. Do not use this evidence to waive #558's Link-action verification or the actual paid live verification.
+
+## Application journey retained for #563
+
+The supported app destination remains `POST /billing/portal`, using the explicit restricted configuration when Coupons or Free access require it. In the hosted portal, use **Current subscription → Update payment method**. The generic Customer-default action is insufficient, as the negative control above demonstrates. The [customer-action investigation](stripe-customer-actions.md) also retains an old seller-mode Subscription after the Instance enables Managed Payments. Neither case needs a new mode projection or Link route in Pumpkit.
+
+Settings keeps its existing Manage billing (or Manage subscription with Coupons disabled) and Fix payment actions, cancellation and frequency controls, and pending-operation guards. While requesting the destination, all billing entry points share one in-flight request and show **Opening billing…** disabled. Failure leaves confirmed billing data visible with an inline error and a retry. Once the destination request settles, the opening state clears, including when navigation is cancelled. A normal return mounts Settings and reloads billing; a browser-cache restoration refreshes it through `pageshow.persisted`. Neither return claims a card update succeeded.
+
+This application change reuses the real test-mode replacement/subsequent-payment results above and the old-mode evidence in the customer-action investigation; it makes no new real-provider payment claim. Authenticated Link and guest-receipt actions, older Link capabilities, remaining independent provider-action races and the authorized paid live verification remain mandatory final #499 gates before general purchases reopen.

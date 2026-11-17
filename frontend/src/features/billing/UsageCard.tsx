@@ -104,7 +104,7 @@ function UsageDetails({
   allowance: AllowanceUsage;
   onSubscriptionSettled: () => void;
 }) {
-  const { openPortal, error } = useOpenPortal();
+  const { openPortal, error, isOpeningPortal } = useOpenPortal();
   const {
     trial,
     generations,
@@ -161,10 +161,12 @@ function UsageDetails({
       {wayOut === 'update_payment' && (
         <button
           type="button"
+          disabled={isOpeningPortal}
+          aria-busy={isOpeningPortal}
           onClick={() => void openPortal()}
           className="rounded-sm font-sans text-sm text-foreground underline underline-offset-4 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
-          Update your payment method to buy a top-up
+          {isOpeningPortal ? 'Opening billing…' : 'Update your payment method to buy a top-up'}
         </button>
       )}
     </div>
