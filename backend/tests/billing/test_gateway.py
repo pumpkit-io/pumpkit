@@ -17,6 +17,7 @@ import stripe
 from pumpkit.billing.gateway import (
     BillingGateway,
     BillingProviderError,
+    CheckoutOutcomeUnknown,
     DeferralRefused,
     FakeBillingGateway,
     OneOffPrice,
@@ -1212,3 +1213,48 @@ async def test_drain_account_mode_requires_a_positive_known_key_mode(monkeypatch
             await gateway.account_identity()
     else:
         assert await gateway.account_identity() == ("acct_contract", mode)
+
+
+@pytest.mark.parametrize(
+    "status,error_type,code,headers,definite",
+    [
+        (400, "invalid_request_error", "parameter_missing", {}, True),
+        (400, "invalid_request_error", "parameter_unknown", {}, True),
+        (401, "invalid_request_error", None, {}, True),
+        (429, "rate_limit_error", None, {"Stripe-Rate-Limited-Reason": "global-rate"}, True),
+        (400, "invalid_request_error", "parameter_missing", {"Idempotent-Replayed": "true"}, False),
+        (400, "invalid_request_error", "resource_missing", {}, False),
+        (400, "invalid_request_error", None, {}, False),
+        (402, "card_error", "card_declined", {}, False),
+        (409, "invalid_request_error", "idempotency_key_in_use", {}, False),
+        (424, "api_error", None, {}, False),
+        (429, "rate_limit_error", "lock_timeout", {}, False),
+        (500, "api_error", None, {"Stripe-Should-Retry": "false"}, False),
+    ],
+)
+async def test_journaled_create_only_proves_structured_preexecution_rejections(
+    status, error_type, code, headers, definite
+):
+    response_headers = headers
+
+    class RejectedStripe(_RecordedStripe):
+        def request(self, method, url, headers, post_data=None, *, _usage=None):
+            self.methods.append(method)
+            return (
+                json.dumps(
+                    {"error": {"type": error_type, "code": code, "message": "Controlled rejection"}}
+                ),
+                status,
+                response_headers,
+            )
+
+    http = RejectedStripe("{}")
+    gateway = StripeBillingGateway(
+        stripe.StripeClient("sk_test_contract", http_client=http, max_network_retries=2)
+    )
+    with pytest.raises(BillingProviderError) as caught:
+        await gateway.dispatch_checkout(
+            parameters={"mode": "subscription"}, idempotency_key="fresh-controlled-key"
+        )
+    assert isinstance(caught.value, CheckoutOutcomeUnknown) is not definite
+    assert http.methods == ["post"]

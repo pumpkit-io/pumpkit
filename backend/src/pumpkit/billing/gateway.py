@@ -44,6 +44,10 @@ class BillingProviderError(AppError):
     reported = True
 
 
+class CheckoutNotCreated(BillingProviderError):
+    """This CREATE invocation was rejected before endpoint execution."""
+
+
 class CheckoutOutcomeUnknown(BillingProviderError):
     """A provider incident requires positive request resolution, not another CREATE."""
 
@@ -676,6 +680,28 @@ def stripe_client(**options: Any) -> stripe.StripeClient:
     return stripe.StripeClient(settings.STRIPE_SECRET_KEY or "", **options)
 
 
+def _checkout_rejected_before_execution(error: stripe.StripeError) -> bool:
+    headers = {key.lower(): value for key, value in (error.headers or {}).items()}
+    if str(headers.get("idempotent-replayed", "")).lower() == "true":
+        return False
+    if isinstance(error, stripe.AuthenticationError) and error.http_status == 401:
+        return True
+    if isinstance(error, stripe.InvalidRequestError) and error.http_status == 400:
+        return error.code in {"parameter_missing", "parameter_unknown"}
+    return (
+        isinstance(error, stripe.RateLimitError)
+        and error.http_status == 429
+        and headers.get("stripe-rate-limited-reason")
+        in {
+            "global-rate",
+            "endpoint-rate",
+            "global-concurrency",
+            "endpoint-concurrency",
+            "resource-specific",
+        }
+    )
+
+
 class StripeBillingGateway:
     """Calls Stripe with its own client and API key, off the event loop, and returns plain data."""
 
@@ -708,10 +734,13 @@ class StripeBillingGateway:
                 "create a journaled Checkout",
                 lambda: self._client.v1.checkout.sessions.create(
                     cast(CheckoutSessionCreateParams, parameters),
-                    {"idempotency_key": idempotency_key},
+                    {"idempotency_key": idempotency_key, "max_network_retries": 0},
                 ),
             )
         except BillingProviderError as error:
+            cause = error.__cause__
+            if isinstance(cause, stripe.StripeError) and _checkout_rejected_before_execution(cause):
+                raise CheckoutNotCreated("Checkout was rejected before execution") from error
             raise CheckoutOutcomeUnknown(
                 "Checkout execution needs provider-supported resolution"
             ) from error

@@ -28,6 +28,7 @@ from pumpkit.billing.allowance import (
 from pumpkit.billing.gateway import (
     BillingGateway,
     BillingProviderError,
+    CheckoutNotCreated,
     CheckoutOutcomeUnknown,
     CheckoutSession,
     OneOffPrice,
@@ -413,29 +414,27 @@ async def _dispatch_checkout(
         operation_id=operation_id,
     )
     dispatch_id = dispatch.id
+    user_id = user.id
     # The provider may finish after this request fails; retain its exact intent before sending.
     await db.commit()
-    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
-    dispatch = await checkout_coordination.get_dispatch(db, dispatch_id)
-    if dispatch.settled:
-        raise BillingProviderError("This Checkout dispatch has already been resolved")
     try:
+        user = await users_service.require_locked_user(db, user_id=user_id, clock=clock)
+        dispatch = await checkout_coordination.get_dispatch(db, dispatch_id)
+        if dispatch.settled:
+            raise BillingProviderError("This Checkout dispatch has already been resolved")
         purchase_availability.require_purchases_available(user)
-    except purchase_availability.PurchasesPausedError:
-        dispatch.provider_finished = True
-        dispatch.settled = True
-        # This invocation has not entered the provider and cannot create after acknowledging pause.
+        if validate:
+            await validate()
+    except Exception as error:
+        if not isinstance(error, AppError):
+            await db.rollback()
+            await users_service.require_locked_user(db, user_id=user_id, clock=clock)
+            dispatch = await checkout_coordination.get_dispatch(db, dispatch_id)
+        if not dispatch.settled:
+            await checkout_coordination.acknowledge_no_checkout(db, dispatch, now=clock())
+        # This invocation never entered CREATE; persist its acknowledgement after any failed transaction.
         await db.commit()
         raise
-    if validate:
-        try:
-            await validate()
-        except AppError:
-            dispatch.provider_finished = True
-            dispatch.settled = True
-            # Eligibility changed while intent was committed; this invocation never entered CREATE.
-            await db.commit()
-            raise
     task = asyncio.create_task(
         gateway.dispatch_checkout(
             parameters=dispatch.parameters, idempotency_key=dispatch.idempotency_key
@@ -454,6 +453,8 @@ async def _dispatch_checkout(
     except Exception as error:
         dispatch.provider_finished = True
         dispatch.provider_resolution_required = isinstance(error, CheckoutOutcomeUnknown)
+        if isinstance(error, CheckoutNotCreated):
+            await checkout_coordination.acknowledge_no_checkout(db, dispatch, now=clock())
         # A finished invocation may still have an unknown remote result; keep its pinned intent.
         await db.commit()
         raise

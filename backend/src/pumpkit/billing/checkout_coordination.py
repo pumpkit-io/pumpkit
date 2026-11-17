@@ -206,3 +206,18 @@ def release_record(barrier: CheckoutFence) -> Optional[dict]:
         "target_fingerprint": barrier.released_fingerprint,
         "evidence_digest": barrier.released_evidence_digest,
     }
+
+
+async def acknowledge_no_checkout(
+    db: AsyncSession, dispatch: CheckoutDispatch, *, now: datetime
+) -> None:
+    dispatch.provider_finished = True
+    dispatch.provider_resolution_required = False
+    dispatch.settled = True
+    if dispatch.kind == "arranged_paid_signup":
+        operation = await db.get(PaidSignup, dispatch.id, populate_existing=True)
+        if operation and operation.status == "pending":
+            operation.status = "refused"
+            operation.resolved_at = now
+            operation.detail = "No future payment was arranged. Your free access is unchanged; review a fresh paid offer to subscribe."
+    await db.flush()

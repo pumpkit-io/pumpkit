@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
+import stripe
 from sqlalchemy import delete, event, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -1043,3 +1044,245 @@ async def test_new_acceptance_marker_is_not_proof_that_an_old_creator_cannot_dis
     assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"]["ends_at"] == free[
         "ends_at"
     ]
+
+
+@pytest.mark.parametrize("kind", ["subscription", "top_up", "arranged_paid_signup"])
+async def test_proven_preexecution_rejection_allows_fresh_purchase_and_account_deletion(
+    authed_client, coupons, fake_billing, fixed_clock, monkeypatch, sells_top_ups, kind
+):
+    fake_billing.clock = fixed_clock
+    free = None
+    if kind != "subscription":
+        free = await redeem_coupon(authed_client, coupons)
+    keys = []
+
+    def create(params, options):
+        keys.append(options["idempotency_key"])
+        raise stripe.InvalidRequestError(
+            "Controlled validation failure", "missing", code="parameter_missing", http_status=400
+        )
+
+    sdk = SimpleNamespace(
+        v1=SimpleNamespace(checkout=SimpleNamespace(sessions=SimpleNamespace(create=create)))
+    )
+    adapter = StripeBillingGateway(client=cast(Any, sdk))
+    original = fake_billing.dispatch_checkout
+    monkeypatch.setattr(fake_billing, "dispatch_checkout", adapter.dispatch_checkout)
+    if kind == "arranged_paid_signup":
+        request, result = await accept_paid_signup(authed_client)
+        assert result["status"] == "refused"
+        assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+            "status"
+        ] == "refused"
+        assert free is not None
+        assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"][
+            "ends_at"
+        ] == free["ends_at"]
+        monkeypatch.setattr(fake_billing, "dispatch_checkout", original)
+        preview = (
+            await authed_client.post(SIGNUPS + "/preview", json={"plan_key": "pumpkit_pro_monthly"})
+        ).json()
+        replacement = {
+            **request,
+            "operation_id": "22222222-2222-4222-8222-222222222222",
+            "revision": preview["revision"],
+        }
+        fresh = await authed_client.post(SIGNUPS, json=replacement)
+        assert fresh.status_code == 200
+        assert fresh.json()["status"] == "pending"
+        assert fresh.json()["url"]
+        assert (await authed_client.post(SIGNUPS, json=request)).json()["status"] == "refused"
+        assert all(key != keys[0] for key in fake_billing.checkout_dispatches)
+    else:
+        path = CHECKOUT if kind == "subscription" else TOP_UP_CHECKOUT
+        payload = CHECKOUT_MONTHLY if kind == "subscription" else ACCEPTANCE
+        assert (await authed_client.post(path, json=payload)).status_code == 502
+        monkeypatch.setattr(fake_billing, "dispatch_checkout", original)
+        assert (await authed_client.post(path, json=payload)).status_code == 200
+    assert len(keys) == 1
+    assert (
+        await authed_client.request("DELETE", "/api/v1/users/me", json={"handle": "ada"})
+    ).status_code == 204
+
+
+@pytest.mark.parametrize("kind", ["subscription", "top_up", "arranged_paid_signup"])
+@pytest.mark.parametrize("checkpoint_available", [True, False])
+async def test_failed_revalidation_transaction_before_create_does_not_pin_purchase(
+    authed_client,
+    coupons,
+    fake_billing,
+    fixed_clock,
+    monkeypatch,
+    sells_top_ups,
+    kind,
+    checkpoint_available,
+):
+    fake_billing.clock = fixed_clock
+    if kind != "subscription":
+        await redeem_coupon(authed_client, coupons)
+    path = CHECKOUT if kind == "subscription" else TOP_UP_CHECKOUT
+    armed = False
+    failed = False
+
+    def arm(db):
+        nonlocal armed
+        if any(
+            isinstance(row, CheckoutDispatch) and not row.provider_finished
+            for row in db.identity_map.values()
+        ):
+            armed = True
+
+    def fail_read(execute_state):
+        nonlocal failed
+        if armed and not failed and execute_state.is_select:
+            failed = True
+            execute_state.session.add(
+                CheckoutDispatch(
+                    id="controlled-invalid-row",
+                    kind="subscription",
+                    generation=0,
+                    parameters={},
+                    idempotency_key="controlled-invalid-key",
+                    attempted_at=fixed_clock(),
+                )
+            )
+            execute_state.session.flush()
+
+    def fail_acknowledgement(db):
+        if not checkpoint_available and any(
+            isinstance(row, CheckoutDispatch) and row.settled for row in db.identity_map.values()
+        ):
+            raise SQLAlchemyError("Controlled no-dispatch acknowledgement failure")
+
+    event.listen(Session, "after_commit", arm)
+    event.listen(Session, "do_orm_execute", fail_read)
+    event.listen(Session, "before_commit", fail_acknowledgement)
+    try:
+        if kind == "arranged_paid_signup":
+            preview = (
+                await authed_client.post(
+                    SIGNUPS + "/preview", json={"plan_key": "pumpkit_pro_monthly"}
+                )
+            ).json()
+            payload = {
+                "operation_id": "11111111-1111-4111-8111-111111111111",
+                "revision": preview["revision"],
+                "terms_version": preview["terms_version"],
+                "accepted_terms": True,
+                "requested_immediate_start": True,
+                "approved_specific_clauses": True,
+                "language": "en",
+            }
+            result = await authed_client.post(SIGNUPS, json=payload)
+        else:
+            path = CHECKOUT if kind == "subscription" else TOP_UP_CHECKOUT
+            payload = CHECKOUT_MONTHLY if kind == "subscription" else ACCEPTANCE
+            result = await authed_client.post(path, json=payload)
+    finally:
+        event.remove(Session, "after_commit", arm)
+        event.remove(Session, "do_orm_execute", fail_read)
+        event.remove(Session, "before_commit", fail_acknowledgement)
+    assert result.status_code == 500
+    assert failed
+    assert fake_billing.checkouts == []
+    if not checkpoint_available:
+        if kind == "arranged_paid_signup":
+            assert (await authed_client.get(SIGNUPS + "/" + payload["operation_id"])).json()[
+                "status"
+            ] == "pending"
+        else:
+            assert (await authed_client.post(path, json=payload)).status_code == 409
+        assert (
+            await authed_client.request("DELETE", "/api/v1/users/me", json={"handle": "ada"})
+        ).status_code == 409
+        return
+    if kind == "arranged_paid_signup":
+        assert (await authed_client.get(SIGNUPS + "/" + payload["operation_id"])).json()[
+            "status"
+        ] == "refused"
+        assert (
+            await authed_client.post(SIGNUPS + "/preview", json={"plan_key": "pumpkit_pro_monthly"})
+        ).status_code == 200
+    else:
+        assert (await authed_client.post(path, json=payload)).status_code == 200
+    assert (
+        await authed_client.request("DELETE", "/api/v1/users/me", json={"handle": "ada"})
+    ).status_code == 204
+
+
+async def test_operator_positive_no_object_proof_ends_arranged_signup_without_replaying_key(
+    authed_client, coupons, fake_billing, fixed_clock, db_session_maker, monkeypatch, tmp_path
+):
+    fake_billing.clock = fixed_clock
+    free = await redeem_coupon(authed_client, coupons)
+    sent = []
+
+    async def incident(**kwargs):
+        sent.append(kwargs)
+        raise CheckoutOutcomeUnknown("Controlled provider result requires resolution")
+
+    monkeypatch.setattr(fake_billing, "dispatch_checkout", incident)
+    request, result = await accept_paid_signup(authed_client)
+    assert result["status"] == "pending"
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+    _, closed = await drain(db_session_maker, fake_billing, ["execute"], clock=fixed_clock)
+    original = sent[0]
+    resolution = {
+        "dispatch_id": original["parameters"]["metadata"]["pumpkit_dispatch"],
+        "parameters_sha256": hashlib.sha256(
+            json.dumps(original["parameters"], sort_keys=True).encode()
+        ).hexdigest(),
+        "idempotency_key_sha256": hashlib.sha256(original["idempotency_key"].encode()).hexdigest(),
+        "worker_resolution_evidence": "controlled-worker-returned-with-no-delayed-work",
+        "provider_resolution_evidence": "controlled-provider-confirmed-original-request-no-object",
+        "outcome": "provider_resolved_no_object",
+    }
+    evidence = review(tmp_path / "review.json", closed["binding"], resolutions=[resolution])
+    code, resolved = await drain(
+        db_session_maker, fake_billing, ["execute", *evidence], clock=fixed_clock
+    )
+    assert code == 0, resolved
+    assert resolved["ready"] is True
+    assert (await authed_client.get(SIGNUPS + "/" + request["operation_id"])).json()[
+        "status"
+    ] == "refused"
+    assert (await authed_client.get("/api/v1/billing/me")).json()["free_access"]["ends_at"] == free[
+        "ends_at"
+    ]
+    assert len(sent) == 1
+
+
+async def test_replay_preexecution_rejection_cannot_prove_original_key_created_nothing(
+    authed_client, fake_billing, fixed_clock, db_session_maker, monkeypatch, tmp_path
+):
+    fake_billing.plans = [MONTHLY]
+    fake_billing.fail_on.add("create_subscription_checkout")
+    assert (await authed_client.post(CHECKOUT, json=CHECKOUT_MONTHLY)).status_code == 502
+    fake_billing.fail_on.clear()
+    sent = []
+
+    def create(params, options):
+        sent.append(options["idempotency_key"])
+        raise stripe.AuthenticationError("Controlled authentication rejection", http_status=401)
+
+    sdk = SimpleNamespace(
+        v1=SimpleNamespace(checkout=SimpleNamespace(sessions=SimpleNamespace(create=create)))
+    )
+    adapter = StripeBillingGateway(client=cast(Any, sdk))
+    monkeypatch.setattr(fake_billing, "dispatch_checkout", adapter.dispatch_checkout)
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", True)
+    _, closed = await drain(db_session_maker, fake_billing, ["execute"], clock=fixed_clock)
+    evidence = review(tmp_path / "review.json", closed["binding"])
+    for _ in range(2):
+        code, unresolved = await drain(
+            db_session_maker, fake_billing, ["execute", *evidence], clock=fixed_clock
+        )
+        assert code == 1
+        assert unresolved["unresolved_dispatches"]
+        assert unresolved["ready"] is False
+    assert len(sent) == 1
+    assert sent[0] in fake_billing.checkout_dispatches
+    assert fake_billing.checkouts == []
+    assert (
+        await authed_client.request("DELETE", "/api/v1/users/me", json={"handle": "ada"})
+    ).status_code == 409

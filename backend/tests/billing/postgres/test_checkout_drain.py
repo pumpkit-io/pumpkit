@@ -179,13 +179,8 @@ async def test_committed_intent_gap_stays_unready_until_original_caller_acknowle
         db_session_maker, fake_billing, ["execute", *evidence], clock=fixed_clock
     )
     if kind == "arranged_paid_signup":
-        assert code == 1
-        assert "pending_operation_unresolved" in final["blockers"]
-        cancelled = await client.post(SIGNUPS + "/" + payload["operation_id"] + "/cancel")
-        assert cancelled.json()["status"] == "refused"
-        code, final = await drain(
-            db_session_maker, fake_billing, ["execute", *evidence], clock=fixed_clock
-        )
+        operation = await client.get(SIGNUPS + "/" + payload["operation_id"])
+        assert operation.json()["status"] == "refused"
     assert code == 0, final
     assert final["ready"] is True
     assert fake_billing.checkouts == []

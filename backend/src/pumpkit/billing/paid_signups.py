@@ -16,6 +16,7 @@ from pumpkit.billing.gateway import (
     TRIAL_END_FLOOR,
     BillingGateway,
     BillingProviderError,
+    CheckoutNotCreated,
     PaidSignupCheckout,
     SubscriptionState,
     legacy_paid_signup_parameters_match,
@@ -417,6 +418,12 @@ async def reconcile(
             return _cancellation_response(operation, cancel=cancel, url=checkout.url)
         operation.detail = "Your checkout is being confirmed. Your free access is unchanged."
         return _cancellation_response(operation, cancel=cancel)
+    except CheckoutNotCreated:
+        return refuse(
+            operation,
+            now=now,
+            detail="No future payment was arranged. Your free access is unchanged; review a fresh paid offer to subscribe.",
+        )
     except BillingProviderError as error:
         logger.error(
             "Stripe failed or refused paid signup %s: %s",
