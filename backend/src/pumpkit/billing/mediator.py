@@ -1,13 +1,15 @@
+import asyncio
 import hashlib
 from dataclasses import asdict
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import pumpkit.auth.service.users as users_service
 from pumpkit.auth.models import User
 from pumpkit.billing import (
+    checkout_coordination,
     coupon_operations,
     coupon_preview,
     coupon_redemption,
@@ -26,10 +28,14 @@ from pumpkit.billing.allowance import (
 from pumpkit.billing.gateway import (
     BillingGateway,
     BillingProviderError,
+    CheckoutOutcomeUnknown,
+    CheckoutSession,
     OneOffPrice,
+    PaidSignupCheckout,
     SubscriptionState,
     WebhookEvent,
     WebhookSignatureError,
+    checkout_parameters,
 )
 from pumpkit.billing.models import Coupon, CouponOperation, PaidSignup, PlanChange, TopUp
 from pumpkit.billing.schemas import (
@@ -60,6 +66,7 @@ from pumpkit.billing.terms import TERMS_VERSION
 from pumpkit.core.analytics import posthog_client
 from pumpkit.core.config import BILLING_PAGE, settings
 from pumpkit.core.errors import (
+    AppError,
     BadRequestError,
     ConflictError,
     NotFoundError,
@@ -299,6 +306,7 @@ async def create_checkout_session(
     """
     purchase_availability.require_purchases_available(user)
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    await checkout_coordination.require_settled(db, user_id=user.id)
     await coupon_operations.require_settled(db, user_id=user.id)
     if await service.get_free_access(db, user_id=user.id, now=clock()):
         raise ConflictError(
@@ -321,6 +329,7 @@ async def create_checkout_session(
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     # Take the User's lock again: creating the customer committed and released it.
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    await checkout_coordination.require_settled(db, user_id=user.id)
     await coupon_operations.require_settled(db, user_id=user.id)
     await service.sync_customer(db, gateway, user_id=user.id, customer_id=customer_id)
     offer = await service.get_subscription_offer(db, user_id=user.id, now=clock())
@@ -334,15 +343,165 @@ async def create_checkout_session(
     for incomplete in await service.list_incomplete_subscriptions(db, user_id=user.id):
         await gateway.cancel_subscription(subscription_id=incomplete.stripe_subscription_id)
     await gateway.expire_open_checkouts(customer_id=customer_id)
-    session = await gateway.create_subscription_checkout(
-        customer_id=customer_id,
-        price_id=plan.price_id,
-        quantity=1,  # A Subscription is always for one seat; the client never chooses.
-        user_id=user.id,
-        trial_period_days=offer.trial_days,
+    session = await _dispatch_checkout(
+        db,
+        gateway,
+        user=user,
+        kind="subscription",
+        clock=clock,
+        validate=lambda: _revalidate_subscription_checkout(
+            db, gateway, user=user, trial_days=offer.trial_days, clock=clock
+        ),
+        parameters=checkout_parameters(
+            kind="subscription",
+            customer_id=customer_id,
+            price_id=plan.price_id,
+            user_id=user.id,
+            trial_days=offer.trial_days,
+        ),
     )
     await db.commit()
     return CheckoutResponse(url=session.url, session_id=session.id)
+
+
+async def _revalidate_subscription_checkout(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user: User,
+    trial_days: Optional[int],
+    clock: Clock,
+) -> None:
+    await service.sync_customer(
+        db, gateway, user_id=user.id, customer_id=user.stripe_customer_id or ""
+    )
+    offer = await service.get_subscription_offer(db, user_id=user.id, now=clock())
+    if not offer.may_subscribe or offer.trial_days != trial_days:
+        raise ConflictError(
+            "Your subscription offer changed. Review your current plan before subscribing."
+        )
+
+
+async def _revalidate_top_up_checkout(
+    db: AsyncSession, gateway: BillingGateway, *, user: User, clock: Clock
+) -> None:
+    await service.sync_customer(
+        db, gateway, user_id=user.id, customer_id=user.stripe_customer_id or ""
+    )
+    await _check_may_buy_top_up(db, user, clock())
+
+
+async def _dispatch_checkout(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user: User,
+    kind: str,
+    parameters: dict[str, Any],
+    clock: Clock,
+    operation_id: Optional[str] = None,
+    validate: Optional[Callable[[], Awaitable[None]]] = None,
+) -> CheckoutSession:
+    await checkout_coordination.require_settled(db, user_id=user.id)
+    purchase_availability.require_purchases_available(user)
+    dispatch = await checkout_coordination.register(
+        db,
+        user_id=user.id,
+        kind=kind,
+        parameters=parameters,
+        now=clock(),
+        operation_id=operation_id,
+    )
+    dispatch_id = dispatch.id
+    # The provider may finish after this request fails; retain its exact intent before sending.
+    await db.commit()
+    user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    dispatch = await checkout_coordination.get_dispatch(db, dispatch_id)
+    if dispatch.settled:
+        raise BillingProviderError("This Checkout dispatch has already been resolved")
+    try:
+        purchase_availability.require_purchases_available(user)
+    except purchase_availability.PurchasesPausedError:
+        dispatch.provider_finished = True
+        dispatch.settled = True
+        # This invocation has not entered the provider and cannot create after acknowledging pause.
+        await db.commit()
+        raise
+    if validate:
+        try:
+            await validate()
+        except AppError:
+            dispatch.provider_finished = True
+            dispatch.settled = True
+            # Eligibility changed while intent was committed; this invocation never entered CREATE.
+            await db.commit()
+            raise
+    task = asyncio.create_task(
+        gateway.dispatch_checkout(
+            parameters=dispatch.parameters, idempotency_key=dispatch.idempotency_key
+        )
+    )
+    cancelled = False
+    try:
+        while True:
+            try:
+                result = await asyncio.shield(task)
+                break
+            except asyncio.CancelledError:
+                cancelled = True
+                if task.cancelled():
+                    raise
+    except Exception as error:
+        dispatch.provider_finished = True
+        dispatch.provider_resolution_required = isinstance(error, CheckoutOutcomeUnknown)
+        # A finished invocation may still have an unknown remote result; keep its pinned intent.
+        await db.commit()
+        raise
+    dispatch.provider_finished = True
+    dispatch.session_id = result.id
+    dispatch.settled = True
+    if cancelled:
+        # A cancelled request cannot release its User lock while the SDK thread can still dispatch.
+        await db.commit()
+        raise asyncio.CancelledError
+    return result
+
+
+async def _dispatch_paid_signup(
+    db: AsyncSession,
+    gateway: BillingGateway,
+    *,
+    user: User,
+    operation: PaidSignup,
+    clock: Clock,
+) -> PaidSignupCheckout:
+    target = as_utc(datetime.fromisoformat(operation.offer["first_payment_at"]))
+    expiry = as_utc(datetime.fromisoformat(operation.offer["checkout_expires_at"]))
+    result = await _dispatch_checkout(
+        db,
+        gateway,
+        user=user,
+        kind="arranged_paid_signup",
+        clock=clock,
+        operation_id=operation.id,
+        validate=lambda: paid_signups.require_provider_ready(gateway, user=user),
+        parameters=checkout_parameters(
+            kind="arranged_paid_signup",
+            customer_id=operation.customer_id or "",
+            user_id=user.id,
+            price_id=operation.offer["price_id"],
+            operation_id=operation.id,
+            first_payment_at=target,
+            expires_at=expiry,
+        ),
+    )
+    return PaidSignupCheckout(
+        id=result.id,
+        customer_id=operation.customer_id or "",
+        operation_id=operation.id,
+        status="open",
+        url=result.url,
+    )
 
 
 async def _record_terms_acceptance(db: AsyncSession, user: User) -> None:
@@ -386,6 +545,7 @@ async def create_top_up_checkout(
     """
     purchase_availability.require_purchases_available(user)
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    await checkout_coordination.require_settled(db, user_id=user.id)
     await coupon_operations.require_settled(db, user_id=user.id)
     terms_apply = service.requires_terms_acceptance()
     if terms_apply:
@@ -398,14 +558,24 @@ async def create_top_up_checkout(
     if price is None:
         raise BillingProviderError("The configured Top-up has no active one-off price")
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    await checkout_coordination.require_settled(db, user_id=user.id)
     await coupon_operations.require_settled(db, user_id=user.id)
     customer_id = await _ensure_stripe_customer(db, gateway, user)
     # First-customer creation commits, so deletion may have won the released User lock.
     user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
+    await checkout_coordination.require_settled(db, user_id=user.id)
     await coupon_operations.require_settled(db, user_id=user.id)
     await _check_may_buy_top_up(db, user, clock())
-    session = await gateway.create_top_up_checkout(
-        customer_id=customer_id, price_id=price.price_id, user_id=user.id
+    session = await _dispatch_checkout(
+        db,
+        gateway,
+        user=user,
+        kind="top_up",
+        clock=clock,
+        validate=lambda: _revalidate_top_up_checkout(db, gateway, user=user, clock=clock),
+        parameters=checkout_parameters(
+            kind="top_up", customer_id=customer_id, price_id=price.price_id, user_id=user.id
+        ),
     )
     await db.commit()
     return CheckoutResponse(url=session.url, session_id=session.id)
@@ -945,7 +1115,15 @@ async def _recover_paid_signup(
         user = await users_service.require_locked_user(db, user_id=user.id, clock=clock)
     operation = await paid_signups.find(db, user_id=user.id, operation_id=operation.operation_id)
     answer = await paid_signups.reconcile(
-        db, gateway, user=user, operation=operation, clock=clock, cancel=cancel
+        db,
+        gateway,
+        user=user,
+        operation=operation,
+        clock=clock,
+        cancel=cancel,
+        create_checkout=lambda: _dispatch_paid_signup(
+            db, gateway, user=user, operation=operation, clock=clock
+        ),
     )
     if (
         operation.status == "pending"

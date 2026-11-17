@@ -393,6 +393,8 @@ export function pumpkitStripe(target: WebhookTarget) {
         );
       });
 
+      app.get('/v1/account', (c: any) => c.json({ id: 'acct_pumpkit_emulator', object: 'account' }));
+
       app.post('/v1/checkout/sessions', async (c: any) => {
         const params = await bodyParams(c);
         const key = c.req.header('Idempotency-Key');
