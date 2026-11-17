@@ -110,6 +110,7 @@ export const NOT_SUBSCRIBED: BillingMe = {
   subscription: null,
   subscribed: false,
   maySubscribe: true,
+  purchasesAvailable: true,
   trialDays: null,
 };
 
@@ -122,6 +123,7 @@ export const SUBSCRIBED: BillingMe = {
   },
   subscribed: true,
   maySubscribe: false,
+  purchasesAvailable: true,
   trialDays: null,
 };
 

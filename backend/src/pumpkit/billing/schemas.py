@@ -105,6 +105,7 @@ class BillingMeResponse(BaseModel):
     subscription: Optional[BillingSubscriptionResponse]
     subscribed: bool
     may_subscribe: bool
+    purchases_available: bool
     trial_days: Optional[int]
 
 

@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 
 from pumpkit.billing.gateway import SubscriptionState
 from pumpkit.billing.models import StripeEvent, Subscription
+from pumpkit.core.config import settings
 
 WEBHOOK = "/api/v1/stripe/webhook"
 
@@ -64,9 +65,11 @@ async def stripe_customer(db, user) -> str:
         "checkout.session.completed",
     ],
 )
+@pytest.mark.parametrize("purchase_paused", [False, True])
 async def test_a_nudge_syncs_the_subscription_the_provider_holds(
-    client, db, fake_billing, stripe_customer, user, event_type
+    client, db, fake_billing, stripe_customer, user, event_type, monkeypatch, purchase_paused
 ):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchase_paused)
     fake_billing.set_subscription(stripe_customer, replace(ACTIVE, status="past_due"))
 
     response = await _send(client, fake_billing, "evt_1", event_type, stripe_customer)

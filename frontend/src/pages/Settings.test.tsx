@@ -157,6 +157,7 @@ function holding(
     },
     subscribed,
     maySubscribe: false,
+    purchasesAvailable: true,
     trialDays: null,
   };
 }
@@ -386,6 +387,7 @@ describe('Settings', () => {
         subscription: null,
         subscribed: true,
         maySubscribe: false,
+        purchasesAvailable: true,
         trialDays: null,
         freeAccess: { startsAt: '2028-01-31T12:01:00Z', endsAt: '2028-04-30T12:01:00Z', months: 3 },
       });
@@ -408,6 +410,7 @@ describe('Settings', () => {
         subscription: null,
         subscribed: true,
         maySubscribe: false,
+        purchasesAvailable: true,
         trialDays: null,
         freeAccess: { startsAt: '2028-01-31T12:01:00Z', endsAt: '2028-04-30T12:01:00Z', months: 3 },
       });

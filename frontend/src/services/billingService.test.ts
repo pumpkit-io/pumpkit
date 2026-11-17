@@ -135,12 +135,13 @@ describe('cardless coupon redemption', () => {
     });
   });
 
-  it('reads free access independently of a Subscription', async () => {
+  it.each([true, false])('reads free access with purchase availability %s', async (available) => {
     vi.spyOn(apiService, 'get').mockResolvedValue({
       data: {
         subscription: null,
         subscribed: true,
         may_subscribe: false,
+        purchases_available: available,
         trial_days: null,
         free_access: {
           starts_at: '2028-01-31T12:01:00Z',
@@ -153,6 +154,7 @@ describe('cardless coupon redemption', () => {
       subscription: null,
       subscribed: true,
       maySubscribe: false,
+      purchasesAvailable: available,
       trialDays: null,
       freeAccess: { startsAt: '2028-01-31T12:01:00Z', endsAt: '2028-04-30T12:01:00Z', months: 3 },
     });

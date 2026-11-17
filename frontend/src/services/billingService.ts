@@ -26,6 +26,7 @@ export interface BillingMe {
   subscription: Subscription | null;
   subscribed: boolean;
   maySubscribe: boolean;
+  purchasesAvailable: boolean;
   /** The Trial a checkout would start with; set only when the User may subscribe. */
   trialDays: number | null;
   pendingPlanChangeId?: string | null;
@@ -279,6 +280,7 @@ interface BillingMeApi {
   } | null;
   subscribed: boolean;
   may_subscribe: boolean;
+  purchases_available: boolean;
   trial_days: number | null;
   pending_plan_change_id?: string | null;
   may_change_plan?: boolean;
@@ -350,6 +352,7 @@ function billingMe(data: BillingMeApi): BillingMe {
     },
     subscribed: data.subscribed,
     maySubscribe: data.may_subscribe,
+    purchasesAvailable: data.purchases_available,
     trialDays: data.trial_days,
     pendingPlanChangeId: data.pending_plan_change_id,
     mayChangePlan: data.may_change_plan,

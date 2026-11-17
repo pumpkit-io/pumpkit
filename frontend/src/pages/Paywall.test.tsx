@@ -121,6 +121,7 @@ function holding(status: NonNullable<BillingMe['subscription']>['status']): Bill
     },
     subscribed: false,
     maySubscribe: status === 'incomplete',
+    purchasesAvailable: true,
     trialDays: null,
   };
 }
@@ -380,6 +381,65 @@ describe('Paywall', () => {
       });
     });
 
+    it('retains the trial offer and acceptance fields while purchases are paused', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+        ...WITH_TRIAL,
+        purchasesAvailable: false,
+      });
+      renderPaywall();
+      const area = await paywall();
+      expect(
+        await area.findByText('New subscriptions are temporarily unavailable. Try again later.'),
+      ).toBeInTheDocument();
+      tickEveryBox(area);
+      expect(area.getByRole('button', { name: 'Start trial: Monthly' })).toBeDisabled();
+      expect(area.getByRole('list', { name: 'Included' })).toHaveTextContent(/trial/i);
+      expect(billingService.startSubscriptionCheckout).not.toHaveBeenCalled();
+    });
+
+    it('keeps accepted Terms and disables purchases when a stale page meets the pause', async () => {
+      vi.mocked(billingService.startSubscriptionCheckout).mockRejectedValue(
+        apiError(503, 'Paused', { code: 'BILLING_PURCHASES_PAUSED' }),
+      );
+      renderPaywall();
+      const area = await paywall();
+      const start = await area.findByRole('button', { name: 'Start trial: Monthly' });
+      tickEveryBox(area);
+      fireEvent.click(start);
+      expect(
+        await area.findByText('New subscriptions are temporarily unavailable. Try again later.'),
+      ).toBeInTheDocument();
+      expect(start).toBeDisabled();
+      for (const box of ACCEPTANCE_BOXES)
+        expect(area.getByRole('checkbox', { name: box })).toBeChecked();
+      expect(billingService.startSubscriptionCheckout).toHaveBeenCalledTimes(1);
+      expect(redirectTo).not.toHaveBeenCalled();
+    });
+
+    it('does not offer a purchase until authenticated availability is loaded', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockReturnValue(new Promise(() => {}));
+      renderPaywall();
+      await paywall();
+      expect(
+        screen.queryByRole('button', { name: 'Start trial: Monthly' }),
+      ).not.toBeInTheDocument();
+    });
+
+    it('lets an ordinary provider error be retried without re-entering acceptance', async () => {
+      vi.mocked(billingService.startSubscriptionCheckout).mockRejectedValueOnce(
+        apiError(503, 'Provider unavailable'),
+      );
+      renderPaywall();
+      const area = await paywall();
+      const start = await area.findByRole('button', { name: 'Start trial: Monthly' });
+      tickEveryBox(area);
+      fireEvent.click(start);
+      expect(await area.findByRole('alert')).toHaveTextContent('Provider unavailable');
+      expect(start).toBeEnabled();
+      fireEvent.click(start);
+      await waitFor(() => expect(redirectTo).toHaveBeenCalled());
+    });
+
     it('links each acceptance box to what it refers to in the Terms', async () => {
       renderPaywall();
 
@@ -428,6 +488,18 @@ describe('Paywall', () => {
   });
 
   describe('Subscribe', () => {
+    it('keeps the returning-user offer while purchases are paused', async () => {
+      vi.mocked(billingService.fetchBillingMe).mockResolvedValue({
+        ...NOT_SUBSCRIBED,
+        purchasesAvailable: false,
+      });
+      renderPaywall();
+      const area = await paywall();
+      expect(await area.findByRole('button', { name: 'Subscribe: Monthly' })).toBeDisabled();
+      expect(area.getByRole('heading', { name: 'Subscribe to keep writing' })).toBeInTheDocument();
+      expect(area.getAllByRole('checkbox')).toHaveLength(3);
+    });
+
     it('offers Subscribe and no charge date to a User whose Trial is used up', async () => {
       vi.mocked(billingService.fetchBillingMe).mockResolvedValue(NOT_SUBSCRIBED);
       renderPaywall();

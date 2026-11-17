@@ -83,9 +83,11 @@ async def _trial_attempts(db, user_id: str, count: int) -> None:
     await db.commit()
 
 
+@pytest.mark.parametrize("purchase_paused", [False, True])
 async def test_subscribing_now_ends_the_trial_and_starts_the_monthly_allowance(
-    client, fake_billing, holds
+    client, fake_billing, holds, monkeypatch, purchase_paused
 ):
+    monkeypatch.setattr(settings, "BILLING_PURCHASES_PAUSED", purchase_paused)
     await holds("trialing")
 
     response = await client.post(SUBSCRIBE_NOW)

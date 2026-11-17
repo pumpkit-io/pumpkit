@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { ErrorBanner } from '@/components/ErrorBanner';
+import { Notice } from '@/components/Notice';
 import { track } from '@/lib/analytics';
 import { redirectTo } from '@/lib/navigation';
-import { errorMessage } from '@/services/apiErrors';
+import { errorCode, errorMessage, errorStatus } from '@/services/apiErrors';
 import { billingService, type Plan, type TermsAcceptance } from '@/services/billingService';
 import type { BillingData } from './BillingProvider';
 import { OfferLineContent } from './OfferLineContent';
@@ -49,12 +50,15 @@ export function PlanPicker({
   const [acceptance, setAcceptance] = useState<TermsAcceptance>(NOTHING_ACCEPTED);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paused, setPaused] = useState(false);
+  const purchasesAvailable = data.me.purchasesAvailable && !paused;
   const hasTerms = data.termsVersion !== null;
   const accepted = !hasTerms || acceptsAll(acceptance);
   const monthly = data.plans.find((plan) => plan.interval === 'month' && plan.intervalCount === 1);
   const offer = offerLines(data.allowance, data.me.trialDays === null ? null : data.trial);
 
   const subscribe = async (planKey: string) => {
+    if (!purchasesAvailable || !accepted || pendingKey !== null) return;
     track('billing_subscription_checkout_started', { plan_key: planKey });
     setPendingKey(planKey);
     setError(null);
@@ -63,6 +67,11 @@ export function PlanPicker({
         await billingService.startSubscriptionCheckout(planKey, data.termsVersion, acceptance),
       );
     } catch (e) {
+      if (errorStatus(e) === 503 && errorCode(e) === 'BILLING_PURCHASES_PAUSED') {
+        setPaused(true);
+        setPendingKey(null);
+        return;
+      }
       const message = errorMessage(e, "Couldn't start checkout. Try again.");
       track('billing_checkout_redirect_failed', { error_message: message });
       setError(message);
@@ -76,6 +85,9 @@ export function PlanPicker({
 
   return (
     <div className="space-y-5">
+      {!purchasesAvailable && (
+        <Notice message="New subscriptions are temporarily unavailable. Try again later." />
+      )}
       {error && <ErrorBanner message={error} />}
       <ul aria-label="Included" className="space-y-1.5 font-sans text-sm text-foreground">
         {offer.map((line) => (
@@ -98,7 +110,7 @@ export function PlanPicker({
             note={savingOver(plan, monthly)}
             actionLabel={pendingKey === plan.key ? 'Redirecting…' : actionLabel}
             ariaLabel={`${actionLabel}: ${planTitle(plan)}`}
-            disabled={!accepted || pendingKey !== null}
+            disabled={!purchasesAvailable || !accepted || pendingKey !== null}
             onAction={() => void subscribe(plan.key)}
           />
         ))}
