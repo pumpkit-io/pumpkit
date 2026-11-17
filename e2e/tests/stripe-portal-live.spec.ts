@@ -42,7 +42,9 @@ async function withFixture(
   action: Action,
   behavior: string,
   exercise: (fixture: Fixture, portal: Portal, directory: string) => Promise<void>,
+  managed = false,
 ) {
+  if (managed) test.setTimeout(600_000);
   const directory = mkdtempSync(path.join(tmpdir(), 'pumpkit-portal-verification-'));
   const ledger = path.join(directory, 'private-resources.json');
   const fixture: Fixture = async (command, options = []) => {
@@ -59,12 +61,20 @@ async function withFixture(
         ledger,
         ...options,
       ],
-      { encoding: 'utf8', timeout: 60_000 },
+      { encoding: 'utf8', timeout: managed && command === 'create' ? 300_000 : 60_000 },
     );
     return JSON.parse(stdout) as Record<string, unknown>;
   };
   try {
-    await fixture('create', ['--mode', mode, '--behavior', behavior, '--action', action]);
+    await fixture('create', [
+      '--mode',
+      mode,
+      '--behavior',
+      behavior,
+      '--action',
+      action,
+      ...(managed ? ['--managed-payments'] : []),
+    ]);
     const portal = JSON.parse(readFileSync(ledger, 'utf8')) as Portal;
     await page.goto(portal.session_url, { waitUntil: 'domcontentloaded' });
     if (action === 'update') {
@@ -104,9 +114,13 @@ async function rejection(answer: Response, transition: string) {
   const expected =
     transition === 'inactive-config'
       ? answer.status() === 400 && /config.*(?:inactive|disabled|not.*active)/i.test(message)
-      : answer.status() === 404 &&
-        error.code === 'resource_missing' &&
-        /subscription/i.test(message);
+      : transition === 'restricted-feature'
+        ? answer.status() === 400 &&
+          error.type === 'invalid_request_error' &&
+          /subscription update feature.*portal configuration is disabled/i.test(message)
+        : answer.status() === 404 &&
+          error.code === 'resource_missing' &&
+          /subscription/i.test(message);
   if (!expected) {
     const reason = {
       status: answer.status(),
@@ -196,3 +210,113 @@ for (const mode of ['classic', 'flexible']) {
     }
   }
 }
+
+for (const action of ['update', 'cancel'] as const) {
+  for (const behavior of action === 'cancel' ? ['end_trial'] : ['end_trial', 'continue_trial']) {
+    test(`Managed Payments control: ${action} ${behavior}`, async ({ page }) => {
+      await withFixture(
+        page,
+        'flexible',
+        action,
+        behavior,
+        async (fixture, _portal, directory) => {
+          const response = page.waitForResponse((answer) => mutation(answer, action));
+          await confirmation(page, action).click();
+          expect((await response).status()).toBe(200);
+          const observed = await fixture('observe');
+          expect(observed.managed_payments).toBe(true);
+          if (action === 'cancel') {
+            expect(observed).toMatchObject({
+              status: 'trialing',
+              cancellation_targets_original_end: true,
+              price_preserved: true,
+              trial_end_preserved: true,
+              nonzero_invoices: 0,
+            });
+          } else {
+            expect(observed.price_preserved).toBe(false);
+            expect(observed.trial_end_preserved).toBe(behavior === 'continue_trial');
+            expect(observed.nonzero_invoices).toBe(behavior === 'end_trial' ? 1 : 0);
+          }
+          writeFileSync(
+            path.join(directory, 'result.json'),
+            JSON.stringify({ control: true, action, behavior, observed }),
+          );
+        },
+        true,
+      );
+    });
+
+    test(`Managed Payments inactive config: ${action} ${behavior}`, async ({ page }) => {
+      await withFixture(
+        page,
+        'flexible',
+        action,
+        behavior,
+        async (fixture, portal, directory) => {
+          await fixture('restrict');
+          const refusals = [];
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const response = page.waitForResponse((answer) => mutation(answer, action));
+            await confirmation(page, action).click();
+            refusals.push(await rejection(await response, 'inactive-config'));
+            await expect(page.getByText(/Something went wrong/)).toBeVisible();
+          }
+          const observed = await fixture('observe');
+          expect(observed).toMatchObject({
+            managed_payments: true,
+            status: 'trialing',
+            price_preserved: true,
+            trial_end_preserved: true,
+            cancellation_preserved: true,
+            nonzero_invoices: 0,
+          });
+          await page.reload({ waitUntil: 'domcontentloaded' });
+          await expect(page.getByRole('button', { name: unsafeAction })).toHaveCount(0);
+          await expect(page.getByRole('link', { name: unsafeAction })).toHaveCount(0);
+          const login = await page.context().newPage();
+          await login.goto(portal.login_url, { waitUntil: 'domcontentloaded' });
+          await expect(login.getByText(/no longer active/)).toBeVisible();
+          writeFileSync(
+            path.join(directory, 'result.json'),
+            JSON.stringify({ action, behavior, refusals, observed }),
+          );
+        },
+        true,
+      );
+    });
+  }
+}
+
+test('Managed Payments restriction-only refuses an old price confirmation', async ({ page }) => {
+  await withFixture(
+    page,
+    'flexible',
+    'update',
+    'end_trial',
+    async (fixture, _portal, directory) => {
+      expect(await fixture('restrict', ['--keep-active'])).toMatchObject({ active: true });
+      const refusals = [];
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const response = page.waitForResponse((answer) => mutation(answer, 'update'));
+        await confirmation(page, 'update').click();
+        refusals.push(await rejection(await response, 'restricted-feature'));
+        await expect(page.getByText(/Something went wrong/)).toBeVisible();
+      }
+      const observed = await fixture('observe');
+      expect(observed).toMatchObject({
+        managed_payments: true,
+        status: 'trialing',
+        price_preserved: true,
+        trial_end_preserved: true,
+        cancellation_preserved: true,
+        nonzero_invoices: 0,
+      });
+      writeFileSync(
+        path.join(directory, 'result.json'),
+        JSON.stringify({ transition: 'restriction-only', refusals, observed }),
+      );
+    },
+    true,
+  );
+});

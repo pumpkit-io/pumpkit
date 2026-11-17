@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import secrets
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -32,6 +33,8 @@ def restricted_features() -> ConfigurationCreateParamsFeatures:
 
 
 def create(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, Any]:
+    if args.managed_payments and args.mode != "flexible":
+        raise ValueError("Managed Payments proof uses the installed flexible billing mode")
     if args.ledger.exists():
         raise ValueError("Existing resource ledger must be recovered first")
     data: dict[str, Any] = {
@@ -44,7 +47,7 @@ def create(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, A
     save(args.ledger, data)
     metadata = {"pumpkit_verification": "portal-transition", "run": data["run"]}
     product = client.v1.products.create(
-        {"name": "Synthetic portal transition", "metadata": metadata}
+        {"name": "Synthetic portal transition", "metadata": metadata, "tax_code": "txcd_10103001"}
     )
     data["product"] = product.id
     save(args.ledger, data)
@@ -53,8 +56,8 @@ def create(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, A
             {
                 "product": product.id,
                 "unit_amount": amount,
-                "currency": "usd",
-                "tax_behavior": "exclusive",
+                "currency": "eur" if args.managed_payments else "usd",
+                "tax_behavior": "inclusive" if args.managed_payments else "exclusive",
                 "recurring": {"interval": interval},
             }
         )
@@ -66,19 +69,59 @@ def create(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, A
     data["clocks"].append(clock.id)
     save(args.ledger, data)
     customer = client.v1.customers.create(
-        {"test_clock": clock.id, "name": "Synthetic legacy portal customer"}
+        {
+            "test_clock": clock.id,
+            "name": "Synthetic legacy portal customer",
+            "email": "managed-transition@example.com",
+        }
     )
     data["customer"] = customer.id
-    payment = client.v1.payment_methods.attach("pm_card_visa", {"customer": customer.id})
-    subscription = client.v1.subscriptions.create(
-        {
-            "customer": customer.id,
-            "items": [{"price": data["prices"][0]}],
-            "default_payment_method": payment.id,
-            "trial_period_days": 30,
-            "billing_mode": {"type": args.mode},
-        }
-    ).to_dict()
+    if args.managed_payments:
+        checkout = client.v1.checkout.sessions.create(
+            {
+                "customer": customer.id,
+                "mode": "subscription",
+                "managed_payments": {"enabled": True},
+                "line_items": [{"price": data["prices"][0], "quantity": 1}],
+                "subscription_data": {
+                    "trial_period_days": 30,
+                    "billing_mode": {"type": "flexible"},
+                },
+                "success_url": "https://example.com/portal-verification",
+            }
+        )
+        data["checkout"] = checkout.id
+        save(args.ledger, data)
+        browser = subprocess.run(
+            ["node", str(Path(__file__).resolve().parents[3] / "e2e" / "stripe-checkout.mjs"), "-"],
+            input=checkout.url,
+            text=True,
+            capture_output=True,
+            timeout=180,
+        )
+        if browser.returncode:
+            raise ValueError("Synthetic Managed Payments Checkout failed")
+        for _ in range(30):
+            completed = client.v1.checkout.sessions.retrieve(checkout.id)
+            if completed.status == "complete":
+                break
+            time.sleep(1)
+        else:
+            raise ValueError("Synthetic Managed Payments Checkout did not complete")
+        subscription = client.v1.subscriptions.retrieve(str(completed.subscription)).to_dict()
+        if not (subscription.get("managed_payments") or {}).get("enabled"):
+            raise ValueError("Managed Payments subscription required")
+    else:
+        payment = client.v1.payment_methods.attach("pm_card_visa", {"customer": customer.id})
+        subscription = client.v1.subscriptions.create(
+            {
+                "customer": customer.id,
+                "items": [{"price": data["prices"][0]}],
+                "default_payment_method": payment.id,
+                "trial_period_days": 30,
+                "billing_mode": {"type": args.mode},
+            }
+        ).to_dict()
     if subscription["livemode"] is not False:
         raise ValueError("Created subscription must be in test mode")
     data.update(subscription=subscription["id"], trial_end=subscription["trial_end"])
@@ -195,6 +238,7 @@ def execute(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, 
         subscription = client.v1.subscriptions.retrieve(data["subscription"]).to_dict()
         result = {
             "status": subscription["status"],
+            "managed_payments": bool((subscription.get("managed_payments") or {}).get("enabled")),
             "price_preserved": subscription["items"]["data"][0]["price"]["id"] == data["prices"][0],
             "trial_end_preserved": subscription["trial_end"] == data["trial_end"],
             "cancellation_preserved": all(
@@ -228,6 +272,20 @@ def execute(client: stripe.StripeClient, args: argparse.Namespace) -> dict[str, 
                 )
             )
         return result
+    if data.get("checkout"):
+        try:
+            checkout = client.v1.checkout.sessions.retrieve(data["checkout"])
+            if checkout.status == "open":
+                try:
+                    client.v1.checkout.sessions.expire(data["checkout"])
+                except stripe.StripeError:
+                    # Expiration can race completion; current state resolves an uncertain reply.
+                    pass
+                checkout = client.v1.checkout.sessions.retrieve(data["checkout"])
+            if checkout.status not in {"complete", "expired"}:
+                raise ValueError("Owned Checkout cleanup is unresolved")
+        except stripe.StripeError:
+            raise ValueError("Owned Checkout cleanup is unresolved") from None
     failures = []
     for configuration in data["configs"]:
         try:
@@ -271,6 +329,7 @@ def main() -> None:
     parser.add_argument("--behavior", choices=["continue_trial", "end_trial"], default="end_trial")
     parser.add_argument("--action", choices=["update", "cancel"], default="update")
     parser.add_argument("--keep-active", action="store_true")
+    parser.add_argument("--managed-payments", action="store_true")
     args = parser.parse_args()
     key = os.environ.get("PUMPKIT_STRIPE_TEST_KEY", "")
     if not key.startswith(("sk_test_", "rk_test_")):
