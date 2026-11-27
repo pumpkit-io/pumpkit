@@ -6,6 +6,8 @@ Before 1.0, upgrades may need manual steps. Read the section for every version b
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-11-27
+
 - Links to Pumpkit now show the pumpkin mascot and wordmark as their social preview image, replacing a blank placeholder.
 
 ## [0.16.0] - 2026-11-17
