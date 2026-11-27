@@ -17,17 +17,35 @@ describe('page metadata in index.html', () => {
     expect(text).not.toMatch(/\brepl(y|ies)\b/i);
   });
 
-  it('describes Pumpkit as an open-source writing tool for X', () => {
-    const descriptions = [
+  it('titles every preview with the landing headline', () => {
+    const titles = [
       head.querySelector('title')?.textContent ?? '',
-      meta('name="description"'),
       meta('property="og:title"'),
-      meta('property="og:description"'),
       meta('name="twitter:title"'),
-      meta('name="twitter:description"'),
     ];
+    for (const text of titles) {
+      expect(text).toBe('Pumpkit: run your X account on autopilot with AI agents [open-source]');
+    }
+  });
+
+  it('describes what Pumpkit does, as the landing page does', () => {
+    const data = JSON.parse(
+      head.querySelector('script[type="application/ld+json"]')?.textContent ?? '',
+    );
+    const graphDescriptions = (data['@graph'] as { description?: string }[])
+      .map((node) => node.description)
+      .filter((text) => text !== undefined);
+    const descriptions = [
+      meta('name="description"'),
+      meta('property="og:description"'),
+      meta('name="twitter:description"'),
+      ...graphDescriptions,
+    ];
+    expect(descriptions).toHaveLength(5);
     for (const text of descriptions) {
-      expect(text).toMatch(/open-source writing tool for X/i);
+      expect(text).toBe(
+        'Pumpkit writes and schedules posts on X for you. Posts sound like you. Use it in the web app, or use the MCP to let your agents run it.',
+      );
     }
   });
 
